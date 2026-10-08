@@ -1,0 +1,13 @@
+public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer : androidx/media3/common/Player {
+	public abstract fun getSession ()Lio/github/aivanyuk/airkast/VideoSession;
+	public abstract fun setSession (Lio/github/aivanyuk/airkast/VideoSession;)V
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
+	public fun <init> (Landroid/content/Context;)V
+	public final fun build ()Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
+	public final fun setKeepAwake (Z)Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Builder;
+	public final fun setLooper (Landroid/os/Looper;)Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Builder;
+	public final fun setPositionPollIntervalMillis (J)Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Builder;
+}
+

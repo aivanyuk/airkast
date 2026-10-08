@@ -99,8 +99,10 @@ A session sends `/feedback` every two seconds and keeps two TCP connections open
 off, the CPU sleeps unless something holds a wake lock. How long the LG keeps a sender that has
 gone quiet has not been measured. An app that casts in the background runs a foreground service
 of type `mediaPlayback`, which keeps network access under Doze, and holds a partial wake lock and
-a Wi-Fi lock while a session plays. airkast does not take these locks for the app yet. The media3
-module will, with a phone checked through a whole episode with its screen locked.
+a Wi-Fi lock while a session plays. `AirkastPlayer` (`airkast-media3`) takes both locks while
+an item loads, plays or is paused, and declares `WAKE_LOCK` for it. An app that drives a
+`VideoSession` without the player takes them itself. No phone has yet been checked through a
+whole episode with its screen locked.
 
 ## Callers
 
@@ -108,4 +110,6 @@ module will, with a phone checked through a whole episode with its screen locked
 - kotlin-stdlib 2.2.21 and kotlinx-coroutines 1.10.2 at least. Gradle hands an app its own newer
   versions.
 - Gradle metadata says JVM 11 (`org.gradle.jvm.version`).
+- `airkast-media3`: media3 1.11.1 at least. Its player extends `SimpleBasePlayer`, which media3
+  marks unstable, so a media3 release that changes it may need an airkast release to match.
 - No reflection, so R8 needs no keep rules.

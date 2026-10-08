@@ -8,6 +8,8 @@ smart TVs with an AirPlay 2 receiver built in.
   JVM against a real TV, which is how it is tested.
 - **`airkast-android`**: receiver discovery through `NsdManager`, Android 17's local network
   permission, and connections bound to the network the receiver is on.
+- **`airkast-media3`**: `AirkastPlayer`, a media3 `Player` over a session, so media3's UI and a
+  `MediaSession` drive the TV. It keeps the phone awake while a cast plays.
 
 ## Status
 
@@ -39,6 +41,7 @@ dependencyResolutionManagement {
 // build.gradle.kts
 implementation("com.github.aivanyuk.airkast:airkast-core:<version>")
 implementation("com.github.aivanyuk.airkast:airkast-android:<version>")
+implementation("com.github.aivanyuk.airkast:airkast-media3:<version>") // for a media3 Player
 ```
 
 On Android:
@@ -55,6 +58,19 @@ val info = session.playbackInfo()  // position, duration, buffered ranges
 session.seek(1200.0)
 session.close()
 ```
+
+With media3, the player drives the session, and a `MediaSession` over it gives the notification
+and the lock screen:
+
+```kotlin
+val player = AirkastPlayer.Builder(context).build()
+player.setMediaItem(MediaItem.fromUri("https://example.com/master.m3u8"), 600_000)
+player.playWhenReady = true
+player.session = Airkast.connect(context, receiver)  // loads the item
+```
+
+The app still opens and closes the session, and takes from it what a `Player` has no place for:
+BACK on the TV's remote, and switching renditions.
 
 On a desktop JVM, `Airkast.connect(Receiver("TV", "192.168.1.20"))` takes a receiver typed in by
 hand.
