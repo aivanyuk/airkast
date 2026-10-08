@@ -25,6 +25,15 @@ why. `./gradlew ktlintFormat` fixes most formatting.
 - A user-visible change adds a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md).
 - Release tags are immutable ([releasing](docs/releasing.md)).
 
+## Automated review
+
+Every pull request gets a review from an automated reviewer, posted as `tmikx`. It holds the diff
+against [.github/review-rules.md](.github/review-rules.md), following
+[.github/review.md](.github/review.md), and posts `REQUEST_CHANGES` when it finds a bug and
+`COMMENT` otherwise. It never approves or pushes, and its findings are one reader's opinion with
+a rule ID attached. The rubric is an index into this file and `docs/`: a change to a rule here
+changes its row there in the same PR. A PR labelled `skip-review` is left alone.
+
 ## The public API
 
 - **Explicit API mode** is on: every public declaration says `public`, and anything a caller
