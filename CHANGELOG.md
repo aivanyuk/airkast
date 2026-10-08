@@ -6,6 +6,8 @@ caller sees adds its line under "Unreleased".
 
 ## Unreleased
 
+## 0.1.0 - 2026-10-08
+
 The first release. What it holds:
 
 ### Requires
