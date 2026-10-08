@@ -24,7 +24,12 @@ import kotlin.concurrent.thread
 internal class FakeReceiver(
     private val takesItems: Boolean = true,
     private val corruptProof: Boolean = false,
+    /** Milliseconds to wait before the first answer to a path or a command type. */
+    lateAnswers: Map<String, Long> = emptyMap(),
+    /** A path or command type that the receiver goes silent at, for good. */
+    private val hangsAt: String? = null,
 ) : AutoCloseable {
+    private val lateAnswers = lateAnswers.toMutableMap()
     private val control = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
     private val events = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
 
@@ -32,6 +37,10 @@ internal class FakeReceiver(
     private var recorded = false
     val port: Int get() = control.localPort
     val commands = CopyOnWriteArrayList<Map<String, Any?>>()
+
+    @Volatile
+    var feedbacks = 0
+        private set
 
     @Volatile
     private var eventLink: Link? = null
@@ -127,7 +136,6 @@ internal class FakeReceiver(
                 }
 
                 path == "/command" -> {
-                    link.reply(request)
                     val outer = BinaryPlist.decode(request.body) as Map<*, *>
 
                     @Suppress("UNCHECKED_CAST")
@@ -136,14 +144,23 @@ internal class FakeReceiver(
                             (outer["params"] as Map<*, *>)["data"] as ByteArray,
                         ) as Map<String, Any?>
                     commands += command
+                    stall(command["type"] as String)
+                    link.reply(request)
                     respond(command)
                 }
 
                 else -> {
+                    if (path == "/feedback") feedbacks++
+                    stall(path)
                     link.reply(request)
                 }
             }
         }
+    }
+
+    private fun stall(key: String) {
+        if (key == hangsAt) Thread.sleep(Long.MAX_VALUE)
+        lateAnswers.remove(key)?.let(Thread::sleep)
     }
 
     private fun respond(command: Map<String, Any?>) {

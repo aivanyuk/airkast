@@ -32,3 +32,5 @@ The first release. What it holds:
 - Every failure is an `AirkastException`: `Unreachable` when no connection opens, `Disconnected`
   when one drops, `UnexpectedReply`, `PairingFailed`, `Rejected`, `Timeout`, `NotPermitted`, and
   `DiscoveryFailed` with the platform's error code.
+- A receiver that answers late costs one `Timeout`, not the session. The late answer is dropped
+  when it comes, and the session ends only if the receiver is still silent at the next request.

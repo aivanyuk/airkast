@@ -65,6 +65,10 @@ The protocol facts, with the receivers they were seen on, are in
 - Everything the public API throws is an `AirkastException`, or a `CancellationException`.
 - An I/O failure on either connection ends the session. It fails every pending request with
   `Disconnected`, sets the state to `Stopped` and emits `ReceiverEvent.Disconnected` last.
+- A late answer is not a failure of the connection. The request throws `Timeout`, the control
+  connection reads and drops the answer before its next request, and only a receiver that is
+  still silent then ends the session. A read times out only between messages: inside one, `Link`
+  waits out a few timeouts, since giving up there would leave the stream out of step.
 - A session never reconnects by itself. Whether to reconnect depends on whether the user still
   wants the cast, which only the app knows. A later `ReconnectPolicy` may change this, as an
   option.

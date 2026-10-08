@@ -6,9 +6,14 @@ import io.github.aivanyuk.airkast.wire.Link
 import java.io.EOFException
 import java.io.IOException
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.security.SecureRandom
 
-/** The connection a sender pairs on and sends its RTSP and HTTP requests over, one at a time. */
+/**
+ * The connection a sender pairs on and sends its RTSP and HTTP requests over, one at a time. A
+ * reply that has not started within the socket's timeout throws [LateReply] and is still owed: the
+ * next exchange reads and drops it first, and fails for good if it has not come by then.
+ */
 internal class ControlConnection(
     socket: Socket,
     private val identity: SenderIdentity,
@@ -16,6 +21,7 @@ internal class ControlConnection(
 ) : AutoCloseable {
     private val link = Link(socket)
     private var sequence = 0
+    private var owed = 0
     private val dacpId = HEX.let { digits -> String(CharArray(16) { digits[RANDOM.nextInt(16)] }) }
     private val activeRemote = (RANDOM.nextInt().toLong() and 0xffffffffL).toString()
 
@@ -48,16 +54,34 @@ internal class ControlConnection(
                 if (contentType != null) add("Content-Type" to contentType)
                 addAll(headers)
             }
+        while (owed > 0) {
+            try {
+                read()
+            } catch (e: SocketTimeoutException) {
+                throw IOException("Still no answer to an earlier request", e)
+            }
+            owed--
+            log("control: dropped a late answer")
+        }
         link.write(HttpMessage("$method $target $protocol", all, body).encode())
         val response =
             try {
-                HttpMessage.read(link.input) ?: throw EOFException("The receiver closed the connection")
+                read()
+            } catch (e: SocketTimeoutException) {
+                owed++
+                log("control: $method $target has no answer yet")
+                throw LateReply("$method $target", e)
             } catch (e: IOException) {
                 log("control: $method $target got no answer: $e")
                 throw IOException("$method $target: ${e.message}", e)
             }
         log("control: $method $target -> ${response.startLine}, ${response.body.size} bytes")
         return response
+    }
+
+    private fun read(): HttpMessage {
+        if (!link.await()) throw EOFException("The receiver closed the connection")
+        return HttpMessage.read(link.input) ?: throw EOFException("The receiver closed the connection")
     }
 
     override fun close() = link.close()
@@ -70,3 +94,9 @@ internal class ControlConnection(
         private val RANDOM = SecureRandom()
     }
 }
+
+/** A request whose answer has not started arriving in time. The connection is still usable. */
+internal class LateReply(
+    request: String,
+    cause: SocketTimeoutException,
+) : IOException("$request: no answer in time", cause)

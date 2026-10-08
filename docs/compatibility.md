@@ -44,6 +44,9 @@ pairs without a PIN, so airkast ignores it.
   sender stops. Its volume keys arrive as `dvlc`, with a volume from 0 to 1.
 - Its player is Apple's web receiver on hls.js, so streams need CORS headers.
 - A second sender takes over, and the first one's connection closes.
+- Once, 13 minutes into a session, it left a `/feedback` unanswered for over 5 s, and played on.
+  A late answer therefore costs the sender one `Timeout`, and the session ends only if the
+  receiver is still silent at the next request.
 
 ### Not checked yet
 

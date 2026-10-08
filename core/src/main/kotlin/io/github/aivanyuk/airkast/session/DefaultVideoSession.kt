@@ -146,6 +146,8 @@ internal class DefaultVideoSession private constructor(
                     delay(FEEDBACK_INTERVAL_MILLIS)
                     try {
                         control.exchange("POST", "/feedback")
+                    } catch (_: LateReply) {
+                        // The LG CX (webOS 04.64.00) once went quiet for over 5 s, 13 minutes into a session, and played on.
                     } catch (e: Exception) {
                         end(e)
                     }
@@ -279,6 +281,8 @@ internal class DefaultVideoSession private constructor(
                         body = "volume\r\n".toByteArray(),
                         contentType = "text/parameters",
                     )
+                } catch (e: LateReply) {
+                    throw AirkastException.Timeout(e.message.orEmpty())
                 } catch (e: IOException) {
                     end(e)
                     throw AirkastException.Disconnected(e)
@@ -322,6 +326,8 @@ internal class DefaultVideoSession private constructor(
                     body = BinaryPlist.encode(mapOf("params" to mapOf("data" to BinaryPlist.encode(payload)))),
                     contentType = ControlConnection.BPLIST,
                 )
+            } catch (e: LateReply) {
+                throw AirkastException.Timeout("No answer to ${payload["type"]}")
             } catch (e: Exception) {
                 end(e)
                 throw AirkastException.Disconnected(e)
@@ -453,6 +459,7 @@ internal class DefaultVideoSession private constructor(
                 runCatching { control.close() }
                 throw when (e) {
                     is AirkastException -> e
+                    is LateReply -> AirkastException.Timeout(e.message.orEmpty())
                     is IOException -> AirkastException.Disconnected(e)
                     else -> AirkastException.UnexpectedReply(e)
                 }
