@@ -1,4 +1,10 @@
 # JitPack builds a tag with VERSION set to it (docs/releasing.md). The build needs JDK 17 or later
 # to run AGP; it publishes Java 11 bytecode whatever JDK builds it.
-jdk:
-  - openjdk21
+#
+# The JDK is an exact SDKMan version, and the build names it in JAVA_HOME itself, so it does not
+# depend on which JDK JitPack picks. JitPack's `jdk: openjdk21` alias resolved to 21.0.2-open for
+# one build and, for 0.1.0's, to a version SDKMan failed to download.
+before_install:
+  - sdk install java 21.0.2-open
+install:
+  - JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.2-open" ./gradlew publishToMavenLocal --console=plain
