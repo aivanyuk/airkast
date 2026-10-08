@@ -20,8 +20,15 @@ internal class HttpMessage(
 
     fun encode(): ByteArray {
         val head = StringBuilder(startLine).append("\r\n")
-        headers.filterNot { it.first.equals("Content-Length", ignoreCase = true) }
-            .forEach { (k, v) -> head.append(k).append(": ").append(v).append("\r\n") }
+        headers
+            .filterNot { it.first.equals("Content-Length", ignoreCase = true) }
+            .forEach { (k, v) ->
+                head
+                    .append(k)
+                    .append(": ")
+                    .append(v)
+                    .append("\r\n")
+            }
         head.append("Content-Length: ").append(body.size).append("\r\n\r\n")
         return head.toString().toByteArray(Charsets.ISO_8859_1) + body
     }
@@ -42,19 +49,22 @@ internal class HttpMessage(
                 }
                 head.write(b)
                 require(head.size() <= MAX_HEAD) { "Message head too long" }
-                matched = when {
-                    b == '\r'.code && (matched == 0 || matched == 2) -> matched + 1
-                    b == '\n'.code && (matched == 1 || matched == 3) -> matched + 1
-                    b == '\r'.code -> 1
-                    else -> 0
-                }
+                matched =
+                    when {
+                        b == '\r'.code && (matched == 0 || matched == 2) -> matched + 1
+                        b == '\n'.code && (matched == 1 || matched == 3) -> matched + 1
+                        b == '\r'.code -> 1
+                        else -> 0
+                    }
             }
             val lines = head.toString(Charsets.ISO_8859_1.name()).split("\r\n").filter { it.isNotEmpty() }
-            val headers = lines.drop(1).mapNotNull { line ->
-                val colon = line.indexOf(':')
-                if (colon < 0) null else line.substring(0, colon).trim() to line.substring(colon + 1).trim()
-            }
-            val length = headers.firstOrNull { it.first.equals("Content-Length", ignoreCase = true) }?.second?.toIntOrNull() ?: 0
+            val headers =
+                lines.drop(1).mapNotNull { line ->
+                    val colon = line.indexOf(':')
+                    if (colon < 0) null else line.substring(0, colon).trim() to line.substring(colon + 1).trim()
+                }
+            val length =
+                headers.firstOrNull { it.first.equals("Content-Length", ignoreCase = true) }?.second?.toIntOrNull() ?: 0
             require(length in 0..MAX_BODY) { "Body of $length bytes" }
             val body = ByteArray(length)
             var read = 0

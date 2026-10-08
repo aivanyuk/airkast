@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import javax.net.SocketFactory
 
 /**
  * A connection to one receiver that plays URLs on it. Every call suspends on I/O and is safe to
@@ -49,26 +50,75 @@ public interface VideoSession : AutoCloseable {
 }
 
 public object Airkast {
-    /** Pairs with [receiver] and opens a session. */
+    /** Pairs with [receiver] and opens a session. On Android, `airkast-android`'s overload picks the network. */
     public suspend fun connect(
         receiver: Receiver,
         identity: SenderIdentity = SenderIdentity(),
-        options: SessionOptions = SessionOptions(),
+        options: SessionOptions = SessionOptions.DEFAULT,
     ): VideoSession = withContext(Dispatchers.IO) { DefaultVideoSession.open(receiver, identity, options) }
 }
 
-public data class SessionOptions(
-    val connectTimeoutMillis: Int = 5_000,
-    val requestTimeoutMillis: Long = 5_000,
+/**
+ * How a session connects and behaves. Build one with `SessionOptions { ... }`, or change one with
+ * [newBuilder]. New options join the [Builder] with defaults, so code that builds options keeps
+ * compiling and linking across releases.
+ */
+public class SessionOptions private constructor(
+    builder: Builder,
+) {
+    public val connectTimeoutMillis: Int = builder.connectTimeoutMillis
+    public val requestTimeoutMillis: Long = builder.requestTimeoutMillis
+
     /** How long a load waits for the receiver to take the item. */
-    val loadTimeoutMillis: Long = 10_000,
+    public val loadTimeoutMillis: Long = builder.loadTimeoutMillis
+
     /** Sends `/feedback` every two seconds, as Apple's senders do. */
-    val keepAlive: Boolean = true,
+    public val keepAlive: Boolean = builder.keepAlive
+
     /**
      * Answers the receiver's NTP timing requests, which needs it to reach this device over UDP.
      * The LG CX never asks; send-airplay2 reports that tvOS stalls SETUP without it.
      */
-    val ntpTiming: Boolean = false,
+    public val ntpTiming: Boolean = builder.ntpTiming
+
+    /**
+     * Creates the TCP connections to the receiver; null uses the platform's default. On Android,
+     * a factory bound to the Wi-Fi network keeps them off mobile data and out of a VPN.
+     */
+    public val socketFactory: SocketFactory? = builder.socketFactory
+
     /** Receives one line per protocol step, for debugging. Lines never hold the media URL. */
-    val logger: ((String) -> Unit)? = null,
-)
+    public val logger: ((String) -> Unit)? = builder.logger
+
+    public fun newBuilder(): Builder = Builder(this)
+
+    public class Builder() {
+        public var connectTimeoutMillis: Int = 5_000
+        public var requestTimeoutMillis: Long = 5_000
+        public var loadTimeoutMillis: Long = 10_000
+        public var keepAlive: Boolean = true
+        public var ntpTiming: Boolean = false
+        public var socketFactory: SocketFactory? = null
+        public var logger: ((String) -> Unit)? = null
+
+        internal constructor(options: SessionOptions) : this() {
+            connectTimeoutMillis = options.connectTimeoutMillis
+            requestTimeoutMillis = options.requestTimeoutMillis
+            loadTimeoutMillis = options.loadTimeoutMillis
+            keepAlive = options.keepAlive
+            ntpTiming = options.ntpTiming
+            socketFactory = options.socketFactory
+            logger = options.logger
+        }
+
+        public fun build(): SessionOptions = SessionOptions(this)
+    }
+
+    public companion object {
+        public val DEFAULT: SessionOptions = Builder().build()
+    }
+}
+
+/** Builds [SessionOptions]: `SessionOptions { keepAlive = false }`. */
+public fun SessionOptions(block: SessionOptions.Builder.() -> Unit): SessionOptions =
+    SessionOptions.Builder().apply(block).build()

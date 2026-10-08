@@ -1,0 +1,297 @@
+public final class io/github/aivanyuk/airkast/Airkast {
+	public static final field INSTANCE Lio/github/aivanyuk/airkast/Airkast;
+	public final fun connect (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/SenderIdentity;Lio/github/aivanyuk/airkast/SessionOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/Airkast;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/SenderIdentity;Lio/github/aivanyuk/airkast/SessionOptions;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public abstract class io/github/aivanyuk/airkast/AirkastException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class io/github/aivanyuk/airkast/AirkastException$Disconnected : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (Ljava/lang/Throwable;)V
+}
+
+public final class io/github/aivanyuk/airkast/AirkastException$NotPermitted : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class io/github/aivanyuk/airkast/AirkastException$PairingFailed : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class io/github/aivanyuk/airkast/AirkastException$Rejected : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (Ljava/lang/String;I)V
+	public final fun getRequest ()Ljava/lang/String;
+	public final fun getStatus ()I
+}
+
+public final class io/github/aivanyuk/airkast/AirkastException$Timeout : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class io/github/aivanyuk/airkast/Compatibility : java/lang/Enum {
+	public static final field NeedsPassword Lio/github/aivanyuk/airkast/Compatibility;
+	public static final field NeedsPin Lio/github/aivanyuk/airkast/Compatibility;
+	public static final field NoTransientPairing Lio/github/aivanyuk/airkast/Compatibility;
+	public static final field NoVideo Lio/github/aivanyuk/airkast/Compatibility;
+	public static final field Supported Lio/github/aivanyuk/airkast/Compatibility;
+	public static final field Unknown Lio/github/aivanyuk/airkast/Compatibility;
+	public static final field VideoV1Only Lio/github/aivanyuk/airkast/Compatibility;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/Compatibility;
+	public static fun values ()[Lio/github/aivanyuk/airkast/Compatibility;
+}
+
+public final class io/github/aivanyuk/airkast/MediaItem {
+	public fun <init> (Ljava/lang/String;DZ)V
+	public synthetic fun <init> (Ljava/lang/String;DZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getStartSeconds ()D
+	public final fun getStreaming ()Z
+	public final fun getUrl ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/MediaKind : java/lang/Enum {
+	public static final field Audio Lio/github/aivanyuk/airkast/MediaKind;
+	public static final field Subtitles Lio/github/aivanyuk/airkast/MediaKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/MediaKind;
+	public static fun values ()[Lio/github/aivanyuk/airkast/MediaKind;
+}
+
+public final class io/github/aivanyuk/airkast/MediaOption {
+	public fun <init> (Lio/github/aivanyuk/airkast/MediaKind;JLjava/lang/String;Ljava/lang/String;Z)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getForced ()Z
+	public final fun getId ()J
+	public final fun getKind ()Lio/github/aivanyuk/airkast/MediaKind;
+	public final fun getLanguage ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/MediaSelection {
+	public fun <init> (Lio/github/aivanyuk/airkast/MediaKind;Ljava/lang/Long;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/Long;
+	public final fun getKind ()Lio/github/aivanyuk/airkast/MediaKind;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/PlaybackInfo {
+	public fun <init> (Lio/github/aivanyuk/airkast/PlaybackState;DLjava/lang/Double;Ljava/lang/Double;Ljava/util/List;Ljava/util/List;Ljava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDurationSeconds ()Ljava/lang/Double;
+	public final fun getItemId ()Ljava/lang/String;
+	public final fun getLoaded ()Ljava/util/List;
+	public final fun getPositionSeconds ()Ljava/lang/Double;
+	public final fun getRate ()D
+	public final fun getSeekable ()Ljava/util/List;
+	public final fun getState ()Lio/github/aivanyuk/airkast/PlaybackState;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/PlaybackState : java/lang/Enum {
+	public static final field Loading Lio/github/aivanyuk/airkast/PlaybackState;
+	public static final field Paused Lio/github/aivanyuk/airkast/PlaybackState;
+	public static final field Playing Lio/github/aivanyuk/airkast/PlaybackState;
+	public static final field Stopped Lio/github/aivanyuk/airkast/PlaybackState;
+	public static final field Unknown Lio/github/aivanyuk/airkast/PlaybackState;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/PlaybackState;
+	public static fun values ()[Lio/github/aivanyuk/airkast/PlaybackState;
+}
+
+public final class io/github/aivanyuk/airkast/Receiver {
+	public static final field Companion Lio/github/aivanyuk/airkast/Receiver$Companion;
+	public static final field DEFAULT_PORT I
+	public static final field SERVICE_TYPE Ljava/lang/String;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/Map;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCompatibility ()Lio/github/aivanyuk/airkast/Compatibility;
+	public final fun getDeviceId ()Ljava/lang/String;
+	public final fun getFeatures ()J
+	public final fun getHost ()Ljava/lang/String;
+	public final fun getModel ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getPort ()I
+	public final fun getProperties ()Ljava/util/Map;
+	public final fun getSourceVersion ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/Receiver$Companion {
+}
+
+public abstract interface class io/github/aivanyuk/airkast/ReceiverEvent {
+}
+
+public final class io/github/aivanyuk/airkast/ReceiverEvent$Disconnected : io/github/aivanyuk/airkast/ReceiverEvent {
+	public fun <init> (Ljava/lang/Throwable;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCause ()Ljava/lang/Throwable;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/ReceiverEvent$ItemChanged : io/github/aivanyuk/airkast/ReceiverEvent {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getItemId ()Ljava/lang/String;
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/ReceiverEvent$ItemEnded : io/github/aivanyuk/airkast/ReceiverEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getItemId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/ReceiverEvent$Other : io/github/aivanyuk/airkast/ReceiverEvent {
+	public fun <init> (Ljava/util/Map;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPayload ()Ljava/util/Map;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/ReceiverEvent$RateChanged : io/github/aivanyuk/airkast/ReceiverEvent {
+	public fun <init> (DLjava/lang/Double;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPositionSeconds ()Ljava/lang/Double;
+	public final fun getRate ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/ReceiverEvent$RemoteCommand : io/github/aivanyuk/airkast/ReceiverEvent {
+	public static final field BACK_END Ljava/lang/String;
+	public static final field BACK_START Ljava/lang/String;
+	public static final field Companion Lio/github/aivanyuk/airkast/ReceiverEvent$RemoteCommand$Companion;
+	public static final field VOLUME Ljava/lang/String;
+	public fun <init> (Ljava/lang/String;Ljava/lang/Double;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCode ()Ljava/lang/String;
+	public final fun getVolume ()Ljava/lang/Double;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/ReceiverEvent$RemoteCommand$Companion {
+}
+
+public final class io/github/aivanyuk/airkast/ReceiverEvent$StateChanged : io/github/aivanyuk/airkast/ReceiverEvent {
+	public fun <init> (Lio/github/aivanyuk/airkast/PlaybackState;Ljava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getState ()Lio/github/aivanyuk/airkast/PlaybackState;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/ReceiverEvent$TimeJumped : io/github/aivanyuk/airkast/ReceiverEvent {
+	public fun <init> (Ljava/lang/Double;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPositionSeconds ()Ljava/lang/Double;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/SenderIdentity {
+	public static final field Companion Lio/github/aivanyuk/airkast/SenderIdentity$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDeviceId ()Ljava/lang/String;
+	public final fun getModel ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getOsBuildVersion ()Ljava/lang/String;
+	public final fun getOsName ()Ljava/lang/String;
+	public final fun getOsVersion ()Ljava/lang/String;
+	public final fun getSourceVersion ()Ljava/lang/String;
+	public final fun getUserAgent ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/SenderIdentity$Companion {
+	public final fun randomDeviceId ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/SessionOptions {
+	public static final field Companion Lio/github/aivanyuk/airkast/SessionOptions$Companion;
+	public final fun getConnectTimeoutMillis ()I
+	public final fun getKeepAlive ()Z
+	public final fun getLoadTimeoutMillis ()J
+	public final fun getLogger ()Lkotlin/jvm/functions/Function1;
+	public final fun getNtpTiming ()Z
+	public final fun getRequestTimeoutMillis ()J
+	public final fun getSocketFactory ()Ljavax/net/SocketFactory;
+	public final fun newBuilder ()Lio/github/aivanyuk/airkast/SessionOptions$Builder;
+}
+
+public final class io/github/aivanyuk/airkast/SessionOptions$Builder {
+	public fun <init> ()V
+	public final fun build ()Lio/github/aivanyuk/airkast/SessionOptions;
+	public final fun getConnectTimeoutMillis ()I
+	public final fun getKeepAlive ()Z
+	public final fun getLoadTimeoutMillis ()J
+	public final fun getLogger ()Lkotlin/jvm/functions/Function1;
+	public final fun getNtpTiming ()Z
+	public final fun getRequestTimeoutMillis ()J
+	public final fun getSocketFactory ()Ljavax/net/SocketFactory;
+	public final fun setConnectTimeoutMillis (I)V
+	public final fun setKeepAlive (Z)V
+	public final fun setLoadTimeoutMillis (J)V
+	public final fun setLogger (Lkotlin/jvm/functions/Function1;)V
+	public final fun setNtpTiming (Z)V
+	public final fun setRequestTimeoutMillis (J)V
+	public final fun setSocketFactory (Ljavax/net/SocketFactory;)V
+}
+
+public final class io/github/aivanyuk/airkast/SessionOptions$Companion {
+	public final fun getDEFAULT ()Lio/github/aivanyuk/airkast/SessionOptions;
+}
+
+public final class io/github/aivanyuk/airkast/TimeRange {
+	public fun <init> (DD)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDurationSeconds ()D
+	public final fun getStartSeconds ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class io/github/aivanyuk/airkast/VideoSession : java/lang/AutoCloseable {
+	public abstract fun close ()V
+	public abstract fun getEvents ()Lkotlinx/coroutines/flow/SharedFlow;
+	public abstract fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public abstract fun getState ()Lkotlinx/coroutines/flow/StateFlow;
+	public abstract fun load (Lio/github/aivanyuk/airkast/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun pause (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun play (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun playbackInfo (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun seek (DLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun selectMedia (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun selectedMedia (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun volume (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/aivanyuk/airkast/VideoSessionKt {
+	public static final fun SessionOptions (Lkotlin/jvm/functions/Function1;)Lio/github/aivanyuk/airkast/SessionOptions;
+}
+

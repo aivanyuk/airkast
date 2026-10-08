@@ -59,11 +59,21 @@ internal class FakeReceiver(
             val request = HttpMessage.read(link.input) ?: return
             val path = request.startLine.split(' ')[1]
             when {
-                path == "/pair-pin-start" -> link.reply(request)
+                path == "/pair-pin-start" -> {
+                    link.reply(request)
+                }
+
                 path == "/pair-setup" -> {
                     val tlv = Tlv8.decode(request.body)
                     if (tlv[Tlv8.SEQUENCE]!![0].toInt() == 1) {
-                        link.reply(request, Tlv8.encode(Tlv8.SEQUENCE to byteArrayOf(2), Tlv8.SALT to salt, Tlv8.PUBLIC_KEY to unsigned(serverPublic)))
+                        link.reply(
+                            request,
+                            Tlv8.encode(
+                                Tlv8.SEQUENCE to byteArrayOf(2),
+                                Tlv8.SALT to salt,
+                                Tlv8.PUBLIC_KEY to unsigned(serverPublic),
+                            ),
+                        )
                     } else {
                         val a = tlv.getValue(Tlv8.PUBLIC_KEY)
                         val u = BigInteger(1, sha512(pad(a), pad(unsigned(serverPublic))))
@@ -78,36 +88,60 @@ internal class FakeReceiver(
                         )
                     }
                 }
+
                 request.startLine.startsWith("SETUP") -> {
                     val body = BinaryPlist.decode(request.body) as Map<*, *>
                     if (body.containsKey("streams")) {
-                        link.reply(request, BinaryPlist.encode(mapOf("streams" to listOf(mapOf("streamID" to 1L, "type" to 130L)))))
+                        link.reply(
+                            request,
+                            BinaryPlist.encode(
+                                mapOf("streams" to listOf(mapOf("streamID" to 1L, "type" to 130L))),
+                            ),
+                        )
                     } else {
                         val key = sessionKey
                         thread(isDaemon = true) {
-                            eventLink = Link(events.accept()).apply {
-                                encrypt(
-                                    Hkdf.sha512(key, "Events-Salt", "Events-Write-Encryption-Key"),
-                                    Hkdf.sha512(key, "Events-Salt", "Events-Read-Encryption-Key"),
-                                )
-                            }
+                            eventLink =
+                                Link(events.accept()).apply {
+                                    encrypt(
+                                        Hkdf.sha512(key, "Events-Salt", "Events-Write-Encryption-Key"),
+                                        Hkdf.sha512(key, "Events-Salt", "Events-Read-Encryption-Key"),
+                                    )
+                                }
                         }
-                        link.reply(request, BinaryPlist.encode(mapOf("eventPort" to events.localPort.toLong(), "timingPort" to 0L)))
+                        link.reply(
+                            request,
+                            BinaryPlist.encode(
+                                mapOf(
+                                    "eventPort" to events.localPort.toLong(),
+                                    "timingPort" to 0L,
+                                ),
+                            ),
+                        )
                     }
                 }
+
                 request.startLine.startsWith("RECORD") -> {
                     recorded = true
                     link.reply(request)
                 }
+
                 path == "/command" -> {
                     link.reply(request)
                     val outer = BinaryPlist.decode(request.body) as Map<*, *>
+
                     @Suppress("UNCHECKED_CAST")
-                    val command = BinaryPlist.decode((outer["params"] as Map<*, *>)["data"] as ByteArray) as Map<String, Any?>
+                    val command =
+                        BinaryPlist.decode(
+                            (outer["params"] as Map<*, *>)["data"] as ByteArray,
+                        ) as Map<String, Any?>
                     commands += command
                     respond(command)
                 }
-                else -> link.reply(request)
+
+                else -> {
+                    link.reply(request)
+                }
             }
         }
     }
@@ -115,28 +149,69 @@ internal class FakeReceiver(
     private fun respond(command: Map<String, Any?>) {
         val id = command["messageID"]
         when (command["type"]) {
-            "insertPlayQueueItem" -> if (takesItems && recorded) {
-                val item = command["item"] as Map<*, *>
-                position = DefaultVideoSession.seconds(item["Start-Position"]) ?: 0.0
-                event(mapOf("type" to "notification", "name" to "currentItemChanged", "item" to mapOf("uuid" to item["uuid"])))
-                event(mapOf("type" to "playbackState", "name" to "playing", "item" to mapOf("uuid" to item["uuid"])))
+            "insertPlayQueueItem" -> {
+                if (takesItems && recorded) {
+                    val item = command["item"] as Map<*, *>
+                    position = DefaultVideoSession.seconds(item["Start-Position"]) ?: 0.0
+                    event(
+                        mapOf(
+                            "type" to "notification",
+                            "name" to "currentItemChanged",
+                            "item" to mapOf("uuid" to item["uuid"]),
+                        ),
+                    )
+                    event(
+                        mapOf("type" to "playbackState", "name" to "playing", "item" to mapOf("uuid" to item["uuid"])),
+                    )
+                }
             }
-            "playbackInfo" -> event(
-                mapOf(
-                    "kind" to "response", "type" to "playbackInfo", "messageID" to id,
-                    "info" to mapOf(
-                        "rate" to 1L, "playbackState" to "playing",
-                        "position" to DefaultVideoSession.cmTime(position),
-                        "duration" to DefaultVideoSession.cmTime(3077.0),
-                        "loadedTimeRanges" to listOf(mapOf("start" to DefaultVideoSession.cmTime(position), "duration" to DefaultVideoSession.cmTime(30.0))),
+
+            "playbackInfo" -> {
+                event(
+                    mapOf(
+                        "kind" to "response",
+                        "type" to "playbackInfo",
+                        "messageID" to id,
+                        "info" to
+                            mapOf(
+                                "rate" to 1L,
+                                "playbackState" to "playing",
+                                "position" to DefaultVideoSession.cmTime(position),
+                                "duration" to DefaultVideoSession.cmTime(3077.0),
+                                "loadedTimeRanges" to
+                                    listOf(
+                                        mapOf(
+                                            "start" to DefaultVideoSession.cmTime(position),
+                                            "duration" to DefaultVideoSession.cmTime(30.0),
+                                        ),
+                                    ),
+                            ),
                     ),
-                ),
-            )
-            "seek" -> if (command["item"] != null && command["toleranceBefore"] != null) {
-                position = DefaultVideoSession.seconds(command["time"])!!
-                event(mapOf("kind" to "response", "type" to "seek", "messageID" to id, "position" to DefaultVideoSession.cmTime(position)))
+                )
             }
-            "setRate" -> event(mapOf("type" to "playbackState", "name" to if (command["rate"] == 0.0) "paused" else "playing"))
+
+            "seek" -> {
+                if (command["item"] != null && command["toleranceBefore"] != null) {
+                    position = DefaultVideoSession.seconds(command["time"])!!
+                    event(
+                        mapOf(
+                            "kind" to "response",
+                            "type" to "seek",
+                            "messageID" to id,
+                            "position" to DefaultVideoSession.cmTime(position),
+                        ),
+                    )
+                }
+            }
+
+            "setRate" -> {
+                event(
+                    mapOf(
+                        "type" to "playbackState",
+                        "name" to if (command["rate"] == 0.0) "paused" else "playing",
+                    ),
+                )
+            }
         }
     }
 
@@ -145,7 +220,16 @@ internal class FakeReceiver(
         val link = generateSequence { eventLink ?: Thread.sleep(10).let { null } }.first()
         val body = BinaryPlist.encode(mapOf("params" to mapOf("data" to BinaryPlist.encode(payload))))
         synchronized(link) {
-            link.write(HttpMessage("POST /command RTSP/1.0", listOf("X-Apple-StreamID" to "1", "Content-Type" to "application/x-apple-binary-plist"), body).encode())
+            link.write(
+                HttpMessage(
+                    "POST /command RTSP/1.0",
+                    listOf(
+                        "X-Apple-StreamID" to "1",
+                        "Content-Type" to "application/x-apple-binary-plist",
+                    ),
+                    body,
+                ).encode(),
+            )
             HttpMessage.read(link.input)
         }
     }
@@ -161,8 +245,27 @@ internal class FakeReceiver(
         events.close()
     }
 
-    private fun Link.reply(request: HttpMessage, body: ByteArray = ByteArray(0)) =
-        write(HttpMessage("${request.requestProtocol} 200 OK", listOfNotNull(request.header("CSeq")?.let { "CSeq" to it }), body).encode())
+    private fun Link.reply(
+        request: HttpMessage,
+        body: ByteArray = ByteArray(0),
+    ) = write(
+        HttpMessage(
+            "${request.requestProtocol} 200 OK",
+            listOfNotNull(
+                request.header("CSeq")?.let {
+                    "CSeq" to it
+                },
+            ),
+            body,
+        ).encode(),
+    )
 
-    private fun pad(bytes: ByteArray): ByteArray = if (bytes.size >= N_LENGTH) bytes else ByteArray(N_LENGTH - bytes.size) + bytes
+    private fun pad(bytes: ByteArray): ByteArray =
+        if (bytes.size >=
+            N_LENGTH
+        ) {
+            bytes
+        } else {
+            ByteArray(N_LENGTH - bytes.size) + bytes
+        }
 }

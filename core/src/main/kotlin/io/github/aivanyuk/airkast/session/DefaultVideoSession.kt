@@ -16,14 +16,6 @@ import io.github.aivanyuk.airkast.VideoSession
 import io.github.aivanyuk.airkast.crypto.Hkdf
 import io.github.aivanyuk.airkast.wire.BinaryPlist
 import io.github.aivanyuk.airkast.wire.HttpMessage
-import java.net.ConnectException
-import java.net.InetSocketAddress
-import java.net.Socket
-import java.security.SecureRandom
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,14 +24,22 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.net.ConnectException
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.security.SecureRandom
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * AirPlay video v2: pair transiently, SETUP the session and its event channel, SETUP a type-130
@@ -72,56 +72,70 @@ internal class DefaultVideoSession private constructor(
     @Volatile
     private var itemTaken: CompletableDeferred<Unit>? = null
 
-    private fun start(identity: SenderIdentity, sessionKey: ByteArray) {
-        val base = control.exchange(
-            "SETUP", rtspUri,
-            body = BinaryPlist.encode(
-                mapOf(
-                    "deviceID" to identity.deviceId,
-                    "sessionUUID" to sessionId,
-                    "timingProtocol" to if (timing != null) "NTP" else "None",
-                    "isMultiSelectAirPlay" to true,
-                    "groupContainsGroupLeader" to false,
-                    "macAddress" to identity.deviceId,
-                    "model" to identity.model,
-                    "name" to identity.name,
-                    "osBuildVersion" to identity.osBuildVersion,
-                    "osName" to identity.osName,
-                    "osVersion" to identity.osVersion,
-                    "senderSupportsRelay" to false,
-                    "sourceVersion" to identity.sourceVersion,
-                    "statsCollectionEnabled" to false,
-                ) + (timing?.let { mapOf("timingPort" to it.port.toLong()) } ?: emptyMap()),
-            ),
-            contentType = ControlConnection.BPLIST,
-        ).requireSuccess("SETUP")
+    private fun start(
+        identity: SenderIdentity,
+        sessionKey: ByteArray,
+    ) {
+        val base =
+            control
+                .exchange(
+                    "SETUP",
+                    rtspUri,
+                    body =
+                        BinaryPlist.encode(
+                            mapOf(
+                                "deviceID" to identity.deviceId,
+                                "sessionUUID" to sessionId,
+                                "timingProtocol" to if (timing != null) "NTP" else "None",
+                                "isMultiSelectAirPlay" to true,
+                                "groupContainsGroupLeader" to false,
+                                "macAddress" to identity.deviceId,
+                                "model" to identity.model,
+                                "name" to identity.name,
+                                "osBuildVersion" to identity.osBuildVersion,
+                                "osName" to identity.osName,
+                                "osVersion" to identity.osVersion,
+                                "senderSupportsRelay" to false,
+                                "sourceVersion" to identity.sourceVersion,
+                                "statsCollectionEnabled" to false,
+                            ) + (timing?.let { mapOf("timingPort" to it.port.toLong()) } ?: emptyMap()),
+                        ),
+                    contentType = ControlConnection.BPLIST,
+                ).requireSuccess("SETUP")
         options.logger?.invoke("SETUP ${base.status} ${plist(base).keys}")
-        val eventPort = (plist(base)["eventPort"] as? Long)?.toInt()
-            ?: throw AirkastException.Rejected("SETUP without an event port", base.status)
+        val eventPort =
+            (plist(base)["eventPort"] as? Long)?.toInt()
+                ?: throw AirkastException.Rejected("SETUP without an event port", base.status)
         val eventSocket = connectWithRetry(eventPort)
         options.logger?.invoke("event channel connected to $eventPort from ${eventSocket.localPort}")
-        eventChannel = EventChannel(eventSocket, sessionKey, ::onMessage, ::onEventChannelClosed) { options.logger?.invoke(it) }
+        eventChannel =
+            EventChannel(eventSocket, sessionKey, ::onMessage, ::onEventChannelClosed) { options.logger?.invoke(it) }
 
         // Without RECORD the LG plays the item but never sends an event about it.
         control.exchange("RECORD", rtspUri).requireSuccess("RECORD")
 
-        val stream = control.exchange(
-            "SETUP", rtspUri,
-            body = BinaryPlist.encode(
-                mapOf(
-                    "streams" to listOf(
-                        mapOf(
-                            "type" to STREAM_TYPE,
-                            "controlType" to 1L,
-                            "clientTypeUUID" to URL_STREAM_CLIENT_TYPE,
-                            "channelID" to "${identity.deviceId}-RCS-1",
-                            "clientUUID" to UUID.randomUUID().toString().uppercase(),
+        val stream =
+            control
+                .exchange(
+                    "SETUP",
+                    rtspUri,
+                    body =
+                        BinaryPlist.encode(
+                            mapOf(
+                                "streams" to
+                                    listOf(
+                                        mapOf(
+                                            "type" to STREAM_TYPE,
+                                            "controlType" to 1L,
+                                            "clientTypeUUID" to URL_STREAM_CLIENT_TYPE,
+                                            "channelID" to "${identity.deviceId}-RCS-1",
+                                            "clientUUID" to UUID.randomUUID().toString().uppercase(),
+                                        ),
+                                    ),
+                            ),
                         ),
-                    ),
-                ),
-            ),
-            contentType = ControlConnection.BPLIST,
-        ).requireSuccess("SETUP stream")
+                    contentType = ControlConnection.BPLIST,
+                ).requireSuccess("SETUP stream")
         streamId = ((plist(stream)["streams"] as? List<*>)?.firstOrNull() as? Map<*, *>)?.get("streamID") as? Long
             ?: throw AirkastException.Rejected("SETUP stream without an ID", stream.status)
 
@@ -143,7 +157,9 @@ internal class DefaultVideoSession private constructor(
         var attempt = 0
         while (true) {
             try {
-                return Socket().apply { connect(InetSocketAddress(receiver.host, port), options.connectTimeoutMillis) }
+                return newSocket(
+                    options,
+                ).apply { connect(InetSocketAddress(receiver.host, port), options.connectTimeoutMillis) }
             } catch (e: ConnectException) {
                 if (++attempt >= 5) throw e
                 Thread.sleep(200)
@@ -160,15 +176,23 @@ internal class DefaultVideoSession private constructor(
             command(
                 mapOf(
                     "type" to "insertPlayQueueItem",
-                    "item" to mapOf(
-                        "uuid" to id,
-                        "mediaType" to if (item.streaming) "streaming" else "file",
-                        "Content-Location" to item.url,
-                        "Start-Position" to cmTime(item.startSeconds),
-                    ),
+                    "item" to
+                        mapOf(
+                            "uuid" to id,
+                            "mediaType" to if (item.streaming) "streaming" else "file",
+                            "Content-Location" to item.url,
+                            "Start-Position" to cmTime(item.startSeconds),
+                        ),
                 ),
             )
-            command(mapOf("type" to "setProperty", "property" to "isInterestedInDateRange", "value" to true, "item" to mapOf("uuid" to id)))
+            command(
+                mapOf(
+                    "type" to "setProperty",
+                    "property" to "isInterestedInDateRange",
+                    "value" to true,
+                    "item" to mapOf("uuid" to id),
+                ),
+            )
             command(mapOf("type" to "setProperty", "property" to "actionAtItemEnd", "value" to 1L))
             command(mapOf("type" to "setRate", "rate" to 1.0))
         }
@@ -182,15 +206,16 @@ internal class DefaultVideoSession private constructor(
 
     override suspend fun seek(positionSeconds: Double): Double? {
         val zero = cmTime(0.0)
-        val reply = request(
-            mapOf(
-                "type" to "seek",
-                "time" to cmTime(positionSeconds),
-                "toleranceBefore" to zero,
-                "toleranceAfter" to zero,
-                "item" to mapOf("uuid" to itemId),
-            ),
-        )
+        val reply =
+            request(
+                mapOf(
+                    "type" to "seek",
+                    "time" to cmTime(positionSeconds),
+                    "toleranceBefore" to zero,
+                    "toleranceAfter" to zero,
+                    "item" to mapOf("uuid" to itemId),
+                ),
+            )
         return seconds(reply["position"])
     }
 
@@ -211,7 +236,9 @@ internal class DefaultVideoSession private constructor(
         val value = request(mapOf("type" to "property", "property" to "selectedMediaArray"))["value"] as? List<*>
         return value.orEmpty().mapNotNull { option ->
             option as? Map<*, *> ?: return@mapNotNull null
-            val kind = MediaKind.entries.firstOrNull { it.wire == option["MediaSelectionGroupMediaType"] } ?: return@mapNotNull null
+            val kind =
+                MediaKind.entries.firstOrNull { it.wire == option["MediaSelectionGroupMediaType"] }
+                    ?: return@mapNotNull null
             MediaOption(
                 kind = kind,
                 id = option["MediaSelectionOptionsPersistentID"] as? Long ?: return@mapNotNull null,
@@ -222,21 +249,37 @@ internal class DefaultVideoSession private constructor(
         }
     }
 
-    override suspend fun selectMedia(selections: List<MediaSelection>) = io {
-        val value = selections.map { selection ->
-            buildMap<String, Any?> {
-                put("MediaSelectionGroupMediaType", selection.kind.wire)
-                selection.id?.let { put("MediaSelectionOptionsPersistentID", it) }
-            }
+    override suspend fun selectMedia(selections: List<MediaSelection>) =
+        io {
+            val value =
+                selections.map { selection ->
+                    buildMap<String, Any?> {
+                        put("MediaSelectionGroupMediaType", selection.kind.wire)
+                        selection.id?.let { put("MediaSelectionOptionsPersistentID", it) }
+                    }
+                }
+            command(
+                mapOf(
+                    "type" to "setProperty",
+                    "property" to "selectedMediaArray",
+                    "value" to value,
+                    "item" to mapOf("uuid" to itemId),
+                ),
+            )
         }
-        command(mapOf("type" to "setProperty", "property" to "selectedMediaArray", "value" to value, "item" to mapOf("uuid" to itemId)))
-    }
 
-    override suspend fun volume(): Double? = io {
-        val reply = control.exchange("GET_PARAMETER", rtspUri, body = "volume\r\n".toByteArray(), contentType = "text/parameters")
-        if (reply.status !in 200..299) return@io null
-        String(reply.body).substringAfter("volume:", "").trim().toDoubleOrNull()
-    }
+    override suspend fun volume(): Double? =
+        io {
+            val reply =
+                control.exchange(
+                    "GET_PARAMETER",
+                    rtspUri,
+                    body = "volume\r\n".toByteArray(),
+                    contentType = "text/parameters",
+                )
+            if (reply.status !in 200..299) return@io null
+            String(reply.body).substringAfter("volume:", "").trim().toDoubleOrNull()
+        }
 
     override suspend fun stop() = io { command(mapOf("type" to "stop")) }
 
@@ -257,22 +300,26 @@ internal class DefaultVideoSession private constructor(
 
     private fun command(payload: Map<String, Any?>) {
         if (closed.get()) throw AirkastException.Disconnected(null)
-        val response = try {
-            control.exchange(
-                "POST", "/command", ControlConnection.HTTP,
-                headers = listOf(
-                    "User-Agent" to COMMAND_USER_AGENT,
-                    "X-Apple-ProtocolVersion" to "1",
-                    "X-Apple-Session-ID" to commandSessionId,
-                    "X-Apple-StreamID" to streamId.toString(),
-                ),
-                body = BinaryPlist.encode(mapOf("params" to mapOf("data" to BinaryPlist.encode(payload)))),
-                contentType = ControlConnection.BPLIST,
-            )
-        } catch (e: Exception) {
-            end(e)
-            throw AirkastException.Disconnected(e)
-        }
+        val response =
+            try {
+                control.exchange(
+                    "POST",
+                    "/command",
+                    ControlConnection.HTTP,
+                    headers =
+                        listOf(
+                            "User-Agent" to COMMAND_USER_AGENT,
+                            "X-Apple-ProtocolVersion" to "1",
+                            "X-Apple-Session-ID" to commandSessionId,
+                            "X-Apple-StreamID" to streamId.toString(),
+                        ),
+                    body = BinaryPlist.encode(mapOf("params" to mapOf("data" to BinaryPlist.encode(payload)))),
+                    contentType = ControlConnection.BPLIST,
+                )
+            } catch (e: Exception) {
+                end(e)
+                throw AirkastException.Disconnected(e)
+            }
         options.logger?.invoke("command ${payload["type"]} ${response.status}")
         response.requireSuccess(payload["type"].toString())
     }
@@ -284,21 +331,50 @@ internal class DefaultVideoSession private constructor(
             return
         }
         val item = (message["item"] as? Map<*, *>)?.get("uuid") as? String
-        val event = when (message["type"]) {
-            "playbackState" -> ReceiverEvent.StateChanged(state(message["name"] as? String), message["reason"] as? String)
-            "sendMediaRemoteCommand" -> ReceiverEvent.RemoteCommand(
-                message["value"] as? String ?: "",
-                (message["volume"] as? Number)?.toDouble(),
-            )
-            "notification" -> when (message["name"]) {
-                "currentItemChanged" -> ReceiverEvent.ItemChanged(item, message["reason"] as? String)
-                "itemPlayedToEnd" -> ReceiverEvent.ItemEnded(item)
-                "rateChanged" -> ReceiverEvent.RateChanged((message["rate"] as? Number)?.toDouble() ?: 0.0, seconds(message["position"]))
-                "timeJumped" -> ReceiverEvent.TimeJumped(seconds(message["position"]))
-                else -> ReceiverEvent.Other(message)
+        val event =
+            when (message["type"]) {
+                "playbackState" -> {
+                    ReceiverEvent.StateChanged(state(message["name"] as? String), message["reason"] as? String)
+                }
+
+                "sendMediaRemoteCommand" -> {
+                    ReceiverEvent.RemoteCommand(
+                        message["value"] as? String ?: "",
+                        (message["volume"] as? Number)?.toDouble(),
+                    )
+                }
+
+                "notification" -> {
+                    when (message["name"]) {
+                        "currentItemChanged" -> {
+                            ReceiverEvent.ItemChanged(item, message["reason"] as? String)
+                        }
+
+                        "itemPlayedToEnd" -> {
+                            ReceiverEvent.ItemEnded(item)
+                        }
+
+                        "rateChanged" -> {
+                            ReceiverEvent.RateChanged(
+                                (message["rate"] as? Number)?.toDouble() ?: 0.0,
+                                seconds(message["position"]),
+                            )
+                        }
+
+                        "timeJumped" -> {
+                            ReceiverEvent.TimeJumped(seconds(message["position"]))
+                        }
+
+                        else -> {
+                            ReceiverEvent.Other(message)
+                        }
+                    }
+                }
+
+                else -> {
+                    ReceiverEvent.Other(message)
+                }
             }
-            else -> ReceiverEvent.Other(message)
-        }
         if (event is ReceiverEvent.ItemChanged && item != null && item == itemId) itemTaken?.complete(Unit)
         if (event is ReceiverEvent.StateChanged) mutableState.value = event.state
         mutableEvents.tryEmit(event)
@@ -334,12 +410,21 @@ internal class DefaultVideoSession private constructor(
         /** The version Apple's senders use for `/command`. */
         private const val COMMAND_USER_AGENT = "AirPlay/870.14.1"
 
-        fun open(receiver: Receiver, identity: SenderIdentity, options: SessionOptions): VideoSession {
-            val socket = Socket().apply {
-                connect(InetSocketAddress(receiver.host, receiver.port), options.connectTimeoutMillis)
-                soTimeout = options.requestTimeoutMillis.toInt()
-                tcpNoDelay = true
-            }
+        fun open(
+            receiver: Receiver,
+            identity: SenderIdentity,
+            options: SessionOptions,
+        ): VideoSession {
+            options.logger?.invoke(
+                "receiver ${receiver.model} srcvers ${receiver.sourceVersion} " +
+                    "features 0x${receiver.features.toString(16)} ${receiver.compatibility}",
+            )
+            val socket =
+                newSocket(options).apply {
+                    connect(InetSocketAddress(receiver.host, receiver.port), options.connectTimeoutMillis)
+                    soTimeout = options.requestTimeoutMillis.toInt()
+                    tcpNoDelay = true
+                }
             val control = ControlConnection(socket, identity) { options.logger?.invoke(it) }
             var timing: TimingResponder? = null
             try {
@@ -360,8 +445,15 @@ internal class DefaultVideoSession private constructor(
             }
         }
 
+        private fun newSocket(options: SessionOptions): Socket = options.socketFactory?.createSocket() ?: Socket()
+
         private fun plist(message: HttpMessage): Map<*, *> =
-            if (BinaryPlist.isPlist(message.body)) BinaryPlist.decode(message.body) as? Map<*, *> ?: emptyMap<Any, Any>() else emptyMap<Any, Any>()
+            if (BinaryPlist.isPlist(message.body)) {
+                BinaryPlist.decode(message.body) as? Map<*, *>
+                    ?: emptyMap<Any, Any>()
+            } else {
+                emptyMap<Any, Any>()
+            }
 
         fun cmTime(seconds: Double): Map<String, Any?> =
             mapOf("value" to Math.round(seconds * 1000), "timescale" to 1000L, "flags" to 1L, "epoch" to 0L)
@@ -376,17 +468,22 @@ internal class DefaultVideoSession private constructor(
             return value.toDouble() / timescale
         }
 
-        fun state(name: String?): PlaybackState = when (name) {
-            "loading" -> PlaybackState.Loading
-            "playing" -> PlaybackState.Playing
-            "paused" -> PlaybackState.Paused
-            "stopped" -> PlaybackState.Stopped
-            else -> PlaybackState.Unknown
-        }
+        fun state(name: String?): PlaybackState =
+            when (name) {
+                "loading" -> PlaybackState.Loading
+                "playing" -> PlaybackState.Playing
+                "paused" -> PlaybackState.Paused
+                "stopped" -> PlaybackState.Stopped
+                else -> PlaybackState.Unknown
+            }
 
-        private fun ranges(value: Any?): List<TimeRange> = (value as? List<*>).orEmpty().mapNotNull { range ->
-            val map = range as? Map<*, *> ?: return@mapNotNull null
-            TimeRange(seconds(map["start"]) ?: return@mapNotNull null, seconds(map["duration"]) ?: return@mapNotNull null)
-        }
+        private fun ranges(value: Any?): List<TimeRange> =
+            (value as? List<*>).orEmpty().mapNotNull { range ->
+                val map = range as? Map<*, *> ?: return@mapNotNull null
+                TimeRange(
+                    seconds(map["start"]) ?: return@mapNotNull null,
+                    seconds(map["duration"]) ?: return@mapNotNull null,
+                )
+            }
     }
 }

@@ -22,7 +22,10 @@ internal class ControlConnection(
     val localAddress get() = link.localAddress
     val remoteAddress get() = link.remoteAddress
 
-    fun encrypt(writeKey: ByteArray, readKey: ByteArray) = link.encrypt(writeKey, readKey)
+    fun encrypt(
+        writeKey: ByteArray,
+        readKey: ByteArray,
+    ) = link.encrypt(writeKey, readKey)
 
     @Synchronized
     fun exchange(
@@ -33,22 +36,26 @@ internal class ControlConnection(
         body: ByteArray = ByteArray(0),
         contentType: String? = null,
     ): HttpMessage {
-        val all = buildList {
-            add("CSeq" to (++sequence).toString())
-            add("DACP-ID" to dacpId)
-            add("Active-Remote" to activeRemote)
-            add("Client-Instance" to dacpId)
-            if (headers.none { it.first.equals("User-Agent", ignoreCase = true) }) add("User-Agent" to identity.userAgent)
-            if (contentType != null) add("Content-Type" to contentType)
-            addAll(headers)
-        }
+        val all =
+            buildList {
+                add("CSeq" to (++sequence).toString())
+                add("DACP-ID" to dacpId)
+                add("Active-Remote" to activeRemote)
+                add("Client-Instance" to dacpId)
+                if (headers.none { it.first.equals("User-Agent", ignoreCase = true) }) {
+                    add("User-Agent" to identity.userAgent)
+                }
+                if (contentType != null) add("Content-Type" to contentType)
+                addAll(headers)
+            }
         link.write(HttpMessage("$method $target $protocol", all, body).encode())
-        val response = try {
-            HttpMessage.read(link.input) ?: throw EOFException("The receiver closed the connection")
-        } catch (e: IOException) {
-            log("control: $method $target got no answer: $e")
-            throw IOException("$method $target: ${e.message}", e)
-        }
+        val response =
+            try {
+                HttpMessage.read(link.input) ?: throw EOFException("The receiver closed the connection")
+            } catch (e: IOException) {
+                log("control: $method $target got no answer: $e")
+                throw IOException("$method $target: ${e.message}", e)
+            }
         log("control: $method $target -> ${response.startLine}, ${response.body.size} bytes")
         return response
     }

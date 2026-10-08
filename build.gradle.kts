@@ -1,9 +1,8 @@
+// The plugins the convention plugins in build-logic apply by id, resolved once here.
 plugins {
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.kotlin.jvm) apply false
-}
-
-allprojects {
-    group = "com.github.aivanyuk.airkast"
-    version = providers.environmentVariable("VERSION").getOrElse("0.1.0-SNAPSHOT")
+    alias(libs.plugins.ktlint) apply false
+    alias(libs.plugins.animalSniffer) apply false
+    alias(libs.plugins.poko) apply false
 }
