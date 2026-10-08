@@ -3,13 +3,19 @@ package io.github.aivanyuk.airkast.wire
 import io.github.aivanyuk.airkast.crypto.ChaCha20Poly1305
 import java.io.BufferedInputStream
 import java.io.EOFException
+import java.io.IOException
 import java.io.InputStream
 import java.net.Socket
+import java.net.SocketTimeoutException
 
 /**
  * One TCP connection to a receiver. It is plain until [encrypt], then every byte travels in HAP
  * frames: a little-endian length of at most 1024 bytes, which is also the frame's associated
  * data, then the sealed bytes. Each direction counts its own frames into the nonce.
+ *
+ * A socket read timeout only surfaces from [await], before a message has started, where it has
+ * consumed nothing. Inside a message, [input] waits out a few timeouts, then fails for good, since
+ * the stream would be out of step.
  */
 internal class Link(
     private val socket: Socket,
@@ -26,7 +32,7 @@ internal class Link(
     val input: InputStream =
         object : InputStream() {
             override fun read(): Int {
-                if (!fill()) return -1
+                if (!fill(boundary = false)) return -1
                 return plain[plainOffset++].toInt() and 0xff
             }
 
@@ -36,7 +42,7 @@ internal class Link(
                 len: Int,
             ): Int {
                 if (len == 0) return 0
-                if (!fill()) return -1
+                if (!fill(boundary = false)) return -1
                 val n = minOf(len, plain.size - plainOffset)
                 plain.copyInto(b, off, plainOffset, plainOffset + n)
                 plainOffset += n
@@ -80,19 +86,26 @@ internal class Link(
         out.flush()
     }
 
+    /**
+     * Waits for the next message to start arriving, for up to the socket's timeout. Its
+     * [SocketTimeoutException] leaves the stream as it was, so the wait can be tried again. False
+     * at the end of the stream.
+     */
+    fun await(): Boolean = fill(boundary = true)
+
     /** Makes decrypted bytes available; false at the end of the stream. */
-    private fun fill(): Boolean {
+    private fun fill(boundary: Boolean): Boolean {
         if (plainOffset < plain.size) return true
         val key = readKey
         if (key == null) {
             val chunk = ByteArray(FRAME)
-            val n = raw.read(chunk)
+            val n = patiently(boundary) { raw.read(chunk) }
             if (n < 0) return false
             plain = chunk.copyOf(n)
         } else {
-            val lo = raw.read()
+            val lo = patiently(boundary) { raw.read() }
             if (lo < 0) return false
-            val hi = raw.read()
+            val hi = patiently { raw.read() }
             if (hi < 0) throw EOFException("Frame header cut short")
             val length = lo or (hi shl 8)
             require(length in 1..FRAME) { "Frame of $length bytes" }
@@ -107,9 +120,25 @@ internal class Link(
     private fun readFully(buffer: ByteArray) {
         var read = 0
         while (read < buffer.size) {
-            val n = raw.read(buffer, read, buffer.size - read)
+            val n = patiently { raw.read(buffer, read, buffer.size - read) }
             if (n < 0) throw EOFException("Frame cut short")
             read += n
+        }
+    }
+
+    /** Runs [read], waiting out [STALLS] timeouts unless [boundary] lets the first one through. */
+    private inline fun patiently(
+        boundary: Boolean = false,
+        read: () -> Int,
+    ): Int {
+        var stalls = 0
+        while (true) {
+            try {
+                return read()
+            } catch (e: SocketTimeoutException) {
+                if (boundary) throw e
+                if (++stalls > STALLS) throw IOException("The receiver stalled inside a message", e)
+            }
         }
     }
 
@@ -117,6 +146,7 @@ internal class Link(
 
     private companion object {
         const val FRAME = 1024
+        const val STALLS = 3
 
         fun nonce(counter: Long): ByteArray =
             ByteArray(12).also {

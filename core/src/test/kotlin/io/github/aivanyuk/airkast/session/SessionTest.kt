@@ -9,6 +9,7 @@ import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.SessionOptions
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -80,6 +81,62 @@ class SessionTest {
                 withTimeout(2_000) { ended.await() }
                 val error = runCatching { session.play() }.exceptionOrNull()
                 assertThat(error).isInstanceOf(AirkastException.Disconnected::class.java)
+            }
+        }
+
+    @Test
+    fun aLateFeedbackAnswerKeepsTheSession() =
+        runBlocking {
+            FakeReceiver(lateAnswers = mapOf("/feedback" to 900)).use { fake ->
+                val patient =
+                    options
+                        .newBuilder()
+                        .apply {
+                            keepAlive = true
+                            requestTimeoutMillis = 500
+                        }.build()
+                Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = patient).use { session ->
+                    session.load(MediaItem("https://example.com/a.m3u8"))
+                    withTimeout(8_000) { while (fake.feedbacks < 2) delay(50) }
+                    assertThat(session.playbackInfo().positionSeconds).isEqualTo(0.0)
+                    session.pause()
+                    assertThat(fake.commands.last()["type"]).isEqualTo("setRate")
+                    assertThat(session.state.value).isNotEqualTo(PlaybackState.Stopped)
+                }
+            }
+        }
+
+    @Test
+    fun aLateCommandAnswerTimesOutAndTheSessionLivesOn() =
+        runBlocking {
+            FakeReceiver(lateAnswers = mapOf("stop" to 900)).use { fake ->
+                val quick = options.newBuilder().apply { requestTimeoutMillis = 500 }.build()
+                Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = quick).use { session ->
+                    session.load(MediaItem("https://example.com/a.m3u8"))
+                    val error = runCatching { session.stop() }.exceptionOrNull()
+                    assertThat(error).isInstanceOf(AirkastException.Timeout::class.java)
+                    session.play()
+                    assertThat(
+                        fake.commands.map { it["type"] }.takeLast(2),
+                    ).containsExactly("stop", "setRate").inOrder()
+                }
+            }
+        }
+
+    @Test
+    fun aReceiverThatGoesSilentEndsTheSession() =
+        runBlocking {
+            FakeReceiver(hangsAt = "/feedback").use { fake ->
+                val patient =
+                    options
+                        .newBuilder()
+                        .apply {
+                            keepAlive = true
+                            requestTimeoutMillis = 500
+                        }.build()
+                val session = Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = patient)
+                val ended = withTimeout(10_000) { session.events.first { it is ReceiverEvent.Disconnected } }
+                assertThat((ended as ReceiverEvent.Disconnected).cause).hasMessageThat().contains("earlier request")
             }
         }
 

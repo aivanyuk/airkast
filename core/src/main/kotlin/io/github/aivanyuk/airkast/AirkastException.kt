@@ -19,7 +19,11 @@ public sealed class AirkastException(
         public val status: Int,
     ) : AirkastException("$request answered $status")
 
-    /** The receiver did not answer in time. A load whose session stays silent ends here too. */
+    /**
+     * The receiver did not answer in time. The session stays open: the late answer is dropped when
+     * it comes, and the session ends with [Disconnected] only if the receiver is still silent at
+     * the next request. A load the receiver does not take in time ends here too.
+     */
     public class Timeout(
         message: String,
     ) : AirkastException(message)
