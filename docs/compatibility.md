@@ -1,0 +1,108 @@
+# Compatibility
+
+What airkast has been checked on, and what each platform version changes. A change that alters
+what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRIBUTING.md#tests)).
+
+## Receivers
+
+### Checked
+
+| Receiver | Firmware, `srcvers` | Date | Sender | Result |
+| --- | --- | --- | --- | --- |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-08, at 8dd8c77 | desktop JVM 21 | `Supported`. Live test passes: start position, seek, pause, play, tracks, volume read, stop. A whole 51-minute episode to its end, position within 2 s of the wall clock |
+
+### How `Receiver.compatibility` decides
+
+From the `_airplay._tcp` TXT record, in this order. Bit numbers follow pyatv's `AirPlayFlags`.
+
+| Case | When | Receivers |
+| --- | --- | --- |
+| `Unknown` | No TXT record: typed in by hand | any |
+| `NoVideo` | No video v2 (feature bit 49) and no video v1 (bit 0) | speakers; mirroring-only receivers |
+| `VideoV1Only` | Video v1 without v2 | older Apple TVs; some third-party receivers |
+| `NeedsPassword` | `pw=true`, or status flag `0x80` | a receiver with a password set |
+| `NeedsPin` | Status flag `0x8` | a receiver set to require a code |
+| `NoTransientPairing` | Neither system pairing (bit 43) nor CoreUtils pairing (bit 48) | none seen yet |
+| `Supported` | Anything else | the LG CX |
+
+pyatv also reads status flag `0x200` as "pairing mandatory". The LG CX sets it (flags `0x244`) and
+pairs without a PIN, so airkast ignores it.
+
+### LG CX (webOS 04.64.00)
+
+- It speaks AirPlay video v2 only. Its features are `0x7F8AD0,0x38BCB46`, and every AirPlay 1
+  video endpoint (`/play`, `/playback-info`, `/scrub`, `/reverse`) answers 404.
+- Before pairing, everything but `GET /info` answers 470. Transient pairing needs no PIN.
+- Without RECORD after the event channel opens, it plays but sends no events.
+- It never asks for NTP timing, so the sender needs no inbound UDP.
+- `Start-Position` must be a CMTime. `Start-Position-Seconds` is ignored.
+- A seek without the item's UUID and both tolerances is ignored.
+- With `mediaType: streaming`, a pause reads as loading. `file` reports it as paused, without
+  buffered ranges.
+- It reads its volume (`GET_PARAMETER`), but ignores every way of setting it.
+- BACK on its remote arrives as `pbpr` then `pbal`, and it leaves the player only once the
+  sender stops. Its volume keys arrive as `dvlc`, with a volume from 0 to 1.
+- Its player is Apple's web receiver on hls.js, so streams need CORS headers.
+- A second sender takes over, and the first one's connection closes.
+
+### Not checked yet
+
+- **Apple TV (tvOS).** send-airplay2 reports the same `/command` flow on tvOS 26, and that SETUP
+  stalls without NTP timing (`SessionOptions.ntpTiming`). It may ask for a PIN, depending on its
+  AirPlay access setting.
+- **Other TVs with AirPlay 2** (Samsung, Sony, Vizio, Roku, other LG years): whatever their TXT
+  record says. A report with the record, the firmware and the live test's result is welcome.
+
+## Senders
+
+### JVM
+
+Java 11 or later. The jar is Java 11 bytecode compiled against the JDK 11 class library. It is
+tested on JDK 21.
+
+### Android
+
+minSdk 23 (Android 6.0). Animal Sniffer checks `airkast-core` against API 23 with D8's
+desugaring, so an app needs no core library desugaring. Lint checks `airkast-android`, and its
+tests run under Robolectric at API 23, 34, 36 and 37.
+
+| Android | What changes | What airkast does |
+| --- | --- | --- |
+| below 9 (API 28) | The JCA has no ChaCha20-Poly1305 | Carries its own (RFC 8439) |
+| below 14 (API 34) | `NsdManager` resolves one service at a time, and a resolved service has one `host` | Resolves services one after another |
+| 14 (API 34) and later | A resolved service has `hostAddresses`, which may list IPv6 before IPv4 | Takes the first IPv4 address |
+| 17 (API 37), when the app targets 37 | The local network is blocked until the user grants `ACCESS_LOCAL_NETWORK`. A TCP connection times out with no error that names the cause, and `NsdManager` is blocked too | `ReceiverDiscovery` and `Airkast.connect(context, …)` fail at once with `AirkastException.NotPermitted`. `LocalNetwork.accessible` tells an app when to ask |
+
+The app declares `ACCESS_LOCAL_NETWORK` itself, and only when it targets SDK 37 or more, since
+Android's guidance is to leave it out below that. It is in the `NEARBY_DEVICES` group, so a user
+who granted Bluetooth's nearby devices permission is not asked again.
+
+### Networks
+
+- **Wi-Fi without internet.** Android may keep mobile data as the default network, and a socket
+  that is not bound to Wi-Fi then goes over mobile data and times out. `Airkast.connect(context,
+  …)` binds the session to the Wi-Fi or Ethernet network whose subnet holds the receiver.
+- **VPN.** A VPN that takes all traffic takes LAN connections too. Binding to the Wi-Fi network
+  gets around it when the VPN allows apps to bypass it. When it doesn't, casting may fail while
+  the VPN is on.
+- **Emulators.** The receiver never connects back to the sender, so an emulator behind NAT can
+  drive a TV by its IP address. Its `NsdManager` doesn't see the LAN's mDNS, so the receiver is
+  typed in.
+- **Multicast.** `NsdManager` sends and reads mDNS itself, so no `MulticastLock` is needed.
+
+### Screen off
+
+A session sends `/feedback` every two seconds and keeps two TCP connections open. With the screen
+off, the CPU sleeps unless something holds a wake lock. How long the LG keeps a sender that has
+gone quiet has not been measured. An app that casts in the background runs a foreground service
+of type `mediaPlayback`, which keeps network access under Doze, and holds a partial wake lock and
+a Wi-Fi lock while a session plays. airkast does not take these locks for the app yet. The media3
+module will, with a phone checked through a whole episode with its screen locked.
+
+## Callers
+
+- Kotlin 2.2 or later: airkast compiles at language and API version 2.2.
+- kotlin-stdlib 2.2.21 and kotlinx-coroutines 1.10.2 at least. Gradle hands an app its own newer
+  versions.
+- Gradle metadata says JVM 11 (`org.gradle.jvm.version`).
+- No reflection, so R8 needs no keep rules.

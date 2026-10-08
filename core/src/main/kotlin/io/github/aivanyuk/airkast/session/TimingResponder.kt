@@ -18,7 +18,11 @@ internal class TimingResponder(
     private val socket = DatagramSocket(InetSocketAddress(bind, 0))
     val port: Int get() = socket.localPort
 
-    private val thread = Thread(::serve, "airkast-timing").apply { isDaemon = true; start() }
+    private val thread =
+        Thread(::serve, "airkast-timing").apply {
+            isDaemon = true
+            start()
+        }
 
     private fun serve() {
         val buffer = ByteArray(128)
@@ -43,16 +47,21 @@ internal class TimingResponder(
         private const val NTP_EPOCH_OFFSET = 0x83AA7E80L
 
         /** The reply echoes the request's send time as its reference and stamps now twice. */
-        fun reply(request: ByteArray, now: Long): ByteArray =
-            ByteBuffer.allocate(PACKET).apply {
-                put(request[0])
-                put(0xD3.toByte())
-                putShort(7)
-                putInt(0)
-                put(request, 24, 8)
-                putLong(now)
-                putLong(now)
-            }.array()
+        fun reply(
+            request: ByteArray,
+            now: Long,
+        ): ByteArray =
+            ByteBuffer
+                .allocate(PACKET)
+                .apply {
+                    put(request[0])
+                    put(0xD3.toByte())
+                    putShort(7)
+                    putInt(0)
+                    put(request, 24, 8)
+                    putLong(now)
+                    putLong(now)
+                }.array()
 
         fun ntpNow(): Long {
             val millis = System.currentTimeMillis()

@@ -11,7 +11,9 @@ import java.net.Socket
  * frames: a little-endian length of at most 1024 bytes, which is also the frame's associated
  * data, then the sealed bytes. Each direction counts its own frames into the nonce.
  */
-internal class Link(private val socket: Socket) : AutoCloseable {
+internal class Link(
+    private val socket: Socket,
+) : AutoCloseable {
     private val raw = BufferedInputStream(socket.getInputStream())
     private val out = socket.getOutputStream()
     private var writeKey: ByteArray? = null
@@ -21,26 +23,34 @@ internal class Link(private val socket: Socket) : AutoCloseable {
     private var plain = ByteArray(0)
     private var plainOffset = 0
 
-    val input: InputStream = object : InputStream() {
-        override fun read(): Int {
-            if (!fill()) return -1
-            return plain[plainOffset++].toInt() and 0xff
-        }
+    val input: InputStream =
+        object : InputStream() {
+            override fun read(): Int {
+                if (!fill()) return -1
+                return plain[plainOffset++].toInt() and 0xff
+            }
 
-        override fun read(b: ByteArray, off: Int, len: Int): Int {
-            if (len == 0) return 0
-            if (!fill()) return -1
-            val n = minOf(len, plain.size - plainOffset)
-            plain.copyInto(b, off, plainOffset, plainOffset + n)
-            plainOffset += n
-            return n
+            override fun read(
+                b: ByteArray,
+                off: Int,
+                len: Int,
+            ): Int {
+                if (len == 0) return 0
+                if (!fill()) return -1
+                val n = minOf(len, plain.size - plainOffset)
+                plain.copyInto(b, off, plainOffset, plainOffset + n)
+                plainOffset += n
+                return n
+            }
         }
-    }
 
     val localAddress get() = socket.localAddress
     val remoteAddress get() = socket.inetAddress
 
-    fun encrypt(writeKey: ByteArray, readKey: ByteArray) {
+    fun encrypt(
+        writeKey: ByteArray,
+        readKey: ByteArray,
+    ) {
         this.writeKey = writeKey
         this.readKey = readKey
     }
@@ -55,7 +65,13 @@ internal class Link(private val socket: Socket) : AutoCloseable {
             while (offset < bytes.size) {
                 val length = minOf(FRAME, bytes.size - offset)
                 val aad = byteArrayOf(length.toByte(), (length shr 8).toByte())
-                val sealed = ChaCha20Poly1305.seal(key, nonce(writeCounter++), bytes.copyOfRange(offset, offset + length), aad)
+                val sealed =
+                    ChaCha20Poly1305.seal(
+                        key,
+                        nonce(writeCounter++),
+                        bytes.copyOfRange(offset, offset + length),
+                        aad,
+                    )
                 out.write(aad)
                 out.write(sealed)
                 offset += length
@@ -102,8 +118,9 @@ internal class Link(private val socket: Socket) : AutoCloseable {
     private companion object {
         const val FRAME = 1024
 
-        fun nonce(counter: Long): ByteArray = ByteArray(12).also {
-            for (i in 0 until 8) it[4 + i] = (counter ushr (8 * i)).toByte()
-        }
+        fun nonce(counter: Long): ByteArray =
+            ByteArray(12).also {
+                for (i in 0 until 8) it[4 + i] = (counter ushr (8 * i)).toByte()
+            }
     }
 }

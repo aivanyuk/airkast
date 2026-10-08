@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- LocalNetwork reads the networks' capabilities and addresses to find the one a receiver is on. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- ACCESS_LOCAL_NETWORK is left to the app: it belongs only in an app that targets SDK 37 or
+         more, and the app must ask for it at runtime anyway. See docs/compatibility.md. -->
+</manifest>

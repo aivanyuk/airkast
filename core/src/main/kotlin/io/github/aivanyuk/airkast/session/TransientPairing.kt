@@ -16,28 +16,34 @@ internal object TransientPairing {
 
     fun pair(connection: ControlConnection): ByteArray {
         connection.exchange("POST", "/pair-pin-start", ControlConnection.HTTP, HEADERS, contentType = TLV)
-        val m2 = post(
-            connection,
-            Tlv8.encode(
-                Tlv8.METHOD to byteArrayOf(0),
-                Tlv8.SEQUENCE to byteArrayOf(1),
-                Tlv8.FLAGS to byteArrayOf(Tlv8.FLAG_TRANSIENT.toByte()),
-            ),
-        )
+        val m2 =
+            post(
+                connection,
+                Tlv8.encode(
+                    Tlv8.METHOD to byteArrayOf(0),
+                    Tlv8.SEQUENCE to byteArrayOf(1),
+                    Tlv8.FLAGS to byteArrayOf(Tlv8.FLAG_TRANSIENT.toByte()),
+                ),
+            )
         val salt = m2[Tlv8.SALT] ?: throw AirkastException.PairingFailed("The receiver sent no salt")
-        val serverPublic = m2[Tlv8.PUBLIC_KEY] ?: throw AirkastException.PairingFailed("The receiver sent no public key")
+        val serverPublic =
+            m2[Tlv8.PUBLIC_KEY] ?: throw AirkastException.PairingFailed("The receiver sent no public key")
         val srp = SrpClient("Pair-Setup", PIN)
         val proof = srp.respond(salt, serverPublic)
-        val m4 = post(
-            connection,
-            Tlv8.encode(Tlv8.SEQUENCE to byteArrayOf(3), Tlv8.PUBLIC_KEY to srp.publicKey, Tlv8.PROOF to proof),
-        )
+        val m4 =
+            post(
+                connection,
+                Tlv8.encode(Tlv8.SEQUENCE to byteArrayOf(3), Tlv8.PUBLIC_KEY to srp.publicKey, Tlv8.PROOF to proof),
+            )
         val serverProof = m4[Tlv8.PROOF] ?: throw AirkastException.PairingFailed("The receiver sent no proof")
         if (!srp.verifyServer(serverProof)) throw AirkastException.PairingFailed("The receiver's proof does not match")
         return srp.sessionKey
     }
 
-    private fun post(connection: ControlConnection, body: ByteArray): Map<Int, ByteArray> {
+    private fun post(
+        connection: ControlConnection,
+        body: ByteArray,
+    ): Map<Int, ByteArray> {
         val response = connection.exchange("POST", "/pair-setup", ControlConnection.HTTP, HEADERS, body, TLV)
         if (response.status !in 200..299) {
             throw AirkastException.PairingFailed("Pair-setup answered ${response.status}")

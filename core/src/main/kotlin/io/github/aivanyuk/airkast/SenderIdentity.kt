@@ -1,20 +1,22 @@
 package io.github.aivanyuk.airkast
 
+import io.github.aivanyuk.airkast.internal.Poko
 import java.security.SecureRandom
 
 /**
  * What the sender tells a receiver about itself in SETUP. The defaults are the values receivers
  * are known to accept; [deviceId] is a random, locally administered MAC address, never a real one.
  */
-public data class SenderIdentity(
-    val name: String = "airkast",
-    val deviceId: String = randomDeviceId(),
-    val model: String = "iPhone14,3",
-    val osName: String = "iPhone OS",
-    val osVersion: String = "16.5",
-    val osBuildVersion: String = "20F66",
-    val sourceVersion: String = "690.7.1",
-    val userAgent: String = "AirPlay/550.10",
+@Poko
+public class SenderIdentity(
+    public val name: String = "airkast",
+    public val deviceId: String = randomDeviceId(),
+    public val model: String = "iPhone14,3",
+    public val osName: String = "iPhone OS",
+    public val osVersion: String = "16.5",
+    public val osBuildVersion: String = "20F66",
+    public val sourceVersion: String = "690.7.1",
+    public val userAgent: String = "AirPlay/550.10",
 ) {
     public companion object {
         public fun randomDeviceId(): String {

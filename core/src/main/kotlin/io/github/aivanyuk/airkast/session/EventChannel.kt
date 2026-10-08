@@ -38,11 +38,12 @@ internal class EventChannel(
             while (true) {
                 val request = HttpMessage.read(link.input) ?: break
                 log("event channel: ${request.startLine}, ${request.body.size} bytes")
-                val headers = buildList {
-                    add("Audio-Latency" to "0")
-                    request.header("CSeq")?.let { add("CSeq" to it) }
-                    request.header("Server")?.let { add("Server" to it) }
-                }
+                val headers =
+                    buildList {
+                        add("Audio-Latency" to "0")
+                        request.header("CSeq")?.let { add("CSeq" to it) }
+                        request.header("Server")?.let { add("Server" to it) }
+                    }
                 link.write(HttpMessage("${request.requestProtocol} 200 OK", headers).encode())
                 unwrap(request.body)?.let(onMessage)
             }
