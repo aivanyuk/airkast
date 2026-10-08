@@ -32,6 +32,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
 import java.net.ConnectException
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -157,11 +158,10 @@ internal class DefaultVideoSession private constructor(
         var attempt = 0
         while (true) {
             try {
-                return newSocket(
-                    options,
-                ).apply { connect(InetSocketAddress(receiver.host, port), options.connectTimeoutMillis) }
-            } catch (e: ConnectException) {
-                if (++attempt >= 5) throw e
+                return connect(InetSocketAddress(receiver.host, port), options)
+            } catch (e: AirkastException.Unreachable) {
+                // The event port can refuse for a moment right after SETUP names it.
+                if (e.cause !is ConnectException || ++attempt >= 5) throw e
                 Thread.sleep(200)
             }
         }
@@ -270,13 +270,19 @@ internal class DefaultVideoSession private constructor(
 
     override suspend fun volume(): Double? =
         io {
+            if (closed.get()) throw AirkastException.Disconnected(null)
             val reply =
-                control.exchange(
-                    "GET_PARAMETER",
-                    rtspUri,
-                    body = "volume\r\n".toByteArray(),
-                    contentType = "text/parameters",
-                )
+                try {
+                    control.exchange(
+                        "GET_PARAMETER",
+                        rtspUri,
+                        body = "volume\r\n".toByteArray(),
+                        contentType = "text/parameters",
+                    )
+                } catch (e: IOException) {
+                    end(e)
+                    throw AirkastException.Disconnected(e)
+                }
             if (reply.status !in 200..299) return@io null
             String(reply.body).substringAfter("volume:", "").trim().toDoubleOrNull()
         }
@@ -420,13 +426,13 @@ internal class DefaultVideoSession private constructor(
                     "features 0x${receiver.features.toString(16)} ${receiver.compatibility}",
             )
             val socket =
-                newSocket(options).apply {
-                    connect(InetSocketAddress(receiver.host, receiver.port), options.connectTimeoutMillis)
+                connect(InetSocketAddress(receiver.host, receiver.port), options).apply {
                     soTimeout = options.requestTimeoutMillis.toInt()
                     tcpNoDelay = true
                 }
             val control = ControlConnection(socket, identity) { options.logger?.invoke(it) }
             var timing: TimingResponder? = null
+            var session: DefaultVideoSession? = null
             try {
                 val sessionKey = TransientPairing.pair(control)
                 control.encrypt(
@@ -437,15 +443,41 @@ internal class DefaultVideoSession private constructor(
                 if (options.ntpTiming) {
                     timing = TimingResponder(socket.localAddress, socket.inetAddress) { options.logger?.invoke(it) }
                 }
-                return DefaultVideoSession(receiver, options, control, timing).also { it.start(identity, sessionKey) }
+                session = DefaultVideoSession(receiver, options, control, timing)
+                session.start(identity, sessionKey)
+                return session
             } catch (e: Exception) {
+                // A session that got as far as its event channel closes that too.
+                runCatching { session?.close() }
                 runCatching { timing?.close() }
                 runCatching { control.close() }
-                throw e
+                throw when (e) {
+                    is AirkastException -> e
+                    is IOException -> AirkastException.Disconnected(e)
+                    else -> AirkastException.UnexpectedReply(e)
+                }
             }
         }
 
-        private fun newSocket(options: SessionOptions): Socket = options.socketFactory?.createSocket() ?: Socket()
+        /** A connected socket, or [AirkastException.Unreachable]. */
+        private fun connect(
+            address: InetSocketAddress,
+            options: SessionOptions,
+        ): Socket {
+            val socket =
+                try {
+                    options.socketFactory?.createSocket() ?: Socket()
+                } catch (e: IOException) {
+                    throw AirkastException.Unreachable(e)
+                }
+            try {
+                socket.connect(address, options.connectTimeoutMillis)
+            } catch (e: IOException) {
+                runCatching { socket.close() }
+                throw AirkastException.Unreachable(e)
+            }
+            return socket
+        }
 
         private fun plist(message: HttpMessage): Map<*, *> =
             if (BinaryPlist.isPlist(message.body)) {

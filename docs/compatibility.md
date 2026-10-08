@@ -9,7 +9,7 @@ what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRI
 
 | Receiver | Firmware, `srcvers` | Date | Sender | Result |
 | --- | --- | --- | --- | --- |
-| LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-08 | desktop JVM 21 | `Supported`. Live test passes: start position, seek, pause, play, tracks, volume read, stop. A whole 51-minute episode to its end, position within 2 s of the wall clock |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-08, at 8dd8c77 | desktop JVM 21 | `Supported`. Live test passes: start position, seek, pause, play, tracks, volume read, stop. A whole 51-minute episode to its end, position within 2 s of the wall clock |
 
 ### How `Receiver.compatibility` decides
 

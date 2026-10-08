@@ -8,6 +8,12 @@ caller sees adds its line under "Unreleased".
 
 The first release. What it holds:
 
+### Requires
+
+- Android 6.0 (API 23) or a Java 11 JVM; Kotlin 2.2 or later in the calling code; kotlin-stdlib
+  2.2.21 and kotlinx-coroutines 1.10.2 at least. Before the first release `airkast-android` had
+  minSdk 21 and the jars were Java 17 bytecode.
+
 ### Added
 
 - `Airkast.connect` pairs with an AirPlay video v2 receiver transiently, with no PIN, and opens
@@ -23,3 +29,6 @@ The first release. What it holds:
   local network permission; `Airkast.connect(context, …)`, which checks that permission and binds
   the session to the network the receiver is on. Discovery and connecting fail with
   `AirkastException.NotPermitted` without the permission.
+- Every failure is an `AirkastException`: `Unreachable` when no connection opens, `Disconnected`
+  when one drops, `UnexpectedReply`, `PairingFailed`, `Rejected`, `Timeout`, `NotPermitted`, and
+  `DiscoveryFailed` with the platform's error code.

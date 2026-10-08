@@ -69,8 +69,9 @@ set -- --silent --show-error \
     --write-out '\n%{http_code}'
 [ -n "$input" ] && set -- "$@" --data-binary "@$input" --header 'Content-Type: application/json'
 
-# The header arrives on fd 3 so the token never appears in the process's arguments.
-response=$(curl "$@" "https://api.github.com/${path#/}" 3<<<"Authorization: Bearer $token")
+# The header arrives on fd 3 so the token never appears in the process's arguments. A pipe, not a
+# here-string, which bash before 5.1 backs with a temporary file.
+response=$(curl "$@" "https://api.github.com/${path#/}" 3< <(printf '%s\n' "Authorization: Bearer $token"))
 status=${response##*$'\n'}
 body=${response%$'\n'*}
 

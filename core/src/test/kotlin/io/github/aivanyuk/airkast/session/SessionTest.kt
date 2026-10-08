@@ -15,6 +15,8 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import java.net.ServerSocket
+import kotlin.concurrent.thread
 
 class SessionTest {
     private val options =
@@ -87,6 +89,27 @@ class SessionTest {
             assertThrows(AirkastException.PairingFailed::class.java) {
                 runBlocking { Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = options) }
             }
+        }
+    }
+
+    @Test
+    fun aReceiverThatIsOffIsUnreachable() {
+        val port = ServerSocket(0).use { it.localPort }
+        val error =
+            runCatching { runBlocking { Airkast.connect(Receiver("off", "127.0.0.1", port), options = options) } }
+                .exceptionOrNull()
+        assertThat(error).isInstanceOf(AirkastException.Unreachable::class.java)
+    }
+
+    @Test
+    fun aReceiverThatHangsUpWhilePairingDisconnects() {
+        ServerSocket(0).use { server ->
+            thread(isDaemon = true) { runCatching { server.accept().close() } }
+            val error =
+                runCatching {
+                    runBlocking { Airkast.connect(Receiver("rude", "127.0.0.1", server.localPort), options = options) }
+                }.exceptionOrNull()
+            assertThat(error).isInstanceOf(AirkastException.Disconnected::class.java)
         }
     }
 }

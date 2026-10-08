@@ -24,7 +24,8 @@ public class ReceiverDiscovery(
     /**
      * Every receiver that answers, sorted by name, including ones airkast cannot play on: filter
      * on [Receiver.compatibility]. Fails with [AirkastException.NotPermitted] when the app may
-     * not reach the local network.
+     * not reach the local network, and [AirkastException.DiscoveryFailed] when `NsdManager`
+     * cannot start the scan.
      */
     public fun receivers(): Flow<List<Receiver>> =
         callbackFlow {
@@ -55,7 +56,7 @@ public class ReceiverDiscovery(
                         serviceType: String,
                         errorCode: Int,
                     ) {
-                        close(IllegalStateException("Discovery failed to start: $errorCode"))
+                        close(AirkastException.DiscoveryFailed(errorCode))
                     }
 
                     override fun onStopDiscoveryFailed(

@@ -24,6 +24,19 @@ public sealed class AirkastException(
         message: String,
     ) : AirkastException(message)
 
+    /**
+     * No connection to the receiver could be opened: it is off or asleep, on another network, or a
+     * firewall or VPN is in the way.
+     */
+    public class Unreachable(
+        cause: Throwable,
+    ) : AirkastException("The receiver could not be reached", cause)
+
+    /** The receiver answered with something this library cannot read. */
+    public class UnexpectedReply(
+        cause: Throwable,
+    ) : AirkastException("The receiver's answer could not be read", cause)
+
     /** The connection to the receiver is gone: it closed, another sender took over, or the network failed. */
     public class Disconnected(
         cause: Throwable?,
@@ -36,4 +49,12 @@ public sealed class AirkastException(
     public class NotPermitted(
         message: String,
     ) : AirkastException(message)
+
+    /**
+     * Scanning for receivers could not start. [code] is the platform's error, such as one of
+     * `NsdManager`'s `FAILURE_*` codes on Android.
+     */
+    public class DiscoveryFailed(
+        public val code: Int,
+    ) : AirkastException("Discovery failed to start: $code")
 }

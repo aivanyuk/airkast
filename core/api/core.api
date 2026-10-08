@@ -12,6 +12,11 @@ public final class io/github/aivanyuk/airkast/AirkastException$Disconnected : io
 	public fun <init> (Ljava/lang/Throwable;)V
 }
 
+public final class io/github/aivanyuk/airkast/AirkastException$DiscoveryFailed : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (I)V
+	public final fun getCode ()I
+}
+
 public final class io/github/aivanyuk/airkast/AirkastException$NotPermitted : io/github/aivanyuk/airkast/AirkastException {
 	public fun <init> (Ljava/lang/String;)V
 }
@@ -28,6 +33,14 @@ public final class io/github/aivanyuk/airkast/AirkastException$Rejected : io/git
 
 public final class io/github/aivanyuk/airkast/AirkastException$Timeout : io/github/aivanyuk/airkast/AirkastException {
 	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class io/github/aivanyuk/airkast/AirkastException$UnexpectedReply : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (Ljava/lang/Throwable;)V
+}
+
+public final class io/github/aivanyuk/airkast/AirkastException$Unreachable : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (Ljava/lang/Throwable;)V
 }
 
 public final class io/github/aivanyuk/airkast/Compatibility : java/lang/Enum {
