@@ -340,7 +340,7 @@ internal class DefaultVideoSession private constructor(
                 soTimeout = options.requestTimeoutMillis.toInt()
                 tcpNoDelay = true
             }
-            val control = ControlConnection(socket, identity)
+            val control = ControlConnection(socket, identity) { options.logger?.invoke(it) }
             var timing: TimingResponder? = null
             try {
                 val sessionKey = TransientPairing.pair(control)

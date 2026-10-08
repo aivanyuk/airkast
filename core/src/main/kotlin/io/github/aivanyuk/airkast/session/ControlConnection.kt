@@ -4,11 +4,16 @@ import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.wire.HttpMessage
 import io.github.aivanyuk.airkast.wire.Link
 import java.io.EOFException
+import java.io.IOException
 import java.net.Socket
 import java.security.SecureRandom
 
 /** The connection a sender pairs on and sends its RTSP and HTTP requests over, one at a time. */
-internal class ControlConnection(socket: Socket, private val identity: SenderIdentity) : AutoCloseable {
+internal class ControlConnection(
+    socket: Socket,
+    private val identity: SenderIdentity,
+    private val log: (String) -> Unit = {},
+) : AutoCloseable {
     private val link = Link(socket)
     private var sequence = 0
     private val dacpId = HEX.let { digits -> String(CharArray(16) { digits[RANDOM.nextInt(16)] }) }
@@ -38,7 +43,14 @@ internal class ControlConnection(socket: Socket, private val identity: SenderIde
             addAll(headers)
         }
         link.write(HttpMessage("$method $target $protocol", all, body).encode())
-        return HttpMessage.read(link.input) ?: throw EOFException("The receiver closed the connection")
+        val response = try {
+            HttpMessage.read(link.input) ?: throw EOFException("The receiver closed the connection")
+        } catch (e: IOException) {
+            log("control: $method $target got no answer: $e")
+            throw IOException("$method $target: ${e.message}", e)
+        }
+        log("control: $method $target -> ${response.startLine}, ${response.body.size} bytes")
+        return response
     }
 
     override fun close() = link.close()
