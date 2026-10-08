@@ -5,6 +5,9 @@ kotlin = "2.4.20"
 # its own newer versions. Raising one is a release note (docs/releasing.md, "What counts as a break").
 kotlinStdlibFloor = "2.2.21"
 kotlinxCoroutines = "1.10.2"
+# :media3 compiles against this and so asks for it at least. SimpleBasePlayer is media3's unstable
+# API, so a media3 release that changes it may need an airkast release (docs/compatibility.md).
+media3 = "1.11.1"
 # The Android API level that :core may call, checked by Animal Sniffer against gummy-bears'
 # signatures, which add the APIs D8 desugars. Matches :android's minSdk.
 gummyBears = "0.16.0"
@@ -19,7 +22,9 @@ androidxTestCore = "1.7.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
+androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
 junit = { module = "junit:junit", version.ref = "junit" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }

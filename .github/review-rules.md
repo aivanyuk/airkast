@@ -62,7 +62,7 @@ Authority: docs/architecture.md § Threading and § Failure, CONTRIBUTING.md § 
 
 | ID | Assertion | Trigger |
 | --- | --- | --- |
-| C1 | `airkast-core` stays plain JVM: no `android.*` import, and no new runtime dependency beyond kotlin-stdlib and kotlinx-coroutines. `airkast-android` adds only the Android platform. A module never depends on a sibling other than `:core`. | New import, new `dependencies` line |
+| C1 | `airkast-core` stays plain JVM: no `android.*` import, and no new runtime dependency beyond kotlin-stdlib and kotlinx-coroutines. `airkast-android` adds only the Android platform; `airkast-media3` adds media3-common and kotlinx-coroutines-android, with media3's unstable API in internal classes only. A module never depends on a sibling other than `:core`. | New import, new `dependencies` line |
 | C2 | Raising a floor (minSdk, JVM bytecode or class library level, Kotlin language or API version, the stdlib or coroutines minimum) is a break: P3 and A2's release rules apply, and docs/compatibility.md § Callers or § Senders changes with it. | `build-logic/`, `libs.versions.toml` floor entries |
 | C3 | An Android call above minSdk sits behind a `Build.VERSION.SDK_INT` check, and a Robolectric test pins the levels on both sides with `@Config(sdk = [...])`. Lint's NewApi decides the call; the reviewer checks the test. | New `SDK_INT` branch, new platform API |
 | C4 | Network code on Android goes through `SessionOptions.socketFactory` and `LocalNetwork`, so the session binds to the receiver's network and fails with `NotPermitted` when Android 17 withholds `ACCESS_LOCAL_NETWORK`. A new path that opens a socket or starts `NsdManager` does both. | New socket, new `NsdManager` call |

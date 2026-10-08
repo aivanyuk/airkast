@@ -19,3 +19,4 @@ rootProject.name = "airkast"
 
 include(":core")
 include(":android")
+include(":media3")
