@@ -147,7 +147,7 @@ internal class DefaultVideoSession private constructor(
                     try {
                         control.exchange("POST", "/feedback")
                     } catch (_: LateReply) {
-                        // The LG once went quiet for over 5 s, 13 minutes into a session, and played on.
+                        // The LG CX (webOS 04.64.00) once went quiet for over 5 s, 13 minutes into a session, and played on.
                     } catch (e: Exception) {
                         end(e)
                     }
