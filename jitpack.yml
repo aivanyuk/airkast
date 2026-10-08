@@ -1,2 +1,4 @@
+# JitPack builds a tag with VERSION set to it (docs/releasing.md). The build needs JDK 17 or later
+# to run AGP; it publishes Java 11 bytecode whatever JDK builds it.
 jdk:
   - openjdk21

@@ -6,12 +6,14 @@ smart TVs with an AirPlay 2 receiver built in.
 
 - **`airkast-core`**: plain Kotlin on the JVM, with no Android dependency. It runs on a desktop
   JVM against a real TV, which is how it is tested.
-- **`airkast-android`**: receiver discovery through `NsdManager`.
+- **`airkast-android`**: receiver discovery through `NsdManager`, Android 17's local network
+  permission, and connections bound to the network the receiver is on.
 
 ## Status
 
-Early. It is checked against an LG CX (webOS, receiver 377.25.06), and reverse-engineered from
-public notes, with no specification behind it. What works there:
+Early, and versioned 0.x: a minor release may change the API ([releasing](docs/releasing.md)).
+It is checked against an LG CX (webOS, receiver 377.25.06), and reverse-engineered from public
+notes, with no specification behind it. What works there:
 
 - transient pairing, with no PIN on the screen;
 - loading an HLS URL at a start position, then play, pause, seek, stop and the next item;
@@ -19,23 +21,34 @@ public notes, with no specification behind it. What works there:
 - reading and switching audio and subtitle renditions;
 - receiver events: state, end of item, the TV remote's pause, seek and BACK, and its volume.
 
-It does not yet support receivers that demand a PIN or a password, Apple TV's MRP remote
-channel, or setting the volume (the LG reports it but ignores a change).
+It does not yet support receivers that demand a PIN or a password, receivers that take URLs
+only over AirPlay video v1, Apple TV's remote channel, or setting the volume (the LG reports it
+but ignores a change). [docs/compatibility.md](docs/compatibility.md) lists what has been
+checked, on which receivers and Android versions.
 
 ## Use
 
 ```kotlin
-// settings.gradle.kts: repositories { maven("https://jitpack.io") }
-implementation("com.github.aivanyuk.airkast:airkast-core:<tag>")
-implementation("com.github.aivanyuk.airkast:airkast-android:<tag>")
+// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories {
+        maven("https://jitpack.io") { content { includeGroup("com.github.aivanyuk.airkast") } }
+    }
+}
+
+// build.gradle.kts
+implementation("com.github.aivanyuk.airkast:airkast-core:<version>")
+implementation("com.github.aivanyuk.airkast:airkast-android:<version>")
 ```
 
+On Android:
+
 ```kotlin
-// Scans while collected. playsUrls is false for speakers and for TVs without URL playback.
+// An app that targets SDK 37 declares ACCESS_LOCAL_NETWORK and asks for it before this.
 val receiver = ReceiverDiscovery(context).receivers()
-    .mapNotNull { list -> list.firstOrNull { it.playsUrls } }
+    .mapNotNull { list -> list.firstOrNull { it.compatibility == Compatibility.Supported } }
     .first()
-val session = Airkast.connect(receiver)
+val session = Airkast.connect(context, receiver)
 session.load(MediaItem("https://example.com/master.m3u8", startSeconds = 600.0))
 session.events.collect { event -> /* StateChanged, ItemEnded, RemoteCommand... */ }
 val info = session.playbackInfo()  // position, duration, buffered ranges
@@ -43,11 +56,11 @@ session.seek(1200.0)
 session.close()
 ```
 
+On a desktop JVM, `Airkast.connect(Receiver("TV", "192.168.1.20"))` takes a receiver typed in by
+hand.
+
 The receiver fetches the stream itself. A receiver whose player is a web page (the LG's is)
 needs CORS headers on every playlist and segment.
-
-The receiver also sends timing requests to the sender over UDP. Without answers it plays but
-reports nothing, so the sender must be reachable from the TV. An emulator behind NAT is not.
 
 BACK on the TV's remote arrives as `RemoteCommand(BACK_START)` and `RemoteCommand(BACK_END)`, and
 the TV leaves its player only when the sender calls `stop()`.
@@ -55,13 +68,17 @@ the TV leaves its player only when the sender calls `stop()`.
 ## Tests
 
 ```bash
-./gradlew :core:test
+./gradlew check
 AIRKAST_RECEIVER=192.168.1.20 ./gradlew :core:test --tests '*LiveReceiverTest'
 ```
 
-The crypto tests check SRP-6a and HKDF against srptools and pyatv, and ChaCha20-Poly1305 against
-RFC 8439. ChaCha20-Poly1305 is implemented here because the JCA has no provider for it below
-Android 9.
+`check` runs the JVM tests, the Android tests under Robolectric at several API levels, lint,
+ktlint, the public API check and Animal Sniffer. The crypto tests check SRP-6a and HKDF against
+srptools and pyatv, and ChaCha20-Poly1305 against RFC 8439. ChaCha20-Poly1305 is implemented here
+because the JCA has no provider for it below Android 9. The live test plays on a real receiver.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) has the rules a change follows, and
+[docs/architecture.md](docs/architecture.md) the shape of the code.
 
 ## Credits
 
