@@ -83,6 +83,33 @@ class AirkastPlayerTest {
     }
 
     @Test
+    fun aPauseWhileRebufferingReachesTheReceiver() {
+        playing()
+        fake.emit(ReceiverEvent.StateChanged(PlaybackState.Loading, null))
+        idle()
+        assertThat(player.playbackState).isEqualTo(Player.STATE_BUFFERING)
+        player.pause()
+        idle()
+        assertThat(fake.sent.last()).isEqualTo("pause")
+        fake.emit(ReceiverEvent.StateChanged(PlaybackState.Paused, null))
+        idle()
+        assertThat(player.playWhenReady).isFalse()
+    }
+
+    @Test
+    fun aPlayWhileAPausedLoadRebuffersReachesTheReceiver() {
+        player.session = fake
+        player.setMediaItem(item)
+        idle()
+        fake.emit(ReceiverEvent.StateChanged(PlaybackState.Loading, null))
+        idle()
+        player.play()
+        idle()
+        assertThat(fake.sent).containsExactly("load", "pause", "play").inOrder()
+        assertThat(player.isPlaying).isTrue()
+    }
+
+    @Test
     fun theTvsRemoteReachesThePlayer() {
         playing()
         fake.emit(ReceiverEvent.StateChanged(PlaybackState.Paused, null))

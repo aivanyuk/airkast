@@ -29,6 +29,7 @@ public interface AirkastPlayer : Player {
      */
     public var session: VideoSession?
 
+    /** Builds an [AirkastPlayer]. It needs no session yet: attach one with [session] when it opens. */
     public class Builder(
         context: Context,
     ) {

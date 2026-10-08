@@ -145,9 +145,8 @@ internal class SessionPlayer(
         wantsPlayReason = Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
         moveTo(position.get())
         val s = attached
-        if (s != null && loaded && playback == Player.STATE_READY) {
-            send(s) { if (playWhenReady) play() else pause() }
-        }
+        // Rebuffering included: a pause the receiver never hears would be undone by its next report.
+        if (s != null && loaded) send(s) { if (playWhenReady) play() else pause() }
         return Futures.immediateVoidFuture()
     }
 
