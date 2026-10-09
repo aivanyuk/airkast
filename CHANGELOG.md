@@ -6,7 +6,19 @@ caller sees adds its line under "Unreleased".
 
 ## Unreleased
 
+## 0.1.1 - 2026-10-09
+
+The code of 0.1.0, built.
+
+### Fixed
+
+- JitPack builds the release. 0.1.0's build failed before compiling anything, because JitPack
+  resolved the `openjdk21` alias to a JDK that would not download. `jitpack.yml` now names an
+  exact JDK.
+
 ## 0.1.0 - 2026-10-08
+
+Never built on JitPack, so it cannot be resolved: use 0.1.1, which holds the same code.
 
 The first release. What it holds:
 
