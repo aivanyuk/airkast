@@ -91,17 +91,28 @@ needs CORS headers on every playlist and segment.
 BACK on the TV's remote arrives as `ReceiverEvent.Back`, and the TV leaves its player only when
 the sender calls `stop()`.
 
-## Sample app
+## Sample apps
 
-[`sample/`](sample) is a small app over the three modules, and the reference integration: it finds
-TVs or takes an address, asks for Android 17's local network permission, casts a URL through
-`AirkastPlayer` under a `MediaSession` with its notification, switches tracks, and lists what the
-TV reports. [`Cast.kt`](sample/src/main/kotlin/io/github/aivanyuk/airkast/sample/Cast.kt) and
-[`CastService.kt`](sample/src/main/kotlin/io/github/aivanyuk/airkast/sample/CastService.kt) are
-the integration; `ui/` is Compose over them. It builds against the modules in this repository:
+[`sample/`](sample) holds the reference integration and two small apps over it, one with its UI
+in Compose and one in views, so a reader in either toolkit sees the same calls in their own idiom:
+
+- [`sample/cast`](sample/cast) is the integration, which both apps drive.
+  [`Cast.kt`](sample/cast/src/main/kotlin/io/github/aivanyuk/airkast/sample/Cast.kt) connects to
+  a receiver and plays through an `AirkastPlayer`;
+  [`CastService.kt`](sample/cast/src/main/kotlin/io/github/aivanyuk/airkast/sample/CastService.kt)
+  puts a `MediaSession` over it, for the notification and the lock screen.
+- [`sample/compose`](sample/compose) is one screen in Compose over `Cast`: its flows are
+  collected with `collectAsStateWithLifecycle`, and media3's `PlayerView` sits in an `AndroidView`.
+- [`sample/views`](sample/views) is the same screen as an activity with layouts: the flows are
+  collected under `repeatOnLifecycle`, and `PlayerView` is in the layout.
+
+Either app finds TVs or takes an address, asks for Android 17's local network permission, casts a
+URL, switches tracks, and lists what the TV reports. The library needs neither toolkit: every
+call suspends, and what changes is a `Flow`. They build against the modules in this repository:
 
 ```bash
-./gradlew :sample:installDebug
+./gradlew :sample:compose:installDebug
+./gradlew :sample:views:installDebug
 ```
 
 ## Tests

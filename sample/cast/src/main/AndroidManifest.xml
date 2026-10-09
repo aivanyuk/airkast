@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Android 17 blocks the local network for an app that targets 37 until the user grants this.
+         An app that targets less leaves it out. airkast-android declares INTERNET and
+         ACCESS_NETWORK_STATE, and airkast-media3 WAKE_LOCK. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!-- CastService keeps the cast going with the app in the background. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <application>
+        <!-- Exported so the system and other controllers (a watch, a car, the lock screen) reach
+             the MediaSession, as media3's MediaSessionService requires. -->
+        <service
+            android:name=".CastService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
