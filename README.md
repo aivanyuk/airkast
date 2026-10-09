@@ -53,11 +53,13 @@ val receiver = ReceiverDiscovery(context).receivers
     .first()
 val session = Airkast.connect(context, receiver)
 session.load(VideoItem("https://example.com/master.m3u8", startAt = 10.minutes))
-session.events.collect { event ->
-    when (event) {
-        is ReceiverEvent.Back -> session.stop()  // the TV leaves its player once the sender stops
-        is ReceiverEvent.StateChanged -> show(event.state)
-        else -> Unit  // new events may join in a minor release
+scope.launch {
+    session.events.collect { event ->  // completes when the session ends
+        when (event) {
+            is ReceiverEvent.Back -> session.stop()  // the TV leaves its player once the sender stops
+            is ReceiverEvent.StateChanged -> show(event.state)
+            else -> Unit  // new events may join in a minor release
+        }
     }
 }
 val info = session.playbackInfo()  // position, duration, buffered ranges

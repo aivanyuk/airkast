@@ -21,12 +21,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -56,7 +57,18 @@ internal class DefaultVideoSession private constructor(
 ) : VideoSession {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutableEvents = MutableSharedFlow<ReceiverEvent>(extraBufferCapacity = 64)
-    override val events: SharedFlow<ReceiverEvent> = mutableEvents.asSharedFlow()
+
+    @Volatile
+    private var disconnected: ReceiverEvent.Disconnected? = null
+
+    override val events: Flow<ReceiverEvent> =
+        mutableEvents
+            // Subscribed before the check, so a session that ends between the two is heard either way.
+            .onSubscription { disconnected?.let { emit(it) } }
+            .transformWhile { event ->
+                emit(event)
+                event !is ReceiverEvent.Disconnected
+            }
     private val mutableState = MutableStateFlow(PlaybackState.Unknown)
     override val state: StateFlow<PlaybackState> = mutableState.asStateFlow()
 
@@ -429,7 +441,9 @@ internal class DefaultVideoSession private constructor(
         pending.values.forEach { it.completeExceptionally(error) }
         itemTaken?.completeExceptionally(error)
         mutableState.value = PlaybackState.Stopped
-        mutableEvents.tryEmit(ReceiverEvent.Disconnected(cause))
+        val event = ReceiverEvent.Disconnected(cause)
+        disconnected = event
+        mutableEvents.tryEmit(event)
         runCatching { eventChannel?.close() }
         runCatching { control.close() }
         runCatching { timing?.close() }

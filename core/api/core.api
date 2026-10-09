@@ -292,7 +292,7 @@ public final class io/github/aivanyuk/airkast/VideoItem {
 
 public abstract interface class io/github/aivanyuk/airkast/VideoSession : java/lang/AutoCloseable {
 	public abstract fun close ()V
-	public abstract fun getEvents ()Lkotlinx/coroutines/flow/SharedFlow;
+	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public abstract fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
 	public abstract fun getState ()Lkotlinx/coroutines/flow/StateFlow;
 	public abstract fun load (Lio/github/aivanyuk/airkast/VideoItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

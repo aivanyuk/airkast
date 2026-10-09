@@ -2,7 +2,7 @@ package io.github.aivanyuk.airkast
 
 import io.github.aivanyuk.airkast.session.DefaultVideoSession
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import javax.net.SocketFactory
@@ -16,8 +16,12 @@ import kotlin.time.Duration.Companion.seconds
 public interface VideoSession : AutoCloseable {
     public val receiver: Receiver
 
-    /** Receiver events, and a final [ReceiverEvent.Disconnected] when the session ends. */
-    public val events: SharedFlow<ReceiverEvent>
+    /**
+     * What the receiver reports from the moment of collection, ending with
+     * [ReceiverEvent.Disconnected], after which the flow completes. Collected once the session has
+     * ended, it emits that alone. Every collector hears every event; none replay.
+     */
+    public val events: Flow<ReceiverEvent>
 
     /** The latest playback state the receiver reported, kept for late collectors. */
     public val state: StateFlow<PlaybackState>

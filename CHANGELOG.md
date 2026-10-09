@@ -34,6 +34,9 @@ Breaking, under the rules for a minor release before 1.0 ([releasing](docs/relea
   builds one.
 - `ReceiverDiscovery.receivers` is a property, and `LocalNetwork.accessible` and
   `permissionRequired` are `isAccessible` and `needsPermission`.
+- `VideoSession.events` is a `Flow` that completes after `Disconnected`, and emits that alone to
+  a collector that comes once the session has ended, in place of a `SharedFlow` that never
+  completed and, with no replay, left a late collector waiting for an end it had missed.
 - Items load as `streaming` by default (`VideoItem.streaming`), since the LG reports tracks and
   buffered ranges only for a `streaming` item: a `file` item answers an empty track list and
   ignores a selection, which is why 0.1 could never switch a track. The LG reports a paused

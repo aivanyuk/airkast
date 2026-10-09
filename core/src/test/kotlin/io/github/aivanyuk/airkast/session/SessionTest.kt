@@ -11,6 +11,7 @@ import io.github.aivanyuk.airkast.VideoItem
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
@@ -85,6 +86,25 @@ class SessionTest {
                 withTimeout(2_000) { ended.await() }
                 val error = runCatching { session.play() }.exceptionOrNull()
                 assertThat(error).isInstanceOf(AirkastException.Disconnected::class.java)
+            }
+        }
+
+    @Test
+    fun eventsEndWithDisconnectedAndALateCollectorHearsItToo() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                val session = Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = options)
+                val heard = async { session.events.toList() }
+                yield()
+                session.load(VideoItem("https://example.com/a.m3u8"))
+                session.close()
+                val events = withTimeout(2_000) { heard.await() }
+                assertThat(events.last()).isInstanceOf(ReceiverEvent.Disconnected::class.java)
+                assertThat(events.count { it is ReceiverEvent.Disconnected }).isEqualTo(1)
+                assertThat(events.any { it is ReceiverEvent.ItemChanged }).isTrue()
+                val late = withTimeout(2_000) { session.events.toList() }
+                assertThat(late).hasSize(1)
+                assertThat(late.single()).isInstanceOf(ReceiverEvent.Disconnected::class.java)
             }
         }
 
