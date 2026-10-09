@@ -9,15 +9,22 @@ import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
 import io.github.aivanyuk.airkast.VideoItem
 import io.github.aivanyuk.airkast.VideoSession
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.transformWhile
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /** A session that answers at once, reports what it was asked, and plays as the LG does. */
 internal class FakeSession : VideoSession {
     override val receiver = Receiver("tv", "192.0.2.1", 7000)
-    override val events = MutableSharedFlow<ReceiverEvent>(extraBufferCapacity = 64)
+    private val shared = MutableSharedFlow<ReceiverEvent>(extraBufferCapacity = 64)
+    override val events: Flow<ReceiverEvent> =
+        shared.transformWhile { event ->
+            emit(event)
+            event !is ReceiverEvent.Disconnected
+        }
     override val state = MutableStateFlow(PlaybackState.Unknown)
 
     val sent = mutableListOf<String>()
@@ -27,7 +34,7 @@ internal class FakeSession : VideoSession {
     var volume: Double? = 0.5
 
     fun emit(event: ReceiverEvent) {
-        check(events.tryEmit(event))
+        check(shared.tryEmit(event))
     }
 
     override suspend fun load(item: VideoItem) {
