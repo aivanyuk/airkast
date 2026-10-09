@@ -27,9 +27,9 @@ public class ReceiverDiscovery(
      * not reach the local network, and [AirkastException.DiscoveryFailed] when `NsdManager`
      * cannot start the scan.
      */
-    public fun receivers(): Flow<List<Receiver>> =
+    public val receivers: Flow<List<Receiver>> =
         callbackFlow {
-            if (!LocalNetwork.accessible(context)) throw notPermitted()
+            if (!LocalNetwork.isAccessible(context)) throw notPermitted()
             val found = LinkedHashMap<String, Receiver>()
             val resolving =
                 Resolver(nsd) { receiver ->

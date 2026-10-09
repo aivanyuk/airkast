@@ -5,6 +5,8 @@ import android.os.Looper
 import androidx.media3.common.Player
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.VideoSession
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * A media3 [Player] that plays on a receiver through a [VideoSession], so media3's UI and a
@@ -13,8 +15,7 @@ import io.github.aivanyuk.airkast.VideoSession
  * It plays one media item, whose URL the receiver fetches itself. A media item set while a session
  * is attached loads at once, as a Cast player's does, and one set before waits for a session. The
  * device volume can be read but not set. What a `Player` has no place for, such as BACK on the
- * TV's remote ([ReceiverEvent.RemoteCommand]) or switching renditions, the app takes from
- * [session].
+ * TV's remote ([ReceiverEvent.Back]) or switching tracks, the app takes from [session].
  *
  * Call it on its application looper, as any `Player`.
  */
@@ -29,17 +30,14 @@ public interface AirkastPlayer : Player {
      */
     public var session: VideoSession?
 
-    /** Builds an [AirkastPlayer]. It needs no session yet: attach one with [session] when it opens. */
+    /** How to build an [AirkastPlayer]: `AirkastPlayer(context) { keepAwake = false }`. */
     public class Builder(
         context: Context,
     ) {
         private val context = context.applicationContext
-        private var looper: Looper = Looper.myLooper() ?: Looper.getMainLooper()
-        private var keepAwake = true
-        private var pollIntervalMillis = 1_000L
 
         /** The application looper. The current thread's, or the main one's, by default. */
-        public fun setLooper(looper: Looper): Builder = apply { this.looper = looper }
+        public var looper: Looper = Looper.myLooper() ?: Looper.getMainLooper()
 
         /**
          * Whether to hold a partial wake lock and a Wi-Fi lock while an item loads, plays or is
@@ -47,20 +45,31 @@ public interface AirkastPlayer : Player {
          * keepalive stops, and the receiver may drop the sender. True by default; this artifact's
          * manifest declares `WAKE_LOCK`.
          */
-        public fun setKeepAwake(keepAwake: Boolean): Builder = apply { this.keepAwake = keepAwake }
+        public var keepAwake: Boolean = true
 
         /** How often to ask the receiver for its position while an item is on it. */
-        public fun setPositionPollIntervalMillis(millis: Long): Builder =
-            apply {
-                require(millis > 0) { "The poll interval must be positive" }
-                pollIntervalMillis = millis
-            }
+        public var positionPollInterval: Duration = 1.seconds
 
-        public fun build(): AirkastPlayer =
-            SessionPlayer(
+        /**
+         * Whether to load items as `streaming`, the default, rather than `file`. The LG reports
+         * tracks and buffered ranges only for a `streaming` item.
+         */
+        public var streaming: Boolean = true
+
+        public fun build(): AirkastPlayer {
+            require(positionPollInterval.isPositive()) { "The poll interval must be positive" }
+            return SessionPlayer(
                 looper = looper,
                 awake = if (keepAwake) KeepAwake(context) else null,
-                pollIntervalMillis = pollIntervalMillis,
+                pollInterval = positionPollInterval,
+                streaming = streaming,
             )
+        }
     }
 }
+
+/** Builds an [AirkastPlayer]. It needs no session yet: attach one with [AirkastPlayer.session] when it opens. */
+public fun AirkastPlayer(
+    context: Context,
+    block: AirkastPlayer.Builder.() -> Unit = {},
+): AirkastPlayer = AirkastPlayer.Builder(context).apply(block).build()

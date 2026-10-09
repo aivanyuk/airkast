@@ -6,13 +6,13 @@ public final class io/github/aivanyuk/airkast/android/AirkastAndroid {
 public final class io/github/aivanyuk/airkast/android/LocalNetwork {
 	public static final field INSTANCE Lio/github/aivanyuk/airkast/android/LocalNetwork;
 	public static final field PERMISSION Ljava/lang/String;
-	public final fun accessible (Landroid/content/Context;)Z
-	public final fun permissionRequired (Landroid/content/Context;)Z
+	public final fun isAccessible (Landroid/content/Context;)Z
+	public final fun needsPermission (Landroid/content/Context;)Z
 	public final fun socketFactory (Landroid/content/Context;Ljava/lang/String;)Ljavax/net/SocketFactory;
 }
 
 public final class io/github/aivanyuk/airkast/android/ReceiverDiscovery {
 	public fun <init> (Landroid/content/Context;)V
-	public final fun receivers ()Lkotlinx/coroutines/flow/Flow;
+	public final fun getReceivers ()Lkotlinx/coroutines/flow/Flow;
 }
 

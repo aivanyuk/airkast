@@ -52,7 +52,7 @@ class ReceiverDiscoveryTest {
         val app = ApplicationProvider.getApplicationContext<Application>()
         app.applicationInfo.targetSdkVersion = 37
         assertThrows(AirkastException.NotPermitted::class.java) {
-            runBlocking { ReceiverDiscovery(app).receivers().first() }
+            runBlocking { ReceiverDiscovery(app).receivers.first() }
         }
     }
 }

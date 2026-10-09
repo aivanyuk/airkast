@@ -20,7 +20,7 @@ notes, with no specification behind it. What works there:
 - transient pairing, with no PIN on the screen;
 - loading an HLS URL at a start position, then play, pause, seek, stop and the next item;
 - position, duration and buffered ranges;
-- reading and switching audio and subtitle renditions;
+- reading and switching audio and subtitle tracks;
 - receiver events: state, end of item, the TV remote's pause, seek and BACK, and its volume.
 
 It does not yet support receivers that demand a PIN or a password, receivers that take URLs
@@ -48,29 +48,37 @@ On Android:
 
 ```kotlin
 // An app that targets SDK 37 declares ACCESS_LOCAL_NETWORK and asks for it before this.
-val receiver = ReceiverDiscovery(context).receivers()
-    .mapNotNull { list -> list.firstOrNull { it.compatibility == Compatibility.Supported } }
+val receiver = ReceiverDiscovery(context).receivers
+    .mapNotNull { list -> list.firstOrNull { it.isSupported } }
     .first()
 val session = Airkast.connect(context, receiver)
-session.load(MediaItem("https://example.com/master.m3u8", startSeconds = 600.0))
-session.events.collect { event -> /* StateChanged, ItemEnded, RemoteCommand... */ }
+session.load(VideoItem("https://example.com/master.m3u8", startAt = 10.minutes))
+session.events.collect { event ->
+    when (event) {
+        is ReceiverEvent.Back -> session.stop()  // the TV leaves its player once the sender stops
+        is ReceiverEvent.StateChanged -> show(event.state)
+        else -> Unit  // new events may join in a minor release
+    }
+}
 val info = session.playbackInfo()  // position, duration, buffered ranges
-session.seek(1200.0)
+session.seek(20.minutes)
 session.close()
 ```
+
+Every time is a `kotlin.time.Duration`, and a volume runs from 0 to 1.
 
 With media3, the player drives the session, and a `MediaSession` over it gives the notification
 and the lock screen:
 
 ```kotlin
-val player = AirkastPlayer.Builder(context).build()
+val player = AirkastPlayer(context)
 player.setMediaItem(MediaItem.fromUri("https://example.com/master.m3u8"), 600_000)
 player.playWhenReady = true
 player.session = Airkast.connect(context, receiver)  // loads the item
 ```
 
 The app still opens and closes the session, and takes from it what a `Player` has no place for:
-BACK on the TV's remote, and switching renditions.
+BACK on the TV's remote, and switching tracks.
 
 On a desktop JVM, `Airkast.connect(Receiver("TV", "192.168.1.20"))` takes a receiver typed in by
 hand.
@@ -78,8 +86,8 @@ hand.
 The receiver fetches the stream itself. A receiver whose player is a web page (the LG's is)
 needs CORS headers on every playlist and segment.
 
-BACK on the TV's remote arrives as `RemoteCommand(BACK_START)` and `RemoteCommand(BACK_END)`, and
-the TV leaves its player only when the sender calls `stop()`.
+BACK on the TV's remote arrives as `ReceiverEvent.Back`, and the TV leaves its player only when
+the sender calls `stop()`.
 
 ## Tests
 

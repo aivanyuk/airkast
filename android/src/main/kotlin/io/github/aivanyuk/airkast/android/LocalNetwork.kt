@@ -21,12 +21,12 @@ public object LocalNetwork {
     private const val ANDROID_17 = 37
 
     /** Whether this app needs [PERMISSION]: Android 17 or later, and a target SDK of 37 or more. */
-    public fun permissionRequired(context: Context): Boolean =
+    public fun needsPermission(context: Context): Boolean =
         Build.VERSION.SDK_INT >= ANDROID_17 && context.applicationInfo.targetSdkVersion >= ANDROID_17
 
     /** Whether this app may reach the local network now. */
-    public fun accessible(context: Context): Boolean =
-        !permissionRequired(context) ||
+    public fun isAccessible(context: Context): Boolean =
+        !needsPermission(context) ||
             context.checkPermission(PERMISSION, Process.myPid(), Process.myUid()) ==
             PackageManager.PERMISSION_GRANTED
 

@@ -10,6 +10,7 @@ what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRI
 | Receiver | Firmware, `srcvers` | Date | Sender | Result |
 | --- | --- | --- | --- | --- |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-08, at 8dd8c77 | desktop JVM 21 | `Supported`. Live test passes: start position, seek, pause, play, tracks, volume read, stop. A whole 51-minute episode to its end, position within 2 s of the wall clock |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-09, at c2ceb0f | desktop JVM 21 | `Supported`. Live test passes on a `streaming` item, now the default: start position, seek, pause (reported `Paused`), play, tracks read and subtitles off, volume read, stop. Probed the same day: for a `streaming` item tracks are read and switched (subtitles, audio with a rebuffer, subtitles off) on Apple's bipbop stream and on a kino.pub hls4 master; for a `file` item none are reported and a selection is ignored; a paused `streaming` item reads as `loading` with rate 0 |
 
 ### How `Receiver.compatibility` decides
 
@@ -37,8 +38,15 @@ pairs without a PIN, so airkast ignores it.
 - It never asks for NTP timing, so the sender needs no inbound UDP.
 - `Start-Position` must be a CMTime. `Start-Position-Seconds` is ignored.
 - A seek without the item's UUID and both tolerances is ignored.
-- With `mediaType: streaming`, a pause reads as loading. `file` reports it as paused, without
-  buffered ranges.
+- `selectedMediaArray` lists the selected audio and subtitle renditions, and a `setProperty` on
+  it switches them live (audio with a rebuffer), only for an item loaded with
+  `mediaType: streaming`. A `file` item answers an empty list and ignores the selection, whatever
+  the payload. Ids follow the master's `EXT-X-MEDIA` order: on Apple's bipbop stream audio 0–1
+  then subtitles 2–9, on a kino.pub hls4 master subtitles 0–8 then audio 9–17. Turning subtitles
+  off keeps the forced one.
+- With `mediaType: streaming`, a pause reads as `loading` with rate 0 for as long as it lasts,
+  as an event and on a poll. `file` reports it as `paused`, and reports no buffered ranges.
+  airkast reports `Paused` for `loading` while the rate is 0, so a caller sees the same in both.
 - It reads its volume (`GET_PARAMETER`), but ignores every way of setting it.
 - BACK on its remote arrives as `pbpr` then `pbal`, and it leaves the player only once the
   sender stops. Its volume keys arrive as `dvlc`, with a volume from 0 to 1.
@@ -74,7 +82,7 @@ tests run under Robolectric at API 23, 34, 36 and 37.
 | below 9 (API 28) | The JCA has no ChaCha20-Poly1305 | Carries its own (RFC 8439) |
 | below 14 (API 34) | `NsdManager` resolves one service at a time, and a resolved service has one `host` | Resolves services one after another |
 | 14 (API 34) and later | A resolved service has `hostAddresses`, which may list IPv6 before IPv4 | Takes the first IPv4 address |
-| 17 (API 37), when the app targets 37 | The local network is blocked until the user grants `ACCESS_LOCAL_NETWORK`. A TCP connection times out with no error that names the cause, and `NsdManager` is blocked too | `ReceiverDiscovery` and `Airkast.connect(context, …)` fail at once with `AirkastException.NotPermitted`. `LocalNetwork.accessible` tells an app when to ask |
+| 17 (API 37), when the app targets 37 | The local network is blocked until the user grants `ACCESS_LOCAL_NETWORK`. A TCP connection times out with no error that names the cause, and `NsdManager` is blocked too | `ReceiverDiscovery` and `Airkast.connect(context, …)` fail at once with `AirkastException.NotPermitted`. `LocalNetwork.isAccessible` tells an app when to ask |
 
 The app declares `ACCESS_LOCAL_NETWORK` itself, and only when it targets SDK 37 or more, since
 Android's guidance is to leave it out below that. It is in the `NEARBY_DEVICES` group, so a user

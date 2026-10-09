@@ -12,6 +12,7 @@ dependencies {
 tasks.test {
     // The live tests play on a real receiver only when AIRKAST_RECEIVER names one.
     environment("AIRKAST_RECEIVER", System.getenv("AIRKAST_RECEIVER") ?: "")
+    environment("AIRKAST_URL", System.getenv("AIRKAST_URL") ?: "")
     testLogging {
         events("failed")
         showStandardStreams = true

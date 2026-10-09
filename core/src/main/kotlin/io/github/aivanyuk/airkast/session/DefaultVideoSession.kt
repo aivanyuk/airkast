@@ -1,17 +1,16 @@
 package io.github.aivanyuk.airkast.session
 
 import io.github.aivanyuk.airkast.AirkastException
-import io.github.aivanyuk.airkast.MediaItem
-import io.github.aivanyuk.airkast.MediaKind
-import io.github.aivanyuk.airkast.MediaOption
-import io.github.aivanyuk.airkast.MediaSelection
 import io.github.aivanyuk.airkast.PlaybackInfo
 import io.github.aivanyuk.airkast.PlaybackState
+import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.SessionOptions
-import io.github.aivanyuk.airkast.TimeRange
+import io.github.aivanyuk.airkast.Track
+import io.github.aivanyuk.airkast.TrackKind
+import io.github.aivanyuk.airkast.VideoItem
 import io.github.aivanyuk.airkast.VideoSession
 import io.github.aivanyuk.airkast.crypto.Hkdf
 import io.github.aivanyuk.airkast.wire.BinaryPlist
@@ -41,6 +40,9 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * AirPlay video v2: pair transiently, SETUP the session and its event channel, SETUP a type-130
@@ -72,6 +74,10 @@ internal class DefaultVideoSession private constructor(
 
     @Volatile
     private var itemTaken: CompletableDeferred<Unit>? = null
+
+    /** Whether the rate is 0: set by [pause], [play], [load] and [stop], and by the TV remote's rate changes. */
+    @Volatile
+    private var paused = false
 
     private fun start(
         identity: SenderIdentity,
@@ -143,7 +149,7 @@ internal class DefaultVideoSession private constructor(
         if (options.keepAlive) {
             scope.launch {
                 while (isActive && !closed.get()) {
-                    delay(FEEDBACK_INTERVAL_MILLIS)
+                    delay(FEEDBACK_INTERVAL)
                     try {
                         control.exchange("POST", "/feedback")
                     } catch (_: LateReply) {
@@ -169,11 +175,12 @@ internal class DefaultVideoSession private constructor(
         }
     }
 
-    override suspend fun load(item: MediaItem) {
+    override suspend fun load(item: VideoItem) {
         val id = UUID.randomUUID().toString().uppercase()
         val taken = CompletableDeferred<Unit>()
         itemId = id
         itemTaken = taken
+        paused = false
         io {
             command(
                 mapOf(
@@ -183,7 +190,7 @@ internal class DefaultVideoSession private constructor(
                             "uuid" to id,
                             "mediaType" to if (item.streaming) "streaming" else "file",
                             "Content-Location" to item.url,
-                            "Start-Position" to cmTime(item.startSeconds),
+                            "Start-Position" to cmTime(item.startAt),
                         ),
                 ),
             )
@@ -198,50 +205,56 @@ internal class DefaultVideoSession private constructor(
             command(mapOf("type" to "setProperty", "property" to "actionAtItemEnd", "value" to 1L))
             command(mapOf("type" to "setRate", "rate" to 1.0))
         }
-        withTimeoutOrNull(options.loadTimeoutMillis) { taken.await() }
+        withTimeoutOrNull(options.loadTimeout) { taken.await() }
             ?: throw AirkastException.Timeout("The receiver did not take the item")
     }
 
-    override suspend fun play() = io { command(mapOf("type" to "setRate", "rate" to 1.0)) }
+    override suspend fun play() {
+        paused = false
+        io { command(mapOf("type" to "setRate", "rate" to 1.0)) }
+    }
 
-    override suspend fun pause() = io { command(mapOf("type" to "setRate", "rate" to 0.0)) }
+    override suspend fun pause() {
+        paused = true
+        io { command(mapOf("type" to "setRate", "rate" to 0.0)) }
+    }
 
-    override suspend fun seek(positionSeconds: Double): Double? {
-        val zero = cmTime(0.0)
+    override suspend fun seek(position: Duration): Duration? {
+        val zero = cmTime(Duration.ZERO)
         val reply =
             request(
                 mapOf(
                     "type" to "seek",
-                    "time" to cmTime(positionSeconds),
+                    "time" to cmTime(position),
                     "toleranceBefore" to zero,
                     "toleranceAfter" to zero,
                     "item" to mapOf("uuid" to itemId),
                 ),
             )
-        return seconds(reply["position"])
+        return duration(reply["position"])
     }
 
     override suspend fun playbackInfo(): PlaybackInfo {
         val info = request(mapOf("type" to "playbackInfo"))["info"] as? Map<*, *> ?: emptyMap<String, Any?>()
         return PlaybackInfo(
-            state = state(info["playbackState"] as? String),
+            state = shown(state(info["playbackState"] as? String)),
             rate = (info["rate"] as? Number)?.toDouble() ?: 0.0,
-            positionSeconds = seconds(info["position"]),
-            durationSeconds = seconds(info["duration"]),
-            loaded = ranges(info["loadedTimeRanges"]),
+            position = duration(info["position"]),
+            duration = duration(info["duration"]),
+            buffered = ranges(info["loadedTimeRanges"]),
             seekable = ranges(info["seekableTimeRanges"]),
             itemId = (info["item"] as? Map<*, *>)?.get("uuid") as? String,
         )
     }
 
-    override suspend fun selectedMedia(): List<MediaOption> {
+    override suspend fun tracks(): List<Track> {
         val value = request(mapOf("type" to "property", "property" to "selectedMediaArray"))["value"] as? List<*>
         return value.orEmpty().mapNotNull { option ->
             option as? Map<*, *> ?: return@mapNotNull null
             val kind =
-                MediaKind.entries.firstOrNull { it.wire == option["MediaSelectionGroupMediaType"] }
+                TrackKind.entries.firstOrNull { it.wire == option["MediaSelectionGroupMediaType"] }
                     ?: return@mapNotNull null
-            MediaOption(
+            Track(
                 kind = kind,
                 id = option["MediaSelectionOptionsPersistentID"] as? Long ?: return@mapNotNull null,
                 name = option["MediaSelectionOptionsName"] as? String,
@@ -251,24 +264,24 @@ internal class DefaultVideoSession private constructor(
         }
     }
 
-    override suspend fun selectMedia(selections: List<MediaSelection>) =
-        io {
-            val value =
-                selections.map { selection ->
-                    buildMap<String, Any?> {
-                        put("MediaSelectionGroupMediaType", selection.kind.wire)
-                        selection.id?.let { put("MediaSelectionOptionsPersistentID", it) }
-                    }
-                }
-            command(
-                mapOf(
-                    "type" to "setProperty",
-                    "property" to "selectedMediaArray",
-                    "value" to value,
-                    "item" to mapOf("uuid" to itemId),
-                ),
-            )
-        }
+    override suspend fun selectTrack(
+        kind: TrackKind,
+        id: Long?,
+    ) = io {
+        val selection =
+            buildMap<String, Any?> {
+                put("MediaSelectionGroupMediaType", kind.wire)
+                id?.let { put("MediaSelectionOptionsPersistentID", it) }
+            }
+        command(
+            mapOf(
+                "type" to "setProperty",
+                "property" to "selectedMediaArray",
+                "value" to listOf(selection),
+                "item" to mapOf("uuid" to itemId),
+            ),
+        )
+    }
 
     override suspend fun volume(): Double? =
         io {
@@ -288,10 +301,15 @@ internal class DefaultVideoSession private constructor(
                     throw AirkastException.Disconnected(e)
                 }
             if (reply.status !in 200..299) return@io null
-            String(reply.body).substringAfter("volume:", "").trim().toDoubleOrNull()
+            // The receiver answers in decibels, from -30 to 0, and -144 for muted.
+            val decibels = String(reply.body).substringAfter("volume:", "").trim().toDoubleOrNull() ?: return@io null
+            ((decibels + 30) / 30).coerceIn(0.0, 1.0)
         }
 
-    override suspend fun stop() = io { command(mapOf("type" to "stop")) }
+    override suspend fun stop() {
+        paused = false
+        io { command(mapOf("type" to "stop")) }
+    }
 
     override fun close() = end(null)
 
@@ -301,7 +319,7 @@ internal class DefaultVideoSession private constructor(
         pending[id] = reply
         try {
             io { command(payload + mapOf("kind" to "request", "messageID" to id)) }
-            return withTimeoutOrNull(options.requestTimeoutMillis) { reply.await() }
+            return withTimeoutOrNull(options.requestTimeout) { reply.await() }
                 ?: throw AirkastException.Timeout("No answer to ${payload["type"]}")
         } finally {
             pending.remove(id)
@@ -343,23 +361,28 @@ internal class DefaultVideoSession private constructor(
             return
         }
         val item = (message["item"] as? Map<*, *>)?.get("uuid") as? String
+        val reason = (message["reason"] as? String)?.let(::Reason)
         val event =
             when (message["type"]) {
                 "playbackState" -> {
-                    ReceiverEvent.StateChanged(state(message["name"] as? String), message["reason"] as? String)
+                    ReceiverEvent.StateChanged(shown(state(message["name"] as? String)), reason)
                 }
 
+                // The LG CX sends BACK as `pbpr` (pressed) then `pbal` (released), and its volume
+                // keys as `dvlc` with the volume from 0 to 1.
                 "sendMediaRemoteCommand" -> {
-                    ReceiverEvent.RemoteCommand(
-                        message["value"] as? String ?: "",
-                        (message["volume"] as? Number)?.toDouble(),
-                    )
+                    val volume = (message["volume"] as? Number)?.toDouble()
+                    when {
+                        message["value"] == "pbal" -> ReceiverEvent.Back
+                        message["value"] == "dvlc" && volume != null -> ReceiverEvent.VolumeChanged(volume)
+                        else -> ReceiverEvent.Other(message)
+                    }
                 }
 
                 "notification" -> {
                     when (message["name"]) {
                         "currentItemChanged" -> {
-                            ReceiverEvent.ItemChanged(item, message["reason"] as? String)
+                            ReceiverEvent.ItemChanged(item, reason)
                         }
 
                         "itemPlayedToEnd" -> {
@@ -367,14 +390,13 @@ internal class DefaultVideoSession private constructor(
                         }
 
                         "rateChanged" -> {
-                            ReceiverEvent.RateChanged(
-                                (message["rate"] as? Number)?.toDouble() ?: 0.0,
-                                seconds(message["position"]),
-                            )
+                            val rate = (message["rate"] as? Number)?.toDouble() ?: 0.0
+                            paused = rate == 0.0
+                            ReceiverEvent.RateChanged(rate, duration(message["position"]))
                         }
 
                         "timeJumped" -> {
-                            ReceiverEvent.TimeJumped(seconds(message["position"]))
+                            ReceiverEvent.TimeJumped(duration(message["position"]))
                         }
 
                         else -> {
@@ -391,6 +413,13 @@ internal class DefaultVideoSession private constructor(
         if (event is ReceiverEvent.StateChanged) mutableState.value = event.state
         mutableEvents.tryEmit(event)
     }
+
+    /**
+     * The LG CX (webOS 04.64.00) reports a paused `streaming` item as `loading` with rate 0, for as
+     * long as the pause lasts (docs/compatibility.md). While the rate is 0, that reads as paused.
+     */
+    private fun shown(state: PlaybackState): PlaybackState =
+        if (state == PlaybackState.Loading && paused) PlaybackState.Paused else state
 
     private fun onEventChannelClosed(cause: Throwable?) = end(cause)
 
@@ -417,7 +446,7 @@ internal class DefaultVideoSession private constructor(
     companion object {
         private const val STREAM_TYPE = 130L
         private const val URL_STREAM_CLIENT_TYPE = "A6B27562-B43A-4F2D-B75F-82391E250194"
-        private const val FEEDBACK_INTERVAL_MILLIS = 2_000L
+        private val FEEDBACK_INTERVAL = 2.seconds
 
         /** The version Apple's senders use for `/command`. */
         private const val COMMAND_USER_AGENT = "AirPlay/870.14.1"
@@ -433,7 +462,7 @@ internal class DefaultVideoSession private constructor(
             )
             val socket =
                 connect(InetSocketAddress(receiver.host, receiver.port), options).apply {
-                    soTimeout = options.requestTimeoutMillis.toInt()
+                    soTimeout = options.requestTimeout.inWholeMilliseconds.toInt()
                     tcpNoDelay = true
                 }
             val control = ControlConnection(socket, identity) { options.logger?.invoke(it) }
@@ -478,7 +507,7 @@ internal class DefaultVideoSession private constructor(
                     throw AirkastException.Unreachable(e)
                 }
             try {
-                socket.connect(address, options.connectTimeoutMillis)
+                socket.connect(address, options.connectTimeout.inWholeMilliseconds.toInt())
             } catch (e: IOException) {
                 runCatching { socket.close() }
                 throw AirkastException.Unreachable(e)
@@ -494,17 +523,17 @@ internal class DefaultVideoSession private constructor(
                 emptyMap<Any, Any>()
             }
 
-        fun cmTime(seconds: Double): Map<String, Any?> =
-            mapOf("value" to Math.round(seconds * 1000), "timescale" to 1000L, "flags" to 1L, "epoch" to 0L)
+        fun cmTime(time: Duration): Map<String, Any?> =
+            mapOf("value" to time.inWholeMilliseconds, "timescale" to 1000L, "flags" to 1L, "epoch" to 0L)
 
-        /** A CMTime's seconds, or null unless it is valid and finite (flags bit 0 set, bit 4 clear). */
-        fun seconds(time: Any?): Double? {
+        /** A CMTime as a duration, or null unless it is valid and finite (flags bit 0 set, bit 4 clear). */
+        fun duration(time: Any?): Duration? {
             val map = time as? Map<*, *> ?: return null
             val flags = (map["flags"] as? Number)?.toLong() ?: return null
             val timescale = (map["timescale"] as? Number)?.toLong() ?: return null
             val value = (map["value"] as? Number)?.toLong() ?: return null
             if (flags and 1L == 0L || flags and 0x1CL != 0L || timescale <= 0) return null
-            return value.toDouble() / timescale
+            return (value * 1000 / timescale).milliseconds
         }
 
         fun state(name: String?): PlaybackState =
@@ -516,13 +545,12 @@ internal class DefaultVideoSession private constructor(
                 else -> PlaybackState.Unknown
             }
 
-        private fun ranges(value: Any?): List<TimeRange> =
+        private fun ranges(value: Any?): List<ClosedRange<Duration>> =
             (value as? List<*>).orEmpty().mapNotNull { range ->
                 val map = range as? Map<*, *> ?: return@mapNotNull null
-                TimeRange(
-                    seconds(map["start"]) ?: return@mapNotNull null,
-                    seconds(map["duration"]) ?: return@mapNotNull null,
-                )
+                val start = duration(map["start"]) ?: return@mapNotNull null
+                val length = duration(map["duration"]) ?: return@mapNotNull null
+                start..start + length
             }
     }
 }
