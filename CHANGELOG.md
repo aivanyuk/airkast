@@ -6,6 +6,8 @@ caller sees adds its line under "Unreleased".
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-09
+
 ### Added
 
 - `sample/`, the integration end to end in `sample/cast` (discovery, Android 17's local network
