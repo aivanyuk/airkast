@@ -40,7 +40,7 @@ class SessionTest {
                     val insert = fake.commands.first { it["type"] == "insertPlayQueueItem" }
                     val item = insert["item"] as Map<*, *>
                     assertThat(DefaultVideoSession.duration(item["Start-Position"])).isEqualTo(10.minutes)
-                    assertThat(item["mediaType"]).isEqualTo("file")
+                    assertThat(item["mediaType"]).isEqualTo("streaming")
                     assertThat(fake.commands.map { it["type"] })
                         .containsExactly("insertPlayQueueItem", "setProperty", "setProperty", "setRate")
                         .inOrder()

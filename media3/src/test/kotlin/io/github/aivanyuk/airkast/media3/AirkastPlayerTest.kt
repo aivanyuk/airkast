@@ -46,7 +46,7 @@ class AirkastPlayerTest {
         idle()
         assertThat(fake.loaded?.url).isEqualTo("https://example.com/master.m3u8")
         assertThat(fake.loaded?.startAt).isEqualTo(10.minutes)
-        assertThat(fake.loaded?.streaming).isFalse()
+        assertThat(fake.loaded?.streaming).isTrue()
         assertThat(player.playbackState).isEqualTo(Player.STATE_READY)
         assertThat(player.isPlaying).isTrue()
         assertThat(wakeLock().isHeld).isTrue()
@@ -125,13 +125,13 @@ class AirkastPlayerTest {
     }
 
     @Test
-    fun streamingLoadsItemsAsStreaming() {
-        val streaming = AirkastPlayer(ApplicationProvider.getApplicationContext()) { streaming = true }
-        streaming.session = fake
-        streaming.setMediaItem(item)
+    fun streamingOffLoadsItemsAsFiles() {
+        val files = AirkastPlayer(ApplicationProvider.getApplicationContext()) { streaming = false }
+        files.session = fake
+        files.setMediaItem(item)
         idle()
-        assertThat(fake.loaded?.streaming).isTrue()
-        streaming.release()
+        assertThat(fake.loaded?.streaming).isFalse()
+        files.release()
     }
 
     @Test

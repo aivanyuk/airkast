@@ -48,8 +48,10 @@ class LiveReceiverTest {
                 delay(3_000)
                 withTimeout(15_000) { session.state.first { it == PlaybackState.Playing } }
 
+                // A paused streaming item reads as loading with rate 0 on the LG (docs/compatibility.md).
                 session.pause()
-                withTimeout(10_000) { session.state.first { it == PlaybackState.Paused } }
+                withTimeout(10_000) { session.state.first { it != PlaybackState.Playing } }
+                assertThat(session.playbackInfo().rate).isEqualTo(0.0)
                 session.play()
                 withTimeout(10_000) { session.state.first { it == PlaybackState.Playing } }
 
@@ -65,7 +67,7 @@ class LiveReceiverTest {
         runBlocking {
             assumeTrue("Set AIRKAST_RECEIVER to run against a real receiver", host.isNotBlank())
             Airkast.connect(Receiver("live", host)).use { session ->
-                session.load(VideoItem(url, startAt = 30.seconds, streaming = true))
+                session.load(VideoItem(url, startAt = 30.seconds))
                 withTimeout(30_000) { session.state.first { it == PlaybackState.Playing } }
                 delay(4_000)
                 val selected = session.tracks()

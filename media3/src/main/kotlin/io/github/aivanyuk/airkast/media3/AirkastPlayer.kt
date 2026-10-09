@@ -51,11 +51,11 @@ public interface AirkastPlayer : Player {
         public var positionPollInterval: Duration = 1.seconds
 
         /**
-         * Whether to load items as `streaming` rather than `file`. The LG reports tracks and
-         * buffered ranges only for a `streaming` item, and then reports a pause as loading, which
-         * the player reads as paused while it asked for the pause. Off by default.
+         * Whether to load items as `streaming`, the default, rather than `file`. The LG reports
+         * tracks and buffered ranges only for a `streaming` item, and then reports a pause as
+         * loading, which the player reads as paused while it asked for the pause.
          */
-        public var streaming: Boolean = false
+        public var streaming: Boolean = true
 
         public fun build(): AirkastPlayer {
             require(positionPollInterval.isPositive()) { "The poll interval must be positive" }

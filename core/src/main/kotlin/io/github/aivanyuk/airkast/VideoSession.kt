@@ -39,8 +39,8 @@ public interface VideoSession : AutoCloseable {
 
     /**
      * The renditions the receiver has selected, at most one per [TrackKind]. The LG reports them
-     * only for a [VideoItem] loaded as `streaming`: for a `file` item the list is empty, and
-     * [selectTrack] is ignored.
+     * only for a [VideoItem] loaded as `streaming`, the default: for a `file` item the list is
+     * empty, and [selectTrack] is ignored.
      */
     public suspend fun tracks(): List<Track>
 
