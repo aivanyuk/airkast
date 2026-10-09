@@ -37,10 +37,18 @@ public interface VideoSession : AutoCloseable {
 
     public suspend fun playbackInfo(): PlaybackInfo
 
-    /** The renditions the receiver has selected, at most one per [TrackKind]. */
+    /**
+     * The renditions the receiver has selected, at most one per [TrackKind]. The LG reports them
+     * only for a [VideoItem] loaded as `streaming`: for a `file` item the list is empty, and
+     * [selectTrack] is ignored.
+     */
     public suspend fun tracks(): List<Track>
 
-    /** Selects the rendition [id] of [kind]. A null [id] turns subtitles off, but forced ones. */
+    /**
+     * Selects the rendition [id] of [kind]; ids follow the master's `EXT-X-MEDIA` order. A null
+     * [id] turns subtitles off, but forced ones. The switch takes a moment, with a rebuffer for
+     * audio, and [tracks] then reports it.
+     */
     public suspend fun selectTrack(
         kind: TrackKind,
         id: Long?,

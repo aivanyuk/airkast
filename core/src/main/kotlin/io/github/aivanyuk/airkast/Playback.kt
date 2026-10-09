@@ -9,8 +9,10 @@ public class VideoItem(
     public val url: String,
     public val startAt: Duration = Duration.ZERO,
     /**
-     * `streaming` makes the receiver report what it has buffered, but the LG then reports a
-     * sender's pause as loading. `file` reports no buffer and a pause as paused.
+     * Loads the item as `streaming` rather than `file`. The LG reports what it has buffered, and
+     * reports and switches tracks ([VideoSession.tracks]), only for a `streaming` item; it then
+     * reports a pause as [PlaybackState.Loading] with a rate of 0, never as [PlaybackState.Paused].
+     * See docs/compatibility.md.
      */
     public val streaming: Boolean = false,
 )

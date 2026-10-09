@@ -41,6 +41,7 @@ internal class SessionPlayer(
     looper: Looper,
     private val awake: KeepAwake?,
     private val pollInterval: Duration,
+    private val streaming: Boolean,
 ) : SimpleBasePlayer(looper),
     AirkastPlayer {
     private val scope = CoroutineScope(SupervisorJob() + Handler(looper).asCoroutineDispatcher())
@@ -258,7 +259,7 @@ internal class SessionPlayer(
         loadJob =
             scope.launch {
                 try {
-                    s.load(VideoItem(url, startAt = startMs.milliseconds))
+                    s.load(VideoItem(url, startAt = startMs.milliseconds, streaming = streaming))
                     loaded = true
                     if (!wantsPlay) s.pause()
                 } catch (e: AirkastException) {
@@ -347,7 +348,7 @@ internal class SessionPlayer(
             }
 
             PlaybackState.Loading -> {
-                playback = Player.STATE_BUFFERING
+                playback = loading()
             }
 
             PlaybackState.Stopped -> {
@@ -388,7 +389,7 @@ internal class SessionPlayer(
             }
 
             PlaybackState.Loading -> {
-                playback = Player.STATE_BUFFERING
+                playback = loading()
             }
 
             else -> {}
@@ -408,6 +409,9 @@ internal class SessionPlayer(
         volume = (level * MAX_VOLUME).roundToInt().coerceIn(0, MAX_VOLUME)
         changed()
     }
+
+    /** The LG reports a paused `streaming` item as loading, for as long as the pause lasts. */
+    private fun loading() = if (wantsPlay) Player.STATE_BUFFERING else Player.STATE_READY
 
     private fun end() {
         loaded = false

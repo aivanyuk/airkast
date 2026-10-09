@@ -20,7 +20,7 @@ notes, with no specification behind it. What works there:
 - transient pairing, with no PIN on the screen;
 - loading an HLS URL at a start position, then play, pause, seek, stop and the next item;
 - position, duration and buffered ranges;
-- reading and switching audio and subtitle renditions;
+- reading and switching audio and subtitle tracks, for an item loaded as `streaming`;
 - receiver events: state, end of item, the TV remote's pause, seek and BACK, and its volume.
 
 It does not yet support receivers that demand a PIN or a password, receivers that take URLs

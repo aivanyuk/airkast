@@ -59,6 +59,27 @@ class LiveReceiverTest {
             }
         }
 
+    /** Tracks come and go only on a `streaming` item (docs/compatibility.md, "LG CX"). */
+    @Test
+    fun switchesTracksOnAStreamingItem() =
+        runBlocking {
+            assumeTrue("Set AIRKAST_RECEIVER to run against a real receiver", host.isNotBlank())
+            Airkast.connect(Receiver("live", host)).use { session ->
+                session.load(VideoItem(url, startAt = 30.seconds, streaming = true))
+                withTimeout(30_000) { session.state.first { it == PlaybackState.Playing } }
+                delay(4_000)
+                val selected = session.tracks()
+                log("tracks", selected)
+                assertThat(selected).isNotEmpty()
+                session.selectTrack(TrackKind.Subtitles, null)
+                delay(3_000)
+                val without = session.tracks()
+                log("tracks without subtitles", without)
+                assertThat(without.filter { it.kind == TrackKind.Subtitles && !it.forced }).isEmpty()
+                session.stop()
+            }
+        }
+
     /** `AIRKAST_LONG=1` plays [url] to its end and checks the position against the wall clock. */
     @Test
     fun followsAWholeItem() =

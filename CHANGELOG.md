@@ -9,6 +9,8 @@ caller sees adds its line under "Unreleased".
 ### Added
 
 - `Receiver.isSupported`, and `SessionOptions.copy { … }` in place of `newBuilder()`.
+- `AirkastPlayer.Builder.streaming` loads items as `streaming`, which the LG needs to report
+  tracks and buffered ranges (docs/compatibility.md).
 
 ### Changed
 
@@ -33,6 +35,13 @@ Breaking, under the rules for a minor release before 1.0 ([releasing](docs/relea
   builds one.
 - `ReceiverDiscovery.receivers` is a property, and `LocalNetwork.accessible` and
   `permissionRequired` are `isAccessible` and `needsPermission`.
+
+### Fixed
+
+- `tracks()` and `selectTrack()` say that the LG reports and switches tracks only for a
+  `streaming` item: a `file` item, the default, answers an empty list and ignores a selection.
+  The player reads a `loading` report as paused while it asked for the pause, which is how the LG
+  reports a paused `streaming` item.
 
 ## 0.1.1 - 2026-10-09
 

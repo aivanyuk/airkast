@@ -10,6 +10,7 @@ what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRI
 | Receiver | Firmware, `srcvers` | Date | Sender | Result |
 | --- | --- | --- | --- | --- |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-08, at 8dd8c77 | desktop JVM 21 | `Supported`. Live test passes: start position, seek, pause, play, tracks, volume read, stop. A whole 51-minute episode to its end, position within 2 s of the wall clock |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-09, at 359abe7 | desktop JVM 21 | Tracks: for a `streaming` item, read and switched (subtitles, audio with a rebuffer, subtitles off) on Apple's bipbop stream and on a kino.pub hls4 master; for a `file` item none are reported and a selection is ignored. A paused `streaming` item reads as loading with rate 0 |
 
 ### How `Receiver.compatibility` decides
 
@@ -37,8 +38,14 @@ pairs without a PIN, so airkast ignores it.
 - It never asks for NTP timing, so the sender needs no inbound UDP.
 - `Start-Position` must be a CMTime. `Start-Position-Seconds` is ignored.
 - A seek without the item's UUID and both tolerances is ignored.
-- With `mediaType: streaming`, a pause reads as loading. `file` reports it as paused, without
-  buffered ranges.
+- `selectedMediaArray` lists the selected audio and subtitle renditions, and a `setProperty` on
+  it switches them live (audio with a rebuffer), only for an item loaded with
+  `mediaType: streaming`. A `file` item answers an empty list and ignores the selection, whatever
+  the payload. Ids follow the master's `EXT-X-MEDIA` order: on Apple's bipbop stream audio 0–1
+  then subtitles 2–9, on a kino.pub hls4 master subtitles 0–8 then audio 9–17. Turning subtitles
+  off keeps the forced one.
+- With `mediaType: streaming`, a pause reads as `loading` with rate 0 for as long as it lasts,
+  as an event and on a poll. `file` reports it as `paused`, and reports no buffered ranges.
 - It reads its volume (`GET_PARAMETER`), but ignores every way of setting it.
 - BACK on its remote arrives as `pbpr` then `pbal`, and it leaves the player only once the
   sender stops. Its volume keys arrive as `dvlc`, with a volume from 0 to 1.
