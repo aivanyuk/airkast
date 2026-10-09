@@ -113,18 +113,6 @@ class AirkastPlayerTest {
     }
 
     @Test
-    fun aLoadingReportWhilePausedReadsAsPaused() {
-        playing()
-        player.pause()
-        idle()
-        fake.emit(ReceiverEvent.StateChanged(PlaybackState.Loading, null))
-        idle()
-        assertThat(player.playbackState).isEqualTo(Player.STATE_READY)
-        assertThat(player.playWhenReady).isFalse()
-        assertThat(player.isPlaying).isFalse()
-    }
-
-    @Test
     fun streamingOffLoadsItemsAsFiles() {
         val files = AirkastPlayer(ApplicationProvider.getApplicationContext()) { streaming = false }
         files.session = fake

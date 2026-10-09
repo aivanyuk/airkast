@@ -46,6 +46,7 @@ pairs without a PIN, so airkast ignores it.
   off keeps the forced one.
 - With `mediaType: streaming`, a pause reads as `loading` with rate 0 for as long as it lasts,
   as an event and on a poll. `file` reports it as `paused`, and reports no buffered ranges.
+  airkast reports `Paused` for `loading` while the rate is 0, so a caller sees the same in both.
 - It reads its volume (`GET_PARAMETER`), but ignores every way of setting it.
 - BACK on its remote arrives as `pbpr` then `pbal`, and it leaves the player only once the
   sender stops. Its volume keys arrive as `dvlc`, with a volume from 0 to 1.

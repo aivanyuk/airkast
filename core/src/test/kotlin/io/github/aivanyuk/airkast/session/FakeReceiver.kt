@@ -53,6 +53,10 @@ internal class FakeReceiver(
     @Volatile
     private var position = Duration.ZERO
 
+    /** The LG reports a paused `streaming` item as `loading`, and a paused `file` item as `paused`. */
+    @Volatile
+    private var streaming = false
+
     init {
         thread(isDaemon = true, name = "fake-receiver") { runCatching { serve() } }
     }
@@ -171,6 +175,7 @@ internal class FakeReceiver(
             "insertPlayQueueItem" -> {
                 if (takesItems && recorded) {
                     val item = command["item"] as Map<*, *>
+                    streaming = item["mediaType"] == "streaming"
                     position = DefaultVideoSession.duration(item["Start-Position"]) ?: Duration.ZERO
                     event(
                         mapOf(
@@ -227,7 +232,12 @@ internal class FakeReceiver(
                 event(
                     mapOf(
                         "type" to "playbackState",
-                        "name" to if (command["rate"] == 0.0) "paused" else "playing",
+                        "name" to
+                            when {
+                                command["rate"] != 0.0 -> "playing"
+                                streaming -> "loading"
+                                else -> "paused"
+                            },
                     ),
                 )
             }

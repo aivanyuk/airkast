@@ -37,8 +37,8 @@ Breaking, under the rules for a minor release before 1.0 ([releasing](docs/relea
 - Items load as `streaming` by default (`VideoItem.streaming`), since the LG reports tracks and
   buffered ranges only for a `streaming` item: a `file` item answers an empty track list and
   ignores a selection, which is why 0.1 could never switch a track. The LG reports a paused
-  `streaming` item as `Loading` with rate 0; the player reads that as paused while it asked for
-  the pause.
+  `streaming` item as `loading` with rate 0; the session reports `Paused` while the rate is 0, so
+  `state`, the events and the player all say paused.
 
 ## 0.1.1 - 2026-10-09
 

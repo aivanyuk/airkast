@@ -75,6 +75,10 @@ internal class DefaultVideoSession private constructor(
     @Volatile
     private var itemTaken: CompletableDeferred<Unit>? = null
 
+    /** Whether the rate is 0: set by [pause], [play], [load] and [stop], and by the TV remote's rate changes. */
+    @Volatile
+    private var paused = false
+
     private fun start(
         identity: SenderIdentity,
         sessionKey: ByteArray,
@@ -176,6 +180,7 @@ internal class DefaultVideoSession private constructor(
         val taken = CompletableDeferred<Unit>()
         itemId = id
         itemTaken = taken
+        paused = false
         io {
             command(
                 mapOf(
@@ -204,9 +209,15 @@ internal class DefaultVideoSession private constructor(
             ?: throw AirkastException.Timeout("The receiver did not take the item")
     }
 
-    override suspend fun play() = io { command(mapOf("type" to "setRate", "rate" to 1.0)) }
+    override suspend fun play() {
+        paused = false
+        io { command(mapOf("type" to "setRate", "rate" to 1.0)) }
+    }
 
-    override suspend fun pause() = io { command(mapOf("type" to "setRate", "rate" to 0.0)) }
+    override suspend fun pause() {
+        paused = true
+        io { command(mapOf("type" to "setRate", "rate" to 0.0)) }
+    }
 
     override suspend fun seek(position: Duration): Duration? {
         val zero = cmTime(Duration.ZERO)
@@ -226,7 +237,7 @@ internal class DefaultVideoSession private constructor(
     override suspend fun playbackInfo(): PlaybackInfo {
         val info = request(mapOf("type" to "playbackInfo"))["info"] as? Map<*, *> ?: emptyMap<String, Any?>()
         return PlaybackInfo(
-            state = state(info["playbackState"] as? String),
+            state = shown(state(info["playbackState"] as? String)),
             rate = (info["rate"] as? Number)?.toDouble() ?: 0.0,
             position = duration(info["position"]),
             duration = duration(info["duration"]),
@@ -295,7 +306,10 @@ internal class DefaultVideoSession private constructor(
             ((decibels + 30) / 30).coerceIn(0.0, 1.0)
         }
 
-    override suspend fun stop() = io { command(mapOf("type" to "stop")) }
+    override suspend fun stop() {
+        paused = false
+        io { command(mapOf("type" to "stop")) }
+    }
 
     override fun close() = end(null)
 
@@ -351,7 +365,7 @@ internal class DefaultVideoSession private constructor(
         val event =
             when (message["type"]) {
                 "playbackState" -> {
-                    ReceiverEvent.StateChanged(state(message["name"] as? String), reason)
+                    ReceiverEvent.StateChanged(shown(state(message["name"] as? String)), reason)
                 }
 
                 // The LG CX sends BACK as `pbpr` (pressed) then `pbal` (released), and its volume
@@ -376,10 +390,9 @@ internal class DefaultVideoSession private constructor(
                         }
 
                         "rateChanged" -> {
-                            ReceiverEvent.RateChanged(
-                                (message["rate"] as? Number)?.toDouble() ?: 0.0,
-                                duration(message["position"]),
-                            )
+                            val rate = (message["rate"] as? Number)?.toDouble() ?: 0.0
+                            paused = rate == 0.0
+                            ReceiverEvent.RateChanged(rate, duration(message["position"]))
                         }
 
                         "timeJumped" -> {
@@ -400,6 +413,13 @@ internal class DefaultVideoSession private constructor(
         if (event is ReceiverEvent.StateChanged) mutableState.value = event.state
         mutableEvents.tryEmit(event)
     }
+
+    /**
+     * The LG CX (webOS 04.64.00) reports a paused `streaming` item as `loading` with rate 0, for as
+     * long as the pause lasts (docs/compatibility.md). While the rate is 0, that reads as paused.
+     */
+    private fun shown(state: PlaybackState): PlaybackState =
+        if (state == PlaybackState.Loading && paused) PlaybackState.Paused else state
 
     private fun onEventChannelClosed(cause: Throwable?) = end(cause)
 

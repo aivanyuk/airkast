@@ -16,12 +16,12 @@
 
 ## Before 1.0
 
-- A **minor** release (`0.2.0` after `0.1.x`) may break the API or a floor. Its changelog lists
-  each break under "Changed" or "Removed", and what callers do about it.
-- A **patch** release (`0.1.1`) never breaks. It fixes bugs, adds receiver quirks, and may add
-  API.
+- The API is still being shaped against its first consumer, so a **minor** release (`0.2.0`
+  after `0.1.x`) changes it freely, with no deprecation, shim or migration note: the changelog
+  lists what changed under "Changed" or "Removed".
+- A **patch** release (`0.1.1`) fixes bugs and adds receiver quirks, and may add API.
 - 1.0 comes once the API has held through two minor releases and runs on a second receiver
-  model.
+  model. The compatibility rules below start there.
 
 ## From 1.0
 
@@ -31,6 +31,8 @@
   and is removed only in the next major.
 
 ## What counts as a break
+
+From 1.0. Before it, a break is recorded in the changelog and nothing more.
 
 - **The API dump.** In `*/api/*.api`, a removed or changed line breaks callers. An added line
   does not. A new member of a sealed type or an enum (a `ReceiverEvent`, an `AirkastException`,

@@ -24,7 +24,7 @@ rule behind it.
 | --- | --- | --- |
 | P1 | The change arrives as a PR against `main`, on one topic, and its title says what changes for someone who uses the library. | Always |
 | P2 | Commit subjects are one sentence in the imperative with no type prefix (`Bind the session to …`, not `feat: …`). | New commits |
-| P3 | A change a caller can see adds a line under "Unreleased" in `CHANGELOG.md`, under Added, Changed, Removed or Fixed. A break says what callers do about it. | Public API, behaviour or floor change |
+| P3 | A change a caller can see adds a line under "Unreleased" in `CHANGELOG.md`, under Added, Changed, Removed or Fixed, saying what changed. Before 1.0 that is all a break needs. | Public API, behaviour or floor change |
 | P4 | A change may depart from a written rule, but says so: a comment, or an edit to the passage in the same PR, and to this file if a rule here moves. | Diff contradicts CONTRIBUTING.md or `docs/` |
 | P5 | Nothing attributes the work to a tool or an AI: no co-author trailer, no "generated with" line in a commit, PR, doc or comment. | Commits, PR body, docs |
 | P6 | A PR that claims verification names what ran: `./gradlew check`, and the live test with the receiver when it claims one. | PR body claims tests |
@@ -36,8 +36,8 @@ Authority: CONTRIBUTING.md § Branches and pull requests, docs/releasing.md.
 | ID | Assertion | Trigger |
 | --- | --- | --- |
 | A1 | A declaration is public only if a caller needs it. Public types live in `io.github.aivanyuk.airkast` or `.android`; `crypto`, `wire`, `session` and `internal` hold `internal` code only. | New or changed `public` declaration, new package |
-| A2 | A changed `*/api/*.api` dump is deliberate: every removed or changed line is a break, so the PR is aimed at a minor release before 1.0 (a major after), and P3 names the break. An added line is fine. | Diff touches `api/*.api` |
-| A3 | No `data class` in the public API. A public value is a `@Poko` class. A property added to one goes last with a default, and the old constructor stays as a `@Deprecated(level = DeprecationLevel.HIDDEN)` secondary constructor. | New public class, new constructor parameter |
+| A2 | A changed `*/api/*.api` dump is deliberate: every removed or changed line is a break, so the PR is aimed at a minor release before 1.0 (a major after), and P3 records it. Before 1.0 no deprecation or shim is expected; from 1.0 a removal goes through the deprecation cycle. An added line is fine. | Diff touches `api/*.api` |
+| A3 | No `data class` in the public API. A public value is a `@Poko` class. From 1.0, a property added to one goes last with a default, and the old constructor stays as a `@Deprecated(level = DeprecationLevel.HIDDEN)` secondary constructor. | New public class, new constructor parameter |
 | A4 | Options that will grow are builder properties with defaults, as in `SessionOptions.Builder`, never new parameters on `connect`. | New option, new parameter on a public function |
 | A5 | Every failure the public API reports is an `AirkastException` subclass (or a `CancellationException`). A new failure is a new subclass with KDoc saying when it happens. No raw `IOException`, `IllegalStateException` or `SecurityException` escapes a public call. | New `throw`, new public call that does I/O |
 | A6 | A new member of a sealed type or enum that callers switch on (`ReceiverEvent`, `AirkastException`, `Compatibility`, `PlaybackState`) is fine, and its KDoc says when it happens. | New subclass or enum entry |

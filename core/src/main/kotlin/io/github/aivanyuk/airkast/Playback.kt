@@ -11,9 +11,7 @@ public class VideoItem(
     /**
      * Loads the item as `streaming`, the default, rather than `file`. The LG reports what it has
      * buffered, and reports and switches tracks ([VideoSession.tracks]), only for a `streaming`
-     * item; it then reports a pause as [PlaybackState.Loading] with a rate of 0, never as
-     * [PlaybackState.Paused]. A `file` item reports a pause as paused, and nothing else. See
-     * docs/compatibility.md.
+     * item. See docs/compatibility.md.
      */
     public val streaming: Boolean = true,
 )

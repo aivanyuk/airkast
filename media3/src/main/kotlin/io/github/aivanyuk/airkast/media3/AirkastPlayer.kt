@@ -52,8 +52,7 @@ public interface AirkastPlayer : Player {
 
         /**
          * Whether to load items as `streaming`, the default, rather than `file`. The LG reports
-         * tracks and buffered ranges only for a `streaming` item, and then reports a pause as
-         * loading, which the player reads as paused while it asked for the pause.
+         * tracks and buffered ranges only for a `streaming` item.
          */
         public var streaming: Boolean = true
 

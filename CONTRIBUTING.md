@@ -22,7 +22,8 @@ why. `./gradlew ktlintFormat` fixes most formatting.
 - One topic per pull request. Its title says what changes for someone who uses the library.
 - Commit subjects are one sentence in the imperative, with no type prefix: "Bind the session to
   the network the receiver is on", not "feat: network binding".
-- A user-visible change adds a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md).
+- A user-visible change adds a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md): what
+  changed, in a sentence.
 - Release tags are immutable ([releasing](docs/releasing.md)).
 
 ## Automated review
@@ -44,9 +45,12 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
   callers will see. [Releasing](docs/releasing.md#what-counts-as-a-break) says which diffs break
   callers.
 - **No data classes in the public API.** Value types are `@Poko` classes: they compare by value,
-  and they have no `copy` or `componentN` to break when a property joins them. A new property
-  goes last, with a default, and the old constructor stays as a `@Deprecated(level = HIDDEN)`
-  secondary constructor, so callers compiled against it still link.
+  and they have no `copy` or `componentN` to break when a property joins them.
+- **Before 1.0, the API changes freely.** It is still being shaped against its first consumer,
+  so a change needs no deprecation, no shim and no migration note: the changelog says what
+  changed, and the API dump shows it. From 1.0, a new property goes last with a default, the old
+  constructor stays as a `@Deprecated(level = HIDDEN)` secondary constructor, and a removal goes
+  through a deprecation cycle ([releasing](docs/releasing.md#from-10)).
 - **Options that will grow are builders**, as `SessionOptions` is: a new option joins the
   `Builder` with a default, and a `Type { … }` function builds one.
 - **A time is a `kotlin.time.Duration`**, never a number with the unit in its name, and a volume

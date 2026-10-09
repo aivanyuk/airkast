@@ -48,9 +48,8 @@ class LiveReceiverTest {
                 delay(3_000)
                 withTimeout(15_000) { session.state.first { it == PlaybackState.Playing } }
 
-                // A paused streaming item reads as loading with rate 0 on the LG (docs/compatibility.md).
                 session.pause()
-                withTimeout(10_000) { session.state.first { it != PlaybackState.Playing } }
+                withTimeout(10_000) { session.state.first { it == PlaybackState.Paused } }
                 assertThat(session.playbackInfo().rate).isEqualTo(0.0)
                 session.play()
                 withTimeout(10_000) { session.state.first { it == PlaybackState.Playing } }
