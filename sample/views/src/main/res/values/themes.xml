@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material Components' Material 3 theme, which the views in the layouts are from. -->
+    <style name="Theme.Sample" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>

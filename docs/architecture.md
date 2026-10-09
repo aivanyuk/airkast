@@ -7,10 +7,13 @@
 | `:core` | `airkast-core` | The protocol: pairing, the session, its commands and events. Plain JVM | kotlin-stdlib, kotlinx-coroutines-core |
 | `:android` | `airkast-android` | Discovery through `NsdManager`, the local network permission, binding to the receiver's network, `Airkast.connect(context, …)` | `:core` |
 | `:media3` | `airkast-media3` | `AirkastPlayer`, a media3 `Player` over a `VideoSession`, so a media3 UI and `MediaSession` drive a receiver, and the wake and Wi-Fi locks a cast needs | `:core`, media3-common, kotlinx-coroutines-android |
+| `:sample:cast` | none | The reference integration: `Cast` opens sessions and drives an `AirkastPlayer`, and `CastService` puts a `MediaSession` over it | `:android`, `:media3` |
+| `:sample:compose`, `:sample:views` | none | The sample apps: one screen over `Cast`, in Compose and in views | `:sample:cast` |
 
 Modules depend on `:core` and never on each other. An app that draws its own controls doesn't
 pull media3, and a desktop JVM doesn't pull Android. All artifacts share one version
-([releasing](releasing.md)).
+([releasing](releasing.md)). The `:sample:*` modules are never published, and `:sample:cast` is
+the one place that depends on both `:android` and `:media3`.
 
 `build-logic/` holds the conventions every module applies: `airkast.jvm.library`,
 `airkast.android.library` and `airkast.publish`. A setting that applies to more than one module
