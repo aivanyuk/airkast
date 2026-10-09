@@ -18,22 +18,22 @@ class LocalNetworkTest {
     @Config(sdk = [36])
     fun androidSixteenNeedsNoPermission() {
         app.applicationInfo.targetSdkVersion = 37
-        assertThat(LocalNetwork.permissionRequired(app)).isFalse()
-        assertThat(LocalNetwork.accessible(app)).isTrue()
+        assertThat(LocalNetwork.needsPermission(app)).isFalse()
+        assertThat(LocalNetwork.isAccessible(app)).isTrue()
     }
 
     @Test
     @Config(sdk = [37])
     fun androidSeventeenNeedsItOnlyForATargetOf37() {
         app.applicationInfo.targetSdkVersion = 36
-        assertThat(LocalNetwork.permissionRequired(app)).isFalse()
+        assertThat(LocalNetwork.needsPermission(app)).isFalse()
 
         app.applicationInfo.targetSdkVersion = 37
-        assertThat(LocalNetwork.permissionRequired(app)).isTrue()
-        assertThat(LocalNetwork.accessible(app)).isFalse()
+        assertThat(LocalNetwork.needsPermission(app)).isTrue()
+        assertThat(LocalNetwork.isAccessible(app)).isFalse()
 
         shadowOf(app).grantPermissions(LocalNetwork.PERMISSION)
-        assertThat(LocalNetwork.accessible(app)).isTrue()
+        assertThat(LocalNetwork.isAccessible(app)).isTrue()
     }
 
     @Test

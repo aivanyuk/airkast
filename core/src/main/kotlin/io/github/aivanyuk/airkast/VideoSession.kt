@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import javax.net.SocketFactory
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * A connection to one receiver that plays URLs on it. Every call suspends on I/O and is safe to
@@ -24,22 +26,27 @@ public interface VideoSession : AutoCloseable {
      * Plays [item], replacing whatever plays. Returns once the receiver has taken the item; throws
      * [AirkastException.Timeout] when it stays silent, which a reconnect usually fixes.
      */
-    public suspend fun load(item: MediaItem)
+    public suspend fun load(item: VideoItem)
 
     public suspend fun play()
 
     public suspend fun pause()
 
     /** Seeks the current item and returns the position the receiver reports. */
-    public suspend fun seek(positionSeconds: Double): Double?
+    public suspend fun seek(position: Duration): Duration?
 
     public suspend fun playbackInfo(): PlaybackInfo
 
-    public suspend fun selectedMedia(): List<MediaOption>
+    /** The renditions the receiver has selected, at most one per [TrackKind]. */
+    public suspend fun tracks(): List<Track>
 
-    public suspend fun selectMedia(selections: List<MediaSelection>)
+    /** Selects the rendition [id] of [kind]. A null [id] turns subtitles off, but forced ones. */
+    public suspend fun selectTrack(
+        kind: TrackKind,
+        id: Long?,
+    )
 
-    /** The TV's volume in dB from -30 to 0, or null if it does not say. Receivers may not let it be set. */
+    /** The TV's volume from 0 to 1, or null if it does not say. Receivers may not let it be set. */
     public suspend fun volume(): Double?
 
     /** Ends playback on the receiver, which leaves its player. The session stays open for another [load]. */
@@ -60,17 +67,17 @@ public object Airkast {
 
 /**
  * How a session connects and behaves. Build one with `SessionOptions { ... }`, or change one with
- * [newBuilder]. New options join the [Builder] with defaults, so code that builds options keeps
+ * [copy]. New options join the [Builder] with defaults, so code that builds options keeps
  * compiling and linking across releases.
  */
 public class SessionOptions private constructor(
     builder: Builder,
 ) {
-    public val connectTimeoutMillis: Int = builder.connectTimeoutMillis
-    public val requestTimeoutMillis: Long = builder.requestTimeoutMillis
+    public val connectTimeout: Duration = builder.connectTimeout
+    public val requestTimeout: Duration = builder.requestTimeout
 
     /** How long a load waits for the receiver to take the item. */
-    public val loadTimeoutMillis: Long = builder.loadTimeoutMillis
+    public val loadTimeout: Duration = builder.loadTimeout
 
     /** Sends `/feedback` every two seconds, as Apple's senders do. */
     public val keepAlive: Boolean = builder.keepAlive
@@ -90,21 +97,22 @@ public class SessionOptions private constructor(
     /** Receives one line per protocol step, for debugging. Lines never hold the media URL. */
     public val logger: ((String) -> Unit)? = builder.logger
 
-    public fun newBuilder(): Builder = Builder(this)
+    /** A copy with [block]'s changes: `options.copy { keepAlive = false }`. */
+    public fun copy(block: Builder.() -> Unit): SessionOptions = Builder(this).apply(block).build()
 
     public class Builder() {
-        public var connectTimeoutMillis: Int = 5_000
-        public var requestTimeoutMillis: Long = 5_000
-        public var loadTimeoutMillis: Long = 10_000
+        public var connectTimeout: Duration = 5.seconds
+        public var requestTimeout: Duration = 5.seconds
+        public var loadTimeout: Duration = 10.seconds
         public var keepAlive: Boolean = true
         public var ntpTiming: Boolean = false
         public var socketFactory: SocketFactory? = null
         public var logger: ((String) -> Unit)? = null
 
         internal constructor(options: SessionOptions) : this() {
-            connectTimeoutMillis = options.connectTimeoutMillis
-            requestTimeoutMillis = options.requestTimeoutMillis
-            loadTimeoutMillis = options.loadTimeoutMillis
+            connectTimeout = options.connectTimeout
+            requestTimeout = options.requestTimeout
+            loadTimeout = options.loadTimeout
             keepAlive = options.keepAlive
             ntpTiming = options.ntpTiming
             socketFactory = options.socketFactory

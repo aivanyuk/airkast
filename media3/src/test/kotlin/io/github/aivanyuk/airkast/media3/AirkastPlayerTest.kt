@@ -18,13 +18,15 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowPowerManager
 import java.io.IOException
-import java.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import java.time.Duration as JavaDuration
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class AirkastPlayerTest {
     private val fake = FakeSession()
-    private val player = AirkastPlayer.Builder(ApplicationProvider.getApplicationContext()).build()
+    private val player = AirkastPlayer(ApplicationProvider.getApplicationContext())
     private val item = MediaItem.fromUri("https://example.com/master.m3u8")
 
     @After
@@ -43,7 +45,7 @@ class AirkastPlayerTest {
         player.session = fake
         idle()
         assertThat(fake.loaded?.url).isEqualTo("https://example.com/master.m3u8")
-        assertThat(fake.loaded?.startSeconds).isEqualTo(600.0)
+        assertThat(fake.loaded?.startAt).isEqualTo(10.minutes)
         assertThat(player.playbackState).isEqualTo(Player.STATE_READY)
         assertThat(player.isPlaying).isTrue()
         assertThat(wakeLock().isHeld).isTrue()
@@ -77,7 +79,7 @@ class AirkastPlayerTest {
         player.seekTo(1_200_000)
         assertThat(player.currentPosition).isEqualTo(1_200_000)
         idle()
-        assertThat(fake.sent).containsExactly("load", "pause", "seek 1200.0").inOrder()
+        assertThat(fake.sent).containsExactly("load", "pause", "seek 20m").inOrder()
         assertThat(player.playWhenReady).isFalse()
         assertThat(player.currentPosition).isEqualTo(1_200_000)
     }
@@ -117,12 +119,12 @@ class AirkastPlayerTest {
         assertThat(player.playWhenReady).isFalse()
         assertThat(player.playbackState).isEqualTo(Player.STATE_READY)
 
-        fake.emit(ReceiverEvent.RateChanged(1.0, 30.0))
+        fake.emit(ReceiverEvent.RateChanged(1.0, 30.seconds))
         idle()
         assertThat(player.isPlaying).isTrue()
         assertThat(player.currentPosition).isAtLeast(30_000)
 
-        fake.emit(ReceiverEvent.TimeJumped(90.0))
+        fake.emit(ReceiverEvent.TimeJumped(90.seconds))
         idle()
         assertThat(player.currentPosition).isAtLeast(90_000)
     }
@@ -130,8 +132,8 @@ class AirkastPlayerTest {
     @Test
     fun thePollKeepsThePositionAndDuration() {
         playing()
-        fake.info = fake.info.copy(positionSeconds = 100.0)
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_000))
+        fake.info = fake.info.copy(position = 100.seconds)
+        shadowOf(Looper.getMainLooper()).idleFor(JavaDuration.ofMillis(1_000))
         assertThat(player.duration).isEqualTo(3_077_000)
         assertThat(player.currentPosition).isIn(
             com.google.common.collect.Range
@@ -143,8 +145,8 @@ class AirkastPlayerTest {
     @Test
     fun aStreamWithoutADurationIsLive() {
         playing()
-        fake.info = fake.info.copy(durationSeconds = null)
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_000))
+        fake.info = fake.info.copy(duration = null)
+        shadowOf(Looper.getMainLooper()).idleFor(JavaDuration.ofMillis(1_000))
         assertThat(player.isCurrentMediaItemDynamic).isTrue()
         assertThat(player.isCurrentMediaItemSeekable).isFalse()
     }
@@ -224,7 +226,7 @@ class AirkastPlayerTest {
     fun theTvsVolumeCanBeReadButNotSet() {
         playing()
         assertThat(player.deviceVolume).isEqualTo(50)
-        fake.emit(ReceiverEvent.RemoteCommand(ReceiverEvent.RemoteCommand.VOLUME, 0.8))
+        fake.emit(ReceiverEvent.VolumeChanged(0.8))
         idle()
         assertThat(player.deviceVolume).isEqualTo(80)
         assertThat(player.deviceInfo.playbackType).isEqualTo(androidx.media3.common.DeviceInfo.PLAYBACK_TYPE_REMOTE)
@@ -235,24 +237,20 @@ class AirkastPlayerTest {
     @Test
     fun aNewSessionPicksUpWhereTheLostOneLeftOff() {
         playing()
-        fake.emit(ReceiverEvent.TimeJumped(300.0))
+        fake.emit(ReceiverEvent.TimeJumped(300.seconds))
         fake.emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
         idle()
         val next = FakeSession()
         player.session = next
         idle()
-        assertThat(next.loaded?.startSeconds).isAtLeast(300.0)
+        assertThat(next.loaded?.startAt).isAtLeast(300.seconds)
         assertThat(player.playerError).isNull()
         assertThat(player.playbackState).isEqualTo(Player.STATE_READY)
     }
 
     @Test
     fun noLocksWhenKeepAwakeIsOff() {
-        val quiet =
-            AirkastPlayer
-                .Builder(ApplicationProvider.getApplicationContext())
-                .setKeepAwake(false)
-                .build()
+        val quiet = AirkastPlayer(ApplicationProvider.getApplicationContext()) { keepAwake = false }
         quiet.session = fake
         quiet.setMediaItem(item)
         quiet.play()
@@ -276,8 +274,8 @@ class AirkastPlayerTest {
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     private fun io.github.aivanyuk.airkast.PlaybackInfo.copy(
-        positionSeconds: Double? = this.positionSeconds,
-        durationSeconds: Double? = this.durationSeconds,
+        position: kotlin.time.Duration? = this.position,
+        duration: kotlin.time.Duration? = this.duration,
     ) = io.github.aivanyuk.airkast
-        .PlaybackInfo(state, rate, positionSeconds, durationSeconds, loaded, seekable, itemId)
+        .PlaybackInfo(state, rate, position, duration, buffered, seekable, itemId)
 }

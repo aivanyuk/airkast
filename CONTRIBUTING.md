@@ -48,7 +48,9 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
   goes last, with a default, and the old constructor stays as a `@Deprecated(level = HIDDEN)`
   secondary constructor, so callers compiled against it still link.
 - **Options that will grow are builders**, as `SessionOptions` is: a new option joins the
-  `Builder` with a default.
+  `Builder` with a default, and a `Type { … }` function builds one.
+- **A time is a `kotlin.time.Duration`**, never a number with the unit in its name, and a volume
+  runs from 0 to 1. The API is Kotlin's: every call suspends, so Java is not a target.
 - **Sealed types and enums may gain members** in a minor release (`ReceiverEvent`,
   `AirkastException`, `Compatibility`, `PlaybackState`). Their KDoc says so where it matters;
   callers keep an `else` branch.

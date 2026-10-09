@@ -42,6 +42,7 @@ Authority: CONTRIBUTING.md § Branches and pull requests, docs/releasing.md.
 | A5 | Every failure the public API reports is an `AirkastException` subclass (or a `CancellationException`). A new failure is a new subclass with KDoc saying when it happens. No raw `IOException`, `IllegalStateException` or `SecurityException` escapes a public call. | New `throw`, new public call that does I/O |
 | A6 | A new member of a sealed type or enum that callers switch on (`ReceiverEvent`, `AirkastException`, `Compatibility`, `PlaybackState`) is fine, and its KDoc says when it happens. | New subclass or enum entry |
 | A7 | Public declarations carry KDoc that says what a caller needs and the receivers or platforms it depends on, unless the name says it all. | New public declaration |
+| A8 | A time in the public API is a `kotlin.time.Duration`, never a `Double` of seconds or a `Long` of millis, and a volume runs from 0 to 1. | New public property or parameter that holds a time or a volume |
 
 Authority: CONTRIBUTING.md § The public API, docs/releasing.md § What counts as a break.
 

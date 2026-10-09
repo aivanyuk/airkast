@@ -6,6 +6,34 @@ caller sees adds its line under "Unreleased".
 
 ## Unreleased
 
+### Added
+
+- `Receiver.isSupported`, and `SessionOptions.copy { … }` in place of `newBuilder()`.
+
+### Changed
+
+Breaking, under the rules for a minor release before 1.0 ([releasing](docs/releasing.md)):
+
+- Every time is a `kotlin.time.Duration`: `VideoItem.startAt`, `seek(position)` and what it
+  returns, `PlaybackInfo.position`, `duration`, `buffered` and `seekable` (now
+  `List<ClosedRange<Duration>>`, in place of `TimeRange`), `RateChanged.position`,
+  `TimeJumped.position`, `SessionOptions.connectTimeout`, `requestTimeout` and `loadTimeout`,
+  and `AirkastPlayer.Builder.positionPollInterval`. Callers write `10.minutes` for `600.0`.
+- `MediaItem` is `VideoItem`, so it no longer clashes with media3's `MediaItem`.
+- Tracks: `MediaKind`, `MediaOption` and `MediaSelection` are `TrackKind` and `Track`;
+  `selectedMedia()` is `tracks()`, and `selectMedia(list)` is `selectTrack(kind, id)`, one kind
+  per call.
+- `ReceiverEvent.RemoteCommand` and its string codes are `ReceiverEvent.Back`, sent on the key-up
+  when the TV expects the sender to stop, and `ReceiverEvent.VolumeChanged`. Other codes arrive as
+  `ReceiverEvent.Other`.
+- `VideoSession.volume()` runs from 0 to 1, as `VolumeChanged` does, in place of decibels.
+- `StateChanged.reason` and `ItemChanged.reason` are a `Reason` value class, with `Ended` and
+  `Interrupted` named, in place of a string.
+- `AirkastPlayer.Builder` has properties in place of setters, and `AirkastPlayer(context) { … }`
+  builds one.
+- `ReceiverDiscovery.receivers` is a property, and `LocalNetwork.accessible` and
+  `permissionRequired` are `isAccessible` and `needsPermission`.
+
 ## 0.1.1 - 2026-10-09
 
 The code of 0.1.0, built.

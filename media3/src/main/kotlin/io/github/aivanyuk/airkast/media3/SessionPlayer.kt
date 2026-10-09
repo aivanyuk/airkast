@@ -14,7 +14,9 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.PlaybackState
+import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.VideoItem
 import io.github.aivanyuk.airkast.VideoSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -26,7 +28,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-import io.github.aivanyuk.airkast.MediaItem as RemoteItem
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * [AirkastPlayer] over media3's `SimpleBasePlayer`. Every handler updates the state before it
@@ -37,7 +40,7 @@ import io.github.aivanyuk.airkast.MediaItem as RemoteItem
 internal class SessionPlayer(
     looper: Looper,
     private val awake: KeepAwake?,
-    private val pollIntervalMillis: Long,
+    private val pollInterval: Duration,
 ) : SimpleBasePlayer(looper),
     AirkastPlayer {
     private val scope = CoroutineScope(SupervisorJob() + Handler(looper).asCoroutineDispatcher())
@@ -172,12 +175,12 @@ internal class SessionPlayer(
                 scope.launch {
                     val at =
                         try {
-                            s.seek(target / 1000.0)
+                            s.seek(target.milliseconds)
                         } catch (_: AirkastException) {
                             null
                         }
                     if (at != null && attached === s && loaded) {
-                        moveTo((at * 1000).toLong())
+                        moveTo(at.inWholeMilliseconds)
                         changed()
                     }
                 }
@@ -215,7 +218,7 @@ internal class SessionPlayer(
                 launch(start = CoroutineStart.UNDISPATCHED) { s.events.collect { onEvent(s, it) } }
                 volume(s)
                 while (isActive) {
-                    delay(pollIntervalMillis)
+                    delay(pollInterval)
                     if (loaded && (playback == Player.STATE_READY || playback == Player.STATE_BUFFERING)) poll(s)
                 }
             }
@@ -255,7 +258,7 @@ internal class SessionPlayer(
         loadJob =
             scope.launch {
                 try {
-                    s.load(RemoteItem(url, startSeconds = startMs / 1000.0))
+                    s.load(VideoItem(url, startAt = startMs.milliseconds))
                     loaded = true
                     if (!wantsPlay) s.pause()
                 } catch (e: AirkastException) {
@@ -296,17 +299,16 @@ internal class SessionPlayer(
                 if (!loaded) return
                 if (event.rate > 0) rate = event.rate.toFloat()
                 remoteWants(event.rate > 0)
-                moveTo(event.positionSeconds?.let { (it * 1000).toLong() } ?: position.get())
+                moveTo(event.position?.inWholeMilliseconds ?: position.get())
             }
 
             is ReceiverEvent.TimeJumped -> {
                 if (!loaded) return
-                event.positionSeconds?.let { moveTo((it * 1000).toLong()) }
+                event.position?.let { moveTo(it.inWholeMilliseconds) }
             }
 
-            is ReceiverEvent.RemoteCommand -> {
-                if (event.code != ReceiverEvent.RemoteCommand.VOLUME) return
-                event.volume?.let { volume = (it * MAX_VOLUME).roundToInt().coerceIn(0, MAX_VOLUME) }
+            is ReceiverEvent.VolumeChanged -> {
+                volume = (event.volume * MAX_VOLUME).roundToInt().coerceIn(0, MAX_VOLUME)
             }
 
             is ReceiverEvent.Disconnected -> {
@@ -330,7 +332,7 @@ internal class SessionPlayer(
 
     private fun onState(
         state: PlaybackState,
-        reason: String?,
+        reason: Reason?,
     ) {
         if (!loaded) return
         when (state) {
@@ -349,7 +351,7 @@ internal class SessionPlayer(
             }
 
             PlaybackState.Stopped -> {
-                if (reason == "ended") {
+                if (reason == Reason.Ended) {
                     end()
                 } else {
                     // Stopped from the TV, such as by switching its input. The app reads why from the session.
@@ -372,7 +374,7 @@ internal class SessionPlayer(
             }
         if (attached !== s || !loaded) return
         if (info.itemId != null && receiverItemId != null && info.itemId != receiverItemId) return
-        durationMs = info.durationSeconds?.let { (it * 1000).toLong() } ?: C.TIME_UNSET
+        durationMs = info.duration?.inWholeMilliseconds ?: C.TIME_UNSET
         if (info.rate > 0) rate = info.rate.toFloat()
         when (info.state) {
             PlaybackState.Playing -> {
@@ -391,20 +393,19 @@ internal class SessionPlayer(
 
             else -> {}
         }
-        moveTo(info.positionSeconds?.let { (it * 1000).toLong() } ?: position.get())
+        moveTo(info.position?.inWholeMilliseconds ?: position.get())
         changed()
     }
 
     private suspend fun volume(s: VideoSession) {
-        val decibels =
+        val level =
             try {
                 s.volume()
             } catch (_: AirkastException) {
                 null
             } ?: return
         if (attached !== s) return
-        // The receiver's scale runs from -30 dB to 0, with -144 for muted.
-        volume = ((decibels + 30) / 30 * MAX_VOLUME).roundToInt().coerceIn(0, MAX_VOLUME)
+        volume = (level * MAX_VOLUME).roundToInt().coerceIn(0, MAX_VOLUME)
         changed()
     }
 

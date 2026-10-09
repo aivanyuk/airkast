@@ -74,7 +74,7 @@ tests run under Robolectric at API 23, 34, 36 and 37.
 | below 9 (API 28) | The JCA has no ChaCha20-Poly1305 | Carries its own (RFC 8439) |
 | below 14 (API 34) | `NsdManager` resolves one service at a time, and a resolved service has one `host` | Resolves services one after another |
 | 14 (API 34) and later | A resolved service has `hostAddresses`, which may list IPv6 before IPv4 | Takes the first IPv4 address |
-| 17 (API 37), when the app targets 37 | The local network is blocked until the user grants `ACCESS_LOCAL_NETWORK`. A TCP connection times out with no error that names the cause, and `NsdManager` is blocked too | `ReceiverDiscovery` and `Airkast.connect(context, …)` fail at once with `AirkastException.NotPermitted`. `LocalNetwork.accessible` tells an app when to ask |
+| 17 (API 37), when the app targets 37 | The local network is blocked until the user grants `ACCESS_LOCAL_NETWORK`. A TCP connection times out with no error that names the cause, and `NsdManager` is blocked too | `ReceiverDiscovery` and `Airkast.connect(context, …)` fail at once with `AirkastException.NotPermitted`. `LocalNetwork.isAccessible` tells an app when to ask |
 
 The app declares `ACCESS_LOCAL_NETWORK` itself, and only when it targets SDK 37 or more, since
 Android's guidance is to leave it out below that. It is in the `NEARBY_DEVICES` group, so a user

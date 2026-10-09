@@ -3,11 +3,11 @@ package io.github.aivanyuk.airkast.session
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
-import io.github.aivanyuk.airkast.MediaItem
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.SessionOptions
+import io.github.aivanyuk.airkast.VideoItem
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -18,13 +18,17 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.net.ServerSocket
 import kotlin.concurrent.thread
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class SessionTest {
     private val options =
         SessionOptions {
             keepAlive = false
-            loadTimeoutMillis = 1_000
-            requestTimeoutMillis = 2_000
+            loadTimeout = 1.seconds
+            requestTimeout = 2.seconds
         }
 
     @Test
@@ -32,10 +36,10 @@ class SessionTest {
         runBlocking {
             FakeReceiver().use { fake ->
                 Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = options).use { session ->
-                    session.load(MediaItem("https://example.com/master.m3u8", startSeconds = 600.0))
+                    session.load(VideoItem("https://example.com/master.m3u8", startAt = 10.minutes))
                     val insert = fake.commands.first { it["type"] == "insertPlayQueueItem" }
                     val item = insert["item"] as Map<*, *>
-                    assertThat(DefaultVideoSession.seconds(item["Start-Position"])).isEqualTo(600.0)
+                    assertThat(DefaultVideoSession.duration(item["Start-Position"])).isEqualTo(10.minutes)
                     assertThat(item["mediaType"]).isEqualTo("file")
                     assertThat(fake.commands.map { it["type"] })
                         .containsExactly("insertPlayQueueItem", "setProperty", "setProperty", "setRate")
@@ -43,11 +47,11 @@ class SessionTest {
 
                     val info = session.playbackInfo()
                     assertThat(info.state).isEqualTo(PlaybackState.Playing)
-                    assertThat(info.positionSeconds).isEqualTo(600.0)
-                    assertThat(info.durationSeconds).isEqualTo(3077.0)
-                    assertThat(info.loaded.single().durationSeconds).isEqualTo(30.0)
+                    assertThat(info.position).isEqualTo(10.minutes)
+                    assertThat(info.duration).isEqualTo(3077.seconds)
+                    assertThat(info.buffered.single()).isEqualTo(10.minutes..10.minutes + 30.seconds)
 
-                    assertThat(session.seek(1200.0)).isEqualTo(1200.0)
+                    assertThat(session.seek(20.minutes)).isEqualTo(20.minutes)
                     val seek = fake.commands.last { it["type"] == "seek" }
                     assertThat((seek["item"] as Map<*, *>)["uuid"]).isEqualTo(item["uuid"])
 
@@ -64,7 +68,7 @@ class SessionTest {
         runBlocking {
             FakeReceiver(takesItems = false).use { fake ->
                 Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = options).use { session ->
-                    val error = runCatching { session.load(MediaItem("https://example.com/a.m3u8")) }.exceptionOrNull()
+                    val error = runCatching { session.load(VideoItem("https://example.com/a.m3u8")) }.exceptionOrNull()
                     assertThat(error).isInstanceOf(AirkastException.Timeout::class.java)
                 }
             }
@@ -89,16 +93,14 @@ class SessionTest {
         runBlocking {
             FakeReceiver(lateAnswers = mapOf("/feedback" to 900)).use { fake ->
                 val patient =
-                    options
-                        .newBuilder()
-                        .apply {
-                            keepAlive = true
-                            requestTimeoutMillis = 500
-                        }.build()
+                    options.copy {
+                        keepAlive = true
+                        requestTimeout = 500.milliseconds
+                    }
                 Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = patient).use { session ->
-                    session.load(MediaItem("https://example.com/a.m3u8"))
+                    session.load(VideoItem("https://example.com/a.m3u8"))
                     withTimeout(8_000) { while (fake.feedbacks < 2) delay(50) }
-                    assertThat(session.playbackInfo().positionSeconds).isEqualTo(0.0)
+                    assertThat(session.playbackInfo().position).isEqualTo(Duration.ZERO)
                     session.pause()
                     assertThat(fake.commands.last()["type"]).isEqualTo("setRate")
                     assertThat(session.state.value).isNotEqualTo(PlaybackState.Stopped)
@@ -110,9 +112,9 @@ class SessionTest {
     fun aLateCommandAnswerTimesOutAndTheSessionLivesOn() =
         runBlocking {
             FakeReceiver(lateAnswers = mapOf("stop" to 900)).use { fake ->
-                val quick = options.newBuilder().apply { requestTimeoutMillis = 500 }.build()
+                val quick = options.copy { requestTimeout = 500.milliseconds }
                 Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = quick).use { session ->
-                    session.load(MediaItem("https://example.com/a.m3u8"))
+                    session.load(VideoItem("https://example.com/a.m3u8"))
                     val error = runCatching { session.stop() }.exceptionOrNull()
                     assertThat(error).isInstanceOf(AirkastException.Timeout::class.java)
                     session.play()
@@ -128,12 +130,10 @@ class SessionTest {
         runBlocking {
             FakeReceiver(hangsAt = "/feedback").use { fake ->
                 val patient =
-                    options
-                        .newBuilder()
-                        .apply {
-                            keepAlive = true
-                            requestTimeoutMillis = 500
-                        }.build()
+                    options.copy {
+                        keepAlive = true
+                        requestTimeout = 500.milliseconds
+                    }
                 val session = Airkast.connect(Receiver("fake", "127.0.0.1", fake.port), options = patient)
                 val ended = withTimeout(10_000) { session.events.first { it is ReceiverEvent.Disconnected } }
                 assertThat((ended as ReceiverEvent.Disconnected).cause).hasMessageThat().contains("earlier request")

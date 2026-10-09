@@ -23,13 +23,13 @@ public suspend fun Airkast.connect(
     identity: SenderIdentity = SenderIdentity(),
     options: SessionOptions = SessionOptions.DEFAULT,
 ): VideoSession {
-    if (!LocalNetwork.accessible(context)) throw notPermitted()
+    if (!LocalNetwork.isAccessible(context)) throw notPermitted()
     val bound =
         if (options.socketFactory != null) {
             options
         } else {
             val factory = withContext(Dispatchers.IO) { LocalNetwork.socketFactory(context, receiver.host) }
-            options.newBuilder().apply { socketFactory = factory }.build()
+            options.copy { socketFactory = factory }
         }
     return connect(receiver, identity, bound)
 }

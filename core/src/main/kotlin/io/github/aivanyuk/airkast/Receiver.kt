@@ -20,6 +20,9 @@ public class Receiver(
     /** Whether this library can play on the receiver, and if not, why. */
     public val compatibility: Compatibility get() = compatibilityOf(features, statusFlags, properties)
 
+    /** `compatibility == Supported`. A receiver typed in by hand is [Compatibility.Unknown], not supported. */
+    public val isSupported: Boolean get() = compatibility == Compatibility.Supported
+
     public val model: String? get() = properties["model"]
     public val deviceId: String? get() = properties["deviceid"]
 

@@ -1,16 +1,18 @@
 package io.github.aivanyuk.airkast.media3
 
 import io.github.aivanyuk.airkast.AirkastException
-import io.github.aivanyuk.airkast.MediaItem
-import io.github.aivanyuk.airkast.MediaOption
-import io.github.aivanyuk.airkast.MediaSelection
 import io.github.aivanyuk.airkast.PlaybackInfo
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Track
+import io.github.aivanyuk.airkast.TrackKind
+import io.github.aivanyuk.airkast.VideoItem
 import io.github.aivanyuk.airkast.VideoSession
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** A session that answers at once, reports what it was asked, and plays as the LG does. */
 internal class FakeSession : VideoSession {
@@ -19,16 +21,16 @@ internal class FakeSession : VideoSession {
     override val state = MutableStateFlow(PlaybackState.Unknown)
 
     val sent = mutableListOf<String>()
-    var loaded: MediaItem? = null
+    var loaded: VideoItem? = null
     var loadError: AirkastException? = null
-    var info = PlaybackInfo(PlaybackState.Playing, 1.0, 0.0, 3077.0, emptyList(), emptyList(), ITEM)
-    var decibels: Double? = -15.0
+    var info = PlaybackInfo(PlaybackState.Playing, 1.0, Duration.ZERO, 3077.seconds, emptyList(), emptyList(), ITEM)
+    var volume: Double? = 0.5
 
     fun emit(event: ReceiverEvent) {
         check(events.tryEmit(event))
     }
 
-    override suspend fun load(item: MediaItem) {
+    override suspend fun load(item: VideoItem) {
         sent += "load"
         loadError?.let { throw it }
         loaded = item
@@ -46,18 +48,21 @@ internal class FakeSession : VideoSession {
         emit(ReceiverEvent.StateChanged(PlaybackState.Paused, null))
     }
 
-    override suspend fun seek(positionSeconds: Double): Double {
-        sent += "seek $positionSeconds"
-        return positionSeconds
+    override suspend fun seek(position: Duration): Duration {
+        sent += "seek $position"
+        return position
     }
 
     override suspend fun playbackInfo(): PlaybackInfo = info
 
-    override suspend fun selectedMedia(): List<MediaOption> = emptyList()
+    override suspend fun tracks(): List<Track> = emptyList()
 
-    override suspend fun selectMedia(selections: List<MediaSelection>) {}
+    override suspend fun selectTrack(
+        kind: TrackKind,
+        id: Long?,
+    ) {}
 
-    override suspend fun volume(): Double? = decibels
+    override suspend fun volume(): Double? = volume
 
     override suspend fun stop() {
         sent += "stop"

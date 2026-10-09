@@ -2,6 +2,7 @@ package io.github.aivanyuk.airkast
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import kotlin.time.Duration.Companion.seconds
 
 class ReceiverTest {
     private val lgFeatures = "0x7F8AD0,0x38BCB46"
@@ -48,6 +49,6 @@ class ReceiverTest {
             tv.hashCode(),
         ).isEqualTo(Receiver("tv", "10.0.0.2", properties = mapOf("features" to lgFeatures)).hashCode())
         assertThat(tv.toString()).contains("host=10.0.0.2")
-        assertThat(MediaItem("a", 1.0)).isNotEqualTo(MediaItem("a", 2.0))
+        assertThat(VideoItem("a", 1.seconds)).isNotEqualTo(VideoItem("a", 2.seconds))
     }
 }

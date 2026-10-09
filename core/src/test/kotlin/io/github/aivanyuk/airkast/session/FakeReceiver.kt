@@ -16,6 +16,8 @@ import java.net.ServerSocket
 import java.security.SecureRandom
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.thread
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * A receiver on loopback that pairs transiently, accepts the session and its stream, and answers
@@ -49,7 +51,7 @@ internal class FakeReceiver(
     private var controlLink: Link? = null
 
     @Volatile
-    private var position = 0.0
+    private var position = Duration.ZERO
 
     init {
         thread(isDaemon = true, name = "fake-receiver") { runCatching { serve() } }
@@ -169,7 +171,7 @@ internal class FakeReceiver(
             "insertPlayQueueItem" -> {
                 if (takesItems && recorded) {
                     val item = command["item"] as Map<*, *>
-                    position = DefaultVideoSession.seconds(item["Start-Position"]) ?: 0.0
+                    position = DefaultVideoSession.duration(item["Start-Position"]) ?: Duration.ZERO
                     event(
                         mapOf(
                             "type" to "notification",
@@ -194,12 +196,12 @@ internal class FakeReceiver(
                                 "rate" to 1L,
                                 "playbackState" to "playing",
                                 "position" to DefaultVideoSession.cmTime(position),
-                                "duration" to DefaultVideoSession.cmTime(3077.0),
+                                "duration" to DefaultVideoSession.cmTime(3077.seconds),
                                 "loadedTimeRanges" to
                                     listOf(
                                         mapOf(
                                             "start" to DefaultVideoSession.cmTime(position),
-                                            "duration" to DefaultVideoSession.cmTime(30.0),
+                                            "duration" to DefaultVideoSession.cmTime(30.seconds),
                                         ),
                                     ),
                             ),
@@ -209,7 +211,7 @@ internal class FakeReceiver(
 
             "seek" -> {
                 if (command["item"] != null && command["toleranceBefore"] != null) {
-                    position = DefaultVideoSession.seconds(command["time"])!!
+                    position = DefaultVideoSession.duration(command["time"])!!
                     event(
                         mapOf(
                             "kind" to "response",
