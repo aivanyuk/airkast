@@ -8,6 +8,8 @@ caller sees adds its line under "Unreleased".
 
 ### Added
 
+- `sample/`, an app that shows the integration end to end: discovery, Android 17's local network
+  permission, `AirkastPlayer` under a `MediaSession`, tracks, and the TV's events.
 - `Receiver.isSupported`, and `SessionOptions.copy { … }` in place of `newBuilder()`.
 - `AirkastPlayer.Builder.streaming`, on by default, with `streaming = false` for `file` items.
 

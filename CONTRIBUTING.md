@@ -55,6 +55,8 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
   `Builder` with a default, and a `Type { … }` function builds one.
 - **A time is a `kotlin.time.Duration`**, never a number with the unit in its name, and a volume
   runs from 0 to 1. The API is Kotlin's: every call suspends, so Java is not a target.
+- **`sample/` compiles against the modules**, so a change to the API changes the sample with it,
+  and the sample shows the current way to make the call.
 - **Sealed types and enums may gain members** in a minor release (`ReceiverEvent`,
   `AirkastException`, `Compatibility`, `PlaybackState`). Their KDoc says so where it matters;
   callers keep an `else` branch.

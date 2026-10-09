@@ -20,3 +20,6 @@ rootProject.name = "airkast"
 include(":core")
 include(":android")
 include(":media3")
+
+// A reference app over the modules above. Not published.
+include(":sample")

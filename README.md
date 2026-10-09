@@ -91,6 +91,19 @@ needs CORS headers on every playlist and segment.
 BACK on the TV's remote arrives as `ReceiverEvent.Back`, and the TV leaves its player only when
 the sender calls `stop()`.
 
+## Sample app
+
+[`sample/`](sample) is a small app over the three modules, and the reference integration: it finds
+TVs or takes an address, asks for Android 17's local network permission, casts a URL through
+`AirkastPlayer` under a `MediaSession` with its notification, switches tracks, and lists what the
+TV reports. [`Cast.kt`](sample/src/main/kotlin/io/github/aivanyuk/airkast/sample/Cast.kt) and
+[`CastService.kt`](sample/src/main/kotlin/io/github/aivanyuk/airkast/sample/CastService.kt) are
+the integration; `ui/` is Compose over them. It builds against the modules in this repository:
+
+```bash
+./gradlew :sample:installDebug
+```
+
 ## Tests
 
 ```bash
