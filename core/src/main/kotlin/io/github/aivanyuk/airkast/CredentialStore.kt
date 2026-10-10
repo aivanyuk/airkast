@@ -108,11 +108,7 @@ private class FileCredentialStore(
         val temp = File(file.absoluteFile.parentFile, "${file.name}.tmp")
         temp.delete()
         temp.createNewFile()
-        // Owner only, before a key reaches it.
-        temp.setReadable(false, false)
-        temp.setWritable(false, false)
-        temp.setReadable(true, true)
-        temp.setWritable(true, true)
+        temp.ownerOnly()
         val properties = Properties().apply { entries.forEach { (key, value) -> setProperty(key, value) } }
         temp.outputStream().use { properties.store(it, "airkast pairings: they hold private keys") }
         // On Windows a rename does not replace a file.
@@ -120,4 +116,17 @@ private class FileCredentialStore(
             throw IOException("Cannot replace $file")
         }
     }
+}
+
+/**
+ * Makes this readable and writable by its owner alone, before a key reaches it. `File` sets a
+ * permission for the owner without taking it from anyone else, so each is cleared for everybody
+ * first: with owner-only calls alone, a file the umask made `rw-r--r--` stays that way.
+ * `Files.setPosixFilePermissions` does it in one call, but Android has it only from API 26.
+ */
+private fun File.ownerOnly() {
+    setReadable(false, false)
+    setReadable(true, true)
+    setWritable(false, false)
+    setWritable(true, true)
 }

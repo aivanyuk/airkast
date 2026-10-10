@@ -5,11 +5,15 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.net.ServerSocket
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import javax.net.SocketFactory
@@ -113,6 +117,15 @@ class AirkastTest {
             assertThat(file.canRead()).isTrue()
             assertThat(File(file.parentFile, "credentials.tmp").exists()).isFalse()
         }
+
+    @Test
+    fun theFileStoreKeepsItsFileFromOtherUsers() {
+        assumeTrue("POSIX permissions only", "posix" in FileSystems.getDefault().supportedFileAttributeViews())
+        val file = File(folder.root, "credentials")
+        runBlocking { CredentialStore.file(file).put(tv, credentials) }
+        assertThat(Files.getPosixFilePermissions(file.toPath()))
+            .containsExactly(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE)
+    }
 
     @Test
     fun aFileStoreThatCannotWriteKeepsCredentialsInMemory() =
