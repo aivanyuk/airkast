@@ -104,7 +104,10 @@ tested against `FakeReceiver`, and checked by hand on a Mac set to "Require pass
   `statusFlags = 4`. "Everyone" is not checked yet.
 - With "Require password" on, it reads as `NeedsPassword`, refuses transient pairing, and pairs
   with the password as owntone does. It then answers every base SETUP with 401 and a Digest
-  challenge, even after pair-verify, and takes the same password there. Discovery may still hold
+  challenge, even after pair-verify, and takes the same password there. airkast answers that
+  challenge once and signs every later request with its nonce for the session's life. The Mac
+  took that over sessions of up to 36 s; whether it expires the nonce in a longer one is not
+  checked yet, and a 401 there would reach the caller as `Rejected`. Discovery may still hold
   the record from before the password was set, and the receiver then reads as `Supported` until
   it is resolved again.
 - `GET /info` answers 403 without an AirPlay `User-Agent`.

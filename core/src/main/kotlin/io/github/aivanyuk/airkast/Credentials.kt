@@ -24,9 +24,10 @@ public class Credentials internal constructor(
      * after pairing with one.
      */
     public val encoded: String
-        get() =
-            (listOf(receiverKey, senderSeed, receiverId, senderId) + listOfNotNull(password?.toByteArray()))
-                .joinToString(":") { it.hex() }
+        get() {
+            val fields = listOf(receiverKey, senderSeed, receiverId, senderId)
+            return (fields + listOfNotNull(password?.toByteArray(Charsets.UTF_8))).joinToString(":") { it.hex() }
+        }
 
     internal fun withPassword(password: String): Credentials =
         Credentials(receiverKey, senderSeed, receiverId, senderId, password)
@@ -45,7 +46,8 @@ public class Credentials internal constructor(
             val fields = encoded.trim().split(':').map { it.unhex() ?: return null }
             if (fields.size !in 4..5 || fields[0].size != KEY_LENGTH || fields[1].size != KEY_LENGTH) return null
             if (fields[2].isEmpty() || fields[3].isEmpty()) return null
-            return Credentials(fields[0], fields[1], fields[2], fields[3], fields.getOrNull(4)?.let { String(it) })
+            val password = fields.getOrNull(4)?.takeIf { it.isNotEmpty() }?.let { String(it, Charsets.UTF_8) }
+            return Credentials(fields[0], fields[1], fields[2], fields[3], password)
         }
 
         private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it) }

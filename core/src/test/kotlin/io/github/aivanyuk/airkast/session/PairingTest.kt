@@ -255,6 +255,8 @@ class PairingTest {
         assertThat(withPassword.encoded).isEqualTo("$key:$key:4142:4344:68756e74657232")
         assertThat(withPassword.toString()).doesNotContain("hunter2")
         assertThat(Credentials.decode("$key:$key:4142:4344:68:69")).isNull()
+        assertThat(Credentials.decode("$key:$key:4142:4344:")!!.password).isNull()
+        assertThat(Credentials.decode("$key:$key:4142:4344:d0bad0bed0b4")!!.password).isEqualTo("код")
         assertThat(Credentials.decode("$key:${"11".repeat(31)}:4142:4344")).isNull()
         assertThat(Credentials.decode("$key:$key:zz:4344")).isNull()
         assertThat(Credentials.decode("$key:$key::4344")).isNull()
