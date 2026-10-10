@@ -89,7 +89,10 @@ public class ReceiverDiscovery(
             }
         }
 
-    /** Writes a line to [logger], if it takes [level]. A logger that throws loses the line. */
+    /**
+     * Writes a line to [logger], if it takes [level]. A logger that throws loses the line, never the
+     * scan. This is core's `Log` again, which is internal to `airkast-core`.
+     */
     private fun log(
         level: Level,
         error: Throwable? = null,

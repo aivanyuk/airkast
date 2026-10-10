@@ -5,7 +5,8 @@ import io.github.aivanyuk.airkast.Airkast.Logger.Level
 
 /**
  * The player's lines, under the tag `player`. A line is built only when the logger takes its level,
- * and a logger that throws loses the line, never the cast.
+ * and a logger that throws loses the line, never the cast. This is core's `Log` again, which is
+ * internal to `airkast-core`.
  */
 internal class PlayerLog(
     val logger: Airkast.Logger?,
