@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -29,6 +30,7 @@ import io.github.aivanyuk.airkast.sample.CastService
 import io.github.aivanyuk.airkast.sample.CastState
 import io.github.aivanyuk.airkast.sample.cast
 import io.github.aivanyuk.airkast.sample.views.databinding.ActivityMainBinding
+import io.github.aivanyuk.airkast.sample.views.databinding.DialogPinBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.DialogTracksBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.ItemReceiverBinding
 import kotlinx.coroutines.Job
@@ -43,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var connecting: ListenableFuture<MediaController>? = null
     private var scanning: Job? = null
+    private var pinDialog: AlertDialog? = null
 
     /** Android 17's local network permission, which the app declares and asks for itself. */
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { scan() }
@@ -77,6 +80,9 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch { cast.attempt { "${playbackInfo()}\nvolume ${volume()}" }?.let(::showInfo) }
         }
         binding.disconnect.setOnClickListener { cast.stop() }
+        binding.pairWithPin.setOnClickListener {
+            (cast.state.value as? CastState.Idle)?.receiver?.let { cast.start(it, url(), withPin = true) }
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -97,6 +103,13 @@ class MainActivity : AppCompatActivity() {
             { if (connecting === future) binding.playerView.player = future.get() },
             MoreExecutors.directExecutor(),
         )
+    }
+
+    override fun onDestroy() {
+        // A recreated activity shows it again from the state.
+        pinDialog?.dismiss()
+        pinDialog = null
+        super.onDestroy()
     }
 
     override fun onStop() {
@@ -151,19 +164,50 @@ class MainActivity : AppCompatActivity() {
         val failure = (state as? CastState.Idle)?.failure
         binding.failure.text = failure?.let(::describe)
         binding.failure.isVisible = failure != null
+        // A receiver may ask for a PIN without saying so in its TXT record.
+        binding.pairWithPin.isVisible =
+            state is CastState.Idle &&
+            state.receiver != null &&
+            (failure is AirkastException.PairingFailed || failure is AirkastException.PinRejected)
         binding.status.text =
             when (state) {
                 is CastState.Idle -> null
                 is CastState.Connecting -> getString(R.string.connecting, state.receiver.name)
+                is CastState.AwaitingPin -> getString(R.string.awaiting_pin, state.receiver.name)
                 is CastState.Casting -> getString(R.string.casting, state.session.receiver.name)
             }
         binding.status.isVisible = state !is CastState.Idle
         binding.casting.isVisible = state is CastState.Casting
+        if (state is CastState.AwaitingPin) {
+            if (pinDialog == null) pinDialog = showPin(state.receiver)
+        } else {
+            pinDialog?.dismiss()
+            pinDialog = null
+        }
+    }
+
+    /** The PIN [receiver] shows on its screen, typed in once to pair. */
+    private fun showPin(receiver: Receiver): AlertDialog {
+        val view = DialogPinBinding.inflate(layoutInflater)
+        return MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.pin_title, receiver.name))
+            .setView(view.root)
+            .setPositiveButton(R.string.pair) { _, _ ->
+                cast.enterPin(
+                    view.pin.text
+                        .toString()
+                        .trim(),
+                )
+            }.setNegativeButton(android.R.string.cancel) { _, _ -> cast.cancelPin() }
+            .setOnCancelListener { cast.cancelPin() }
+            .show()
     }
 
     /**
      * The receiver reports the renditions it selected, with ids that follow the HLS master's order,
-     * so "next" is the next id. A subtitle selection with a null id turns subtitles off.
+     * so "next" is the next id. With none of a kind selected, as on a Mac with subtitles off, it is
+     * the id after the highest one selected, since a master lists audio before subtitles. A subtitle
+     * selection with a null id turns subtitles off.
      */
     private fun showTracks(selected: List<Track>) {
         val view = DialogTracksBinding.inflate(layoutInflater)
@@ -182,7 +226,10 @@ class MainActivity : AppCompatActivity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
 
-        fun next(kind: TrackKind) = (selected.firstOrNull { it.kind == kind }?.id ?: -1) + 1
+        fun next(kind: TrackKind): Long {
+            val current = selected.firstOrNull { it.kind == kind } ?: selected.maxByOrNull { it.id }
+            return current?.id?.plus(1) ?: 0
+        }
 
         fun pick(
             kind: TrackKind,
@@ -217,6 +264,8 @@ class MainActivity : AppCompatActivity() {
 
             Compatibility.NeedsPassword -> getString(R.string.compat_needs_password)
 
+            Compatibility.AccessRestricted -> getString(R.string.compat_restricted)
+
             // New cases may join in a minor release.
             else -> getString(R.string.compat_other, compatibility.name)
         }
@@ -227,6 +276,7 @@ class MainActivity : AppCompatActivity() {
             is AirkastException.NotPermitted -> getString(R.string.failed_not_permitted)
             is AirkastException.Unreachable -> getString(R.string.failed_unreachable)
             is AirkastException.PairingFailed -> getString(R.string.failed_pairing)
+            is AirkastException.PinRejected -> getString(R.string.failed_pin)
             is AirkastException.Disconnected -> getString(R.string.failed_disconnected)
             is AirkastException.DiscoveryFailed -> getString(R.string.discovery_failed, failure.code)
             else -> getString(R.string.failed_other, failure.message ?: failure.javaClass.simpleName)

@@ -13,6 +13,9 @@ public sealed class AirkastException(
         message: String,
     ) : AirkastException(message)
 
+    /** The receiver did not take the PIN given to [Airkast.pair]. Pairing again starts over. */
+    public class PinRejected : AirkastException("The receiver did not take the PIN")
+
     /** The receiver answered a request with an error status. */
     public class Rejected(
         public val request: String,

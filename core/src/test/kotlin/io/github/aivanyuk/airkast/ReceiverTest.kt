@@ -24,12 +24,24 @@ class ReceiverTest {
     }
 
     @Test
-    fun aCodeOnTheScreenOrAPasswordIsNotSupportedYet() {
-        assertThat(receiver("features" to lgFeatures, "flags" to "0x8").compatibility).isEqualTo(Compatibility.NeedsPin)
+    fun aCodeOnTheScreenPairsButAPasswordIsNotSupportedYet() {
+        val pin = receiver("features" to lgFeatures, "flags" to "0x8")
+        assertThat(pin.compatibility).isEqualTo(Compatibility.NeedsPin)
+        assertThat(pin.isSupported).isTrue()
         assertThat(receiver("features" to lgFeatures, "flags" to "0x80").compatibility)
             .isEqualTo(Compatibility.NeedsPassword)
         assertThat(receiver("features" to lgFeatures, "pw" to "TRUE").compatibility)
             .isEqualTo(Compatibility.NeedsPassword)
+        assertThat(receiver("features" to lgFeatures, "pw" to "TRUE").isSupported).isFalse()
+    }
+
+    @Test
+    fun aMacThatLetsInOnlyItsOwnersDevicesIsRestricted() {
+        val mac = receiver("features" to lgFeatures, "flags" to "0x4", "act" to "2")
+        assertThat(mac.compatibility).isEqualTo(Compatibility.AccessRestricted)
+        assertThat(mac.isSupported).isFalse()
+        assertThat(receiver("features" to lgFeatures, "flags" to "0x4", "act" to "0").compatibility)
+            .isEqualTo(Compatibility.Supported)
     }
 
     @Test

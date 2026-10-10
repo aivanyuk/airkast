@@ -6,6 +6,23 @@ caller sees adds its line under "Unreleased".
 
 ## Unreleased
 
+### Added
+
+- Pairing with a PIN: `Airkast.pair(receiver) { pin }` (and `Airkast.pair(context, …)` on
+  Android) pairs once with a receiver that shows a PIN, and returns `Credentials`. With them in
+  `SessionOptions.credentials`, `connect` proves the pairing instead of pairing transiently.
+  `Credentials.encoded` and `Credentials.decode` store them, in pyatv's format. A wrong PIN
+  throws `AirkastException.PinRejected`. Not yet checked on a receiver that asks for a PIN.
+- `Compatibility.AccessRestricted`, for a receiver that lets in only its owner's devices (`act=2`):
+  a Mac's AirPlay Receiver at its default, "Current User".
+
+### Changed
+
+- `Receiver.isSupported` is true for `Compatibility.NeedsPin` too, since such a receiver now
+  plays once paired.
+- `SessionOptions.ntpTiming` is on by default. A Mac answers SETUP with 500 without it, and the LG
+  CX plays either way. The receiver now needs to reach the sender over UDP.
+
 ## 0.2.0 - 2026-10-09
 
 ### Added

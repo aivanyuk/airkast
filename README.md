@@ -14,8 +14,9 @@ smart TVs with an AirPlay 2 receiver built in.
 ## Status
 
 Early, and versioned 0.x: a minor release may change the API ([releasing](docs/releasing.md)).
-It is checked against an LG CX (webOS, receiver 377.25.06), and reverse-engineered from public
-notes, with no specification behind it. What works there:
+It is checked against an LG CX (webOS, receiver 377.25.06) and a Mac's AirPlay Receiver
+(960.13.25, set to "Anyone on the same network"), and reverse-engineered from public notes, with
+no specification behind it. What works there:
 
 - transient pairing, with no PIN on the screen;
 - loading an HLS URL at a start position, then play, pause, seek, stop and the next item;
@@ -23,9 +24,13 @@ notes, with no specification behind it. What works there:
 - reading and switching audio and subtitle tracks;
 - receiver events: state, end of item, the TV remote's pause, seek and BACK, and its volume.
 
-It does not yet support receivers that demand a PIN or a password, receivers that take URLs
-only over AirPlay video v1, Apple TV's remote channel, or setting the volume (the LG reports it
-but ignores a change). [docs/compatibility.md](docs/compatibility.md) lists what has been
+Pairing with a PIN shown on the screen (`Airkast.pair`, then `SessionOptions.credentials`) is
+written to pyatv's procedure and tested against a fake receiver, but no receiver that asks for a
+PIN has been checked yet.
+
+It does not yet support receivers that demand a password, receivers that let in only their
+owner's devices (a Mac at its default), receivers that take URLs only over AirPlay video v1,
+Apple TV's remote channel, or setting the volume (the LG reports it but ignores a change). [docs/compatibility.md](docs/compatibility.md) lists what has been
 checked, on which receivers and Android versions.
 
 ## Use
@@ -85,6 +90,21 @@ BACK on the TV's remote, and switching tracks.
 On a desktop JVM, `Airkast.connect(Receiver("TV", "192.168.1.20"))` takes a receiver typed in by
 hand.
 
+A receiver that asks for a PIN ([`Compatibility.NeedsPin`](docs/compatibility.md)) pairs once.
+It shows the PIN on its screen while `pin` waits for the user, and the credentials it leaves let
+every later connect in without one:
+
+```kotlin
+val credentials = Airkast.pair(context, receiver) { askTheUserForThePin() }  // suspends until typed
+store.save(receiver.deviceId, credentials.encoded)  // holds a private key: store it as a secret
+
+val options = SessionOptions { this.credentials = Credentials.decode(store.load(receiver.deviceId)) }
+val session = Airkast.connect(context, receiver, options = options)
+```
+
+A wrong PIN throws `AirkastException.PinRejected`. A receiver that has forgotten the sender
+refuses its credentials with `PairingFailed`, and pairing again fixes it.
+
 The receiver fetches the stream itself. A receiver whose player is a web page (the LG's is)
 needs CORS headers on every playlist and segment.
 
@@ -124,8 +144,10 @@ AIRKAST_RECEIVER=192.168.1.20 ./gradlew :core:test --tests '*LiveReceiverTest'
 
 `check` runs the JVM tests, the Android tests under Robolectric at several API levels, lint,
 ktlint, the public API check and Animal Sniffer. The crypto tests check SRP-6a and HKDF against
-srptools and pyatv, and ChaCha20-Poly1305 against RFC 8439. ChaCha20-Poly1305 is implemented here
-because the JCA has no provider for it below Android 9. The live test plays on a real receiver.
+srptools and pyatv, ChaCha20-Poly1305 against RFC 8439, X25519 against RFC 7748 and Ed25519
+against RFC 8032, and the curves against the JDK's own providers. ChaCha20-Poly1305 is
+implemented here because the JCA has no provider for it below Android 9, and X25519 and Ed25519
+because it has none below Android 13. The live test plays on a real receiver.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) has the rules a change follows, and
 [docs/architecture.md](docs/architecture.md) the shape of the code.
@@ -134,7 +156,8 @@ because the JCA has no provider for it below Android 9. The live test plays on a
 
 The protocol facts come from [pyatv](https://github.com/postlund/pyatv) (MIT) and
 [send-airplay2](https://github.com/ilyalissoboi/send-airplay2) (Apache-2.0), and from watching a
-real receiver. No code is copied from either.
+real receiver. No code is copied from either. The Curve25519 field arithmetic follows
+[TweetNaCl](https://tweetnacl.cr.yp.to/) (public domain).
 
 ## Licence
 

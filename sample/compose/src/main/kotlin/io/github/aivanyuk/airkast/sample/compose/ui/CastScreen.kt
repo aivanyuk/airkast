@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -35,6 +36,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -91,7 +93,7 @@ fun CastScreen(
             maxLines = 3,
             modifier = Modifier.fillMaxWidth(),
         )
-        CastStatus(cast, state, player)
+        CastStatus(cast, state, player, onPair = { cast.start(it, url, withPin = true) })
         EventLog(log)
     }
 }
@@ -221,6 +223,7 @@ private fun CastStatus(
     cast: Cast,
     state: CastState,
     player: Player?,
+    onPair: (Receiver) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<List<Track>?>(null) }
@@ -229,10 +232,22 @@ private fun CastStatus(
         when (state) {
             is CastState.Idle -> {
                 state.failure?.let { Text(describe(it), color = MaterialTheme.colorScheme.error) }
+                // A receiver may ask for a PIN without saying so in its TXT record.
+                val receiver = state.receiver
+                val refused =
+                    state.failure is AirkastException.PairingFailed || state.failure is AirkastException.PinRejected
+                if (receiver != null && refused) {
+                    Button(onClick = { onPair(receiver) }) { Text(stringResource(R.string.pair_with_pin)) }
+                }
             }
 
             is CastState.Connecting -> {
                 Text(stringResource(R.string.connecting, state.receiver.name))
+            }
+
+            is CastState.AwaitingPin -> {
+                Text(stringResource(R.string.awaiting_pin, state.receiver.name))
+                PinDialog(state.receiver, onEnter = cast::enterPin, onDismiss = cast::cancelPin)
             }
 
             is CastState.Casting -> {
@@ -274,6 +289,33 @@ private fun CastStatus(
     }
 }
 
+/** The PIN [receiver] shows on its screen, typed in once to pair. */
+@Composable
+private fun PinDialog(
+    receiver: Receiver,
+    onEnter: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var code by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.pin_title, receiver.name)) },
+        text = {
+            OutlinedTextField(
+                value = code,
+                onValueChange = { code = it.filter(Char::isDigit) },
+                label = { Text(stringResource(R.string.pin_hint)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onEnter(code) }, enabled = code.isNotEmpty()) { Text(stringResource(R.string.pair)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } },
+    )
+}
+
 /** media3's controls over the MediaController, with no surface: the picture is on the TV. */
 @Composable
 private fun PlayerControls(player: Player?) {
@@ -289,7 +331,9 @@ private fun PlayerControls(player: Player?) {
 
 /**
  * The receiver reports the renditions it selected, with ids that follow the HLS master's order,
- * so "next" is the next id. A subtitle selection with a null id turns subtitles off.
+ * so "next" is the next id. With none of a kind selected, as on a Mac with subtitles off, it is
+ * the id after the highest one selected, since a master lists audio before subtitles. A subtitle
+ * selection with a null id turns subtitles off.
  */
 @Composable
 private fun TracksDialog(
@@ -297,7 +341,10 @@ private fun TracksDialog(
     onSelect: (TrackKind, Long?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    fun next(kind: TrackKind) = (selected.firstOrNull { it.kind == kind }?.id ?: -1) + 1
+    fun next(kind: TrackKind): Long {
+        val current = selected.firstOrNull { it.kind == kind } ?: selected.maxByOrNull { it.id }
+        return current?.id?.plus(1) ?: 0
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.tracks_title)) },
@@ -350,6 +397,8 @@ private fun describe(compatibility: Compatibility): String =
 
         Compatibility.NeedsPassword -> stringResource(R.string.compat_needs_password)
 
+        Compatibility.AccessRestricted -> stringResource(R.string.compat_restricted)
+
         // New cases may join in a minor release.
         else -> stringResource(R.string.compat_other, compatibility.name)
     }
@@ -361,6 +410,7 @@ private fun describe(failure: AirkastException): String =
         is AirkastException.NotPermitted -> stringResource(R.string.failed_not_permitted)
         is AirkastException.Unreachable -> stringResource(R.string.failed_unreachable)
         is AirkastException.PairingFailed -> stringResource(R.string.failed_pairing)
+        is AirkastException.PinRejected -> stringResource(R.string.failed_pin)
         is AirkastException.Disconnected -> stringResource(R.string.failed_disconnected)
         is AirkastException.DiscoveryFailed -> stringResource(R.string.discovery_failed, failure.code)
         else -> stringResource(R.string.failed_other, failure.message ?: failure.javaClass.simpleName)

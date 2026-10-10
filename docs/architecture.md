@@ -5,7 +5,7 @@
 | Module | Artifact | Holds | Depends on |
 | --- | --- | --- | --- |
 | `:core` | `airkast-core` | The protocol: pairing, the session, its commands and events. Plain JVM | kotlin-stdlib, kotlinx-coroutines-core |
-| `:android` | `airkast-android` | Discovery through `NsdManager`, the local network permission, binding to the receiver's network, `Airkast.connect(context, …)` | `:core` |
+| `:android` | `airkast-android` | Discovery through `NsdManager`, the local network permission, binding to the receiver's network, `Airkast.connect(context, …)` and `Airkast.pair(context, …)` | `:core` |
 | `:media3` | `airkast-media3` | `AirkastPlayer`, a media3 `Player` over a `VideoSession`, so a media3 UI and `MediaSession` drive a receiver, and the wake and Wi-Fi locks a cast needs | `:core`, media3-common, kotlinx-coroutines-android |
 | `:sample:cast` | none | The reference integration: `Cast` opens sessions and drives an `AirkastPlayer`, and `CastService` puts a `MediaSession` over it | `:android`, `:media3` |
 | `:sample:compose`, `:sample:views` | none | The sample apps: one screen over `Cast`, in Compose and in views | `:sample:cast` |
@@ -23,17 +23,19 @@ goes there, never into a module's own build file.
 
 | Package | Holds | May use |
 | --- | --- | --- |
-| `io.github.aivanyuk.airkast` | The public API: `Airkast`, `VideoSession`, `Receiver`, `Compatibility`, `SessionOptions`, the values and events, `AirkastException` | everything below |
-| `.session` | The protocol's state: `DefaultVideoSession` (AirPlay video v2), `ControlConnection`, `EventChannel`, `TransientPairing`, `TimingResponder` | `wire`, `crypto` |
+| `io.github.aivanyuk.airkast` | The public API: `Airkast`, `VideoSession`, `Receiver`, `Compatibility`, `SessionOptions`, `Credentials`, the values and events, `AirkastException` | everything below |
+| `.session` | The protocol's state: `DefaultVideoSession` (AirPlay video v2), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `PinPairing`, `PairVerify`), `TimingResponder` | `wire`, `crypto` |
 | `.wire` | Encodings and framing: HTTP and RTSP messages, TLV8, binary plists, the encrypted `Link`. No protocol decisions | `crypto` |
-| `.crypto` | SRP-6a, HKDF-SHA512, ChaCha20-Poly1305, as pure functions with vector tests | nothing |
+| `.crypto` | SRP-6a, HKDF-SHA512, ChaCha20-Poly1305, X25519, Ed25519, as pure functions with vector tests | nothing |
 | `.internal` | Build support, such as the `@Poko` annotation | nothing |
 
 Everything outside the root package is `internal`. A lower layer never imports a higher one.
 
 ## One session
 
-`Airkast.connect` opens the control connection, pairs, and encrypts it. `DefaultVideoSession`
+`Airkast.connect` opens the control connection, pairs, and encrypts it. It pairs transiently,
+or, given `SessionOptions.credentials`, proves the pairing `Airkast.pair` made with a PIN
+(pair-verify), and the channel keys derive from that pairing's secret. `DefaultVideoSession`
 then sends the base SETUP, opens the event channel, sends RECORD and a SETUP for the type-130
 stream, and from there drives playback with `POST /command`. The receiver answers every command
 with 200 and sends results and events over the event channel. A request carries a `messageID`,
@@ -45,11 +47,14 @@ The protocol facts, with the receivers they were seen on, are in
 ## Seams
 
 - **`VideoSession` is the protocol seam.** Another protocol, such as AirPlay video v1's
-  `POST /play`, or a v2 session that pairs with a PIN, is another implementation, picked in
-  `Airkast.connect` from `Receiver.compatibility`. Callers don't change. The `Compatibility` case
+  `POST /play`, is another implementation, picked in `Airkast.connect` from
+  `Receiver.compatibility`. Callers don't change. The `Compatibility` case
   it clears becomes `Supported` in the same change.
 - **`SessionOptions.socketFactory` is the network seam.** `:core` opens every connection through
   it, so `:android` can bind the session to a network without `:core` knowing Android.
+- **Pairing is a step before the session.** How a connection pairs (transient, pair-verify, and
+  later a password) changes only the secret the session's keys derive from, so it is chosen in
+  `DefaultVideoSession.open` and the session after it is the same.
 - **`SessionOptions.logger` is the logging seam**, so the app routes lines to its own logger.
 
 ## Threading

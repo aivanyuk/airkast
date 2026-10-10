@@ -69,12 +69,34 @@ public interface VideoSession : AutoCloseable {
 }
 
 public object Airkast {
-    /** Pairs with [receiver] and opens a session. On Android, `airkast-android`'s overload picks the network. */
+    /**
+     * Pairs with [receiver] and opens a session: transiently, or with [SessionOptions.credentials]
+     * from [pair] when the options hold them. On Android, `airkast-android`'s overload picks the
+     * network.
+     */
     public suspend fun connect(
         receiver: Receiver,
         identity: SenderIdentity = SenderIdentity(),
         options: SessionOptions = SessionOptions.DEFAULT,
     ): VideoSession = withContext(Dispatchers.IO) { DefaultVideoSession.open(receiver, identity, options) }
+
+    /**
+     * Pairs once with a receiver that asks for a PIN ([Compatibility.NeedsPin]). It shows one on
+     * its screen, and [pin] returns what the user typed; it runs in the caller's context, so it
+     * may show a dialog and wait. The [Credentials] it returns go into [SessionOptions.credentials]
+     * for every [connect] after. A wrong PIN throws [AirkastException.PinRejected]. On Android,
+     * `airkast-android`'s overload picks the network.
+     */
+    public suspend fun pair(
+        receiver: Receiver,
+        identity: SenderIdentity = SenderIdentity(),
+        options: SessionOptions = SessionOptions.DEFAULT,
+        pin: suspend () -> String,
+    ): Credentials =
+        withContext(Dispatchers.IO) { DefaultVideoSession.startPairing(receiver, identity, options) }.use { pairing ->
+            val code = pin()
+            withContext(Dispatchers.IO) { DefaultVideoSession.finishPairing(pairing, code) }
+        }
 }
 
 /**
@@ -95,8 +117,9 @@ public class SessionOptions private constructor(
     public val keepAlive: Boolean = builder.keepAlive
 
     /**
-     * Answers the receiver's NTP timing requests, which needs it to reach this device over UDP.
-     * The LG CX never asks; send-airplay2 reports that tvOS stalls SETUP without it.
+     * Answers the receiver's NTP timing requests, which needs it to reach this device over UDP. On
+     * by default: a Mac answers SETUP with 500 without it, and send-airplay2 reports that tvOS
+     * stalls SETUP. The LG CX plays either way.
      */
     public val ntpTiming: Boolean = builder.ntpTiming
 
@@ -109,6 +132,13 @@ public class SessionOptions private constructor(
     /** Receives one line per protocol step, for debugging. Lines never hold the media URL. */
     public val logger: ((String) -> Unit)? = builder.logger
 
+    /**
+     * What [Airkast.pair] returned for this receiver. With them, a connect proves the pairing
+     * instead of pairing transiently, and fails with [AirkastException.PairingFailed] when the
+     * receiver no longer knows this sender.
+     */
+    public val credentials: Credentials? = builder.credentials
+
     /** A copy with [block]'s changes: `options.copy { keepAlive = false }`. */
     public fun copy(block: Builder.() -> Unit): SessionOptions = Builder(this).apply(block).build()
 
@@ -117,9 +147,10 @@ public class SessionOptions private constructor(
         public var requestTimeout: Duration = 5.seconds
         public var loadTimeout: Duration = 10.seconds
         public var keepAlive: Boolean = true
-        public var ntpTiming: Boolean = false
+        public var ntpTiming: Boolean = true
         public var socketFactory: SocketFactory? = null
         public var logger: ((String) -> Unit)? = null
+        public var credentials: Credentials? = null
 
         internal constructor(options: SessionOptions) : this() {
             connectTimeout = options.connectTimeout
@@ -129,6 +160,7 @@ public class SessionOptions private constructor(
             ntpTiming = options.ntpTiming
             socketFactory = options.socketFactory
             logger = options.logger
+            credentials = options.credentials
         }
 
         public fun build(): SessionOptions = SessionOptions(this)
