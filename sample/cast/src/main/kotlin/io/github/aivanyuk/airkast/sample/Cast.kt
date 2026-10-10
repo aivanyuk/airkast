@@ -9,6 +9,7 @@ import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Receiver
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.android.Airkast
 import io.github.aivanyuk.airkast.android.logcat
 import io.github.aivanyuk.airkast.media3.AirkastPlayer
@@ -27,7 +28,7 @@ import java.util.Locale
 /**
  * One player for the whole process: the [AirkastPlayer] that [CastService]'s MediaSession and the
  * UI's controls drive. It plays on the phone through an ExoPlayer until a cast starts, connects,
- * asks for a PIN, moves the item to the TV and back, and [AirkastPlayer.connection] says where it
+ * asks for a PIN or password, moves the item to the TV and back, and [AirkastPlayer.connection] says where it
  * stands; this adds a log of what the TV reported. Call it on the main thread.
  */
 class Cast(
@@ -38,7 +39,7 @@ class Cast(
     /**
      * The app's one client. `Airkast(context)` names the sender after the app's label, checks
      * Android 17's local network permission, binds sessions to the Wi-Fi the receiver is on, and
-     * keeps PIN pairings in the app's no-backup files. This only adds a logger: `adb logcat -s airkast`.
+     * keeps pairings in the app's no-backup files. This only adds a logger: `adb logcat -s airkast`.
      */
     val airkast = Airkast(context) { logger = Airkast.Logger.logcat() }
 
@@ -71,19 +72,19 @@ class Cast(
 
     /**
      * Plays [url] on [receiver], from where the phone was in it, ending the cast before. A
-     * receiver that asks for a PIN, or any receiver when [withPin] is set, pairs first unless it
-     * paired before.
+     * receiver that asks for a PIN or password, or any receiver when [pairWith] is set, pairs
+     * first unless it paired before.
      */
     fun start(
         receiver: Receiver,
         url: String,
-        withPin: Boolean = false,
+        pairWith: Secret? = null,
     ) {
         show(url)
         // The phone stops while the TV connects, and the TV plays from where it stopped.
         player.stop()
         player.playWhenReady = true
-        player.connect(receiver, withPin)
+        player.connect(receiver, pairWith)
     }
 
     /** Plays [url] on the phone, from where the TV was in it when casting. */

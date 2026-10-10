@@ -22,16 +22,19 @@
     <string name="compat_no_video">plays no video</string>
     <string name="compat_video_v1">older video protocol only, not supported yet</string>
     <string name="compat_needs_pin">asks for a PIN once</string>
-    <string name="compat_needs_password">needs a password, not supported yet</string>
+    <string name="compat_needs_password">asks for a password once</string>
     <string name="compat_restricted">lets in only its owner\'s devices</string>
     <string name="compat_other">not supported (%1$s)</string>
 
     <string name="connecting">Connecting to %1$s…</string>
-    <string name="awaiting_pin">Pairing with %1$s…</string>
+    <string name="awaiting_secret">Pairing with %1$s…</string>
     <string name="pin_title">PIN on %1$s</string>
     <string name="pin_hint">The code on the TV</string>
+    <string name="password_title">Password for %1$s</string>
+    <string name="password_hint">The password set in the TV\'s AirPlay settings</string>
     <string name="pair">Pair</string>
     <string name="pair_with_pin">Pair with a PIN</string>
+    <string name="pair_with_password">Pair with a password</string>
     <string name="casting">Playing on %1$s</string>
     <string name="renditions">Tracks</string>
     <string name="info">Info</string>
@@ -42,6 +45,7 @@
     <string name="failed_unreachable">The TV did not answer. Is the phone on its Wi-Fi?</string>
     <string name="failed_pairing">The TV refused to pair.</string>
     <string name="failed_pin">The TV did not take the PIN.</string>
+    <string name="failed_password">The TV did not take the password.</string>
     <string name="failed_disconnected">The connection to the TV dropped, or another sender took it over.</string>
     <string name="failed_other">The cast failed: %1$s</string>
 

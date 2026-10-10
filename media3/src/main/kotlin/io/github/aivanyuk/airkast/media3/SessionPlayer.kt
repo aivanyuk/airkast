@@ -19,6 +19,7 @@ import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event.EndReason
@@ -45,7 +46,7 @@ import kotlin.time.TimeSource
  * [AirkastPlayer] over media3's `SimpleBasePlayer`. Every handler updates the state before it
  * returns and sends the command after, so the UI never waits on the network. The receiver's events
  * and a position poll correct the state as they come. Everything runs on the application looper,
- * the connects [connector] makes and the PIN prompts they wait on included.
+ * the connects [connector] makes and the PIN or password prompts they wait on included.
  */
 @OptIn(UnstableApi::class)
 internal class SessionPlayer(
@@ -74,7 +75,7 @@ internal class SessionPlayer(
     /** The receiver of the last [connect], which [prepare] connects to again once the cast has dropped. */
     private var lastReceiver: Receiver? = null
     private var connecting: Job? = null
-    private var pin: CompletableDeferred<String>? = null
+    private var typed: CompletableDeferred<String>? = null
     private var sessionJob: Job? = null
     private var loadJob: Job? = null
 
@@ -124,16 +125,16 @@ internal class SessionPlayer(
 
     override fun connect(
         receiver: Receiver,
-        withPin: Boolean,
+        pairWith: Secret?,
     ) {
         checkLooper()
-        open(receiver, withPin)
+        open(receiver, pairWith)
         changed()
     }
 
-    override fun enterPin(pin: String) {
+    override fun enterSecret(value: String) {
         checkLooper()
-        this.pin?.complete(pin)
+        typed?.complete(value)
     }
 
     override fun disconnect() {
@@ -210,7 +211,7 @@ internal class SessionPlayer(
             // The cast this player connected dropped or failed, and the user asks to play again.
             receiver != null && current != null && connecting == null -> {
                 log.debug { "connecting again after the cast dropped" }
-                open(receiver, withPin = false)
+                open(receiver, pairWith = null)
             }
         }
         return Futures.immediateVoidFuture()
@@ -289,24 +290,24 @@ internal class SessionPlayer(
 
     /**
      * Opens a session to [receiver] through [connector], ending the cast before. A connect that
-     * [giveUpConnecting] cancels closes what it opened (`Airkast.connect` does), and its PIN
-     * prompt with it.
+     * [giveUpConnecting] cancels closes what it opened (`Airkast.connect` does), and its PIN or
+     * password prompt with it.
      */
     private fun open(
         receiver: Receiver,
-        withPin: Boolean,
+        pairWith: Secret?,
     ) {
         giveUpConnecting()
         letGo(stop = true, EndReason.Replaced)
         error = null
         lastReceiver = receiver
-        log.debug { if (withPin) "connecting, with a PIN" else "connecting" }
+        log.debug { if (pairWith != null) "connecting, pairing with a ${pairWith.name.lowercase()}" else "connecting" }
         mutableConnection.value = Connection.Connecting(receiver)
         connecting =
             scope.launch {
                 val s =
                     try {
-                        connector.connect(receiver, withPin) { askForPin(receiver) }
+                        connector.connect(receiver, pairWith) { secret -> ask(receiver, secret) }
                     } catch (e: AirkastException) {
                         connecting = null
                         error = playbackException(e)
@@ -327,12 +328,15 @@ internal class SessionPlayer(
             }
     }
 
-    private suspend fun askForPin(receiver: Receiver): String {
-        val code = CompletableDeferred<String>().also { pin = it }
-        log.debug { "waiting for the PIN" }
-        mutableConnection.value = Connection.AwaitingPin(receiver)
+    private suspend fun ask(
+        receiver: Receiver,
+        secret: Secret,
+    ): String {
+        val code = CompletableDeferred<String>().also { typed = it }
+        log.debug { "waiting for the ${secret.name.lowercase()}" }
+        mutableConnection.value = Connection.AwaitingSecret(receiver, secret)
         return code.await().also {
-            pin = null
+            typed = null
             mutableConnection.value = Connection.Connecting(receiver)
         }
     }
@@ -342,26 +346,28 @@ internal class SessionPlayer(
             job.cancel()
             when (val state = mutableConnection.value) {
                 is Connection.Connecting -> {
-                    abandoned(state.receiver, atPin = false)
+                    abandoned(state.receiver, atSecret = null)
                 }
 
-                is Connection.AwaitingPin -> {
-                    abandoned(state.receiver, atPin = true)
+                is Connection.AwaitingSecret -> {
+                    abandoned(state.receiver, state.secret)
                 }
 
                 else -> {}
             }
         }
         connecting = null
-        pin = null
+        typed = null
     }
 
     private fun abandoned(
         receiver: Receiver,
-        atPin: Boolean,
+        atSecret: Secret?,
     ) {
-        log.debug { if (atPin) "the PIN prompt was given up" else "the connect was given up" }
-        report(Event.CastAbandoned(receiver, atPin))
+        log.debug {
+            if (atSecret != null) "the ${atSecret.name.lowercase()} prompt was given up" else "the connect was given up"
+        }
+        report(Event.CastAbandoned(receiver, atSecret))
     }
 
     private fun started(s: AirkastSession) {
@@ -756,7 +762,7 @@ internal class SessionPlayer(
 
                     is AirkastException.Rejected,
                     is AirkastException.PairingFailed,
-                    is AirkastException.PinRejected,
+                    is AirkastException.SecretRejected,
                     -> {
                         PlaybackException.ERROR_CODE_REMOTE_ERROR
                     }

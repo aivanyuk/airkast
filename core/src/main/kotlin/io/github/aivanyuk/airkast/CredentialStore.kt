@@ -8,9 +8,10 @@ import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Where an [Airkast] keeps the [Credentials] that pairing with a PIN leaves, one per receiver, so
- * the user types a receiver's PIN once. They hold the sender's private key for that receiver, so
- * an app with a place for secrets implements this over it. Calls come from any thread.
+ * Where an [Airkast] keeps the [Credentials] that pairing with a PIN or password leaves, one per
+ * receiver, so the user types it once. They hold the sender's private key for that receiver, and
+ * the receiver's password after pairing with one, so an app with a place for secrets implements
+ * this over it. Calls come from any thread.
  *
  * A receiver found by discovery is best known by its [Receiver.deviceId], which stays when its
  * address changes. One typed in by hand has only its host and port.
@@ -26,7 +27,10 @@ public interface CredentialStore {
     public suspend fun remove(receiver: Receiver)
 
     public companion object {
-        /** Keeps credentials while the store lives, so a receiver asks for its PIN again in the next process. */
+        /**
+         * Keeps credentials while the store lives, so a receiver asks for its PIN or password again
+         * in the next process.
+         */
         public fun inMemory(): CredentialStore = MemoryCredentialStore()
 
         /**

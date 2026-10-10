@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.Credentials
 import io.github.aivanyuk.airkast.Receiver
+import io.github.aivanyuk.airkast.Secret
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import java.net.InetAddress
@@ -13,7 +14,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.time.Duration.Companion.seconds
 
-/** How `AirkastPlayer.connect(receiver, withPin = true)` opens a session through an [Airkast]. */
+/** How `AirkastPlayer.connect(receiver, pairWith = …)` opens a session through an [Airkast]. */
 class ConnectorTest {
     private val airkast =
         Airkast {
@@ -22,22 +23,30 @@ class ConnectorTest {
         }
 
     @Test
-    fun withPinVerifiesAReceiverItPairedWithBefore() {
+    fun pairWithVerifiesAReceiverItPairedWithBefore() {
         val credentials = Credentials.decode("${"11".repeat(32)}:${"22".repeat(32)}:4142:4344")!!
         val path =
-            firstRequest { receiver ->
+            firstRequest(Secret.Pin) { receiver ->
                 runBlocking { airkast.credentialStore.put(receiver, credentials) }
             }
         assertThat(path).isEqualTo("/pair-verify")
     }
 
     @Test
-    fun withPinPairsAReceiverItNeverPairedWith() {
-        assertThat(firstRequest {}).isEqualTo("/pair-pin-start")
+    fun pairWithAPinPairsAReceiverItNeverPairedWith() {
+        assertThat(firstRequest(Secret.Pin) {}).isEqualTo("/pair-pin-start")
     }
 
-    /** The path of the first request a connect with [Connector.connect]'s `withPin` sends, after [setUp]. */
-    private fun firstRequest(setUp: (Receiver) -> Unit): String =
+    @Test
+    fun pairWithAPasswordShowsNothingOnTheScreen() {
+        assertThat(firstRequest(Secret.Password) {}).isEqualTo("/pair-setup")
+    }
+
+    /** The path of the first request a connect that pairs with [secret] sends, after [setUp]. */
+    private fun firstRequest(
+        secret: Secret,
+        setUp: (Receiver) -> Unit,
+    ): String =
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
             val receiver = Receiver("tv", "127.0.0.1", server.localPort)
             setUp(receiver)
@@ -56,7 +65,7 @@ class ConnectorTest {
                     }
                 }.onFailure(path::completeExceptionally)
             }
-            runCatching { runBlocking { airkast.connector().connect(receiver, withPin = true) { "2468" } } }
+            runCatching { runBlocking { airkast.connector().connect(receiver, pairWith = secret) { "2468" } } }
             path.get(5, TimeUnit.SECONDS)
         }
 }

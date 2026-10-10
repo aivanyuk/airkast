@@ -131,13 +131,29 @@
             android:textColor="?attr/colorError"
             android:visibility="gone" />
 
-        <!-- After a refused pairing or a wrong PIN: pairs with the PIN the TV shows. -->
-        <Button
-            android:id="@+id/pair_with_pin"
+        <!-- After a refused pairing or a wrong PIN or password: pairs with the one the TV asks for. -->
+        <LinearLayout
+            android:id="@+id/pair"
+            style="?attr/buttonBarStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/pair_with_pin"
-            android:visibility="gone" />
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/pair_with_pin"
+                style="?attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/pair_with_pin" />
+
+            <Button
+                android:id="@+id/pair_with_password"
+                style="?attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/pair_with_password" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/status"

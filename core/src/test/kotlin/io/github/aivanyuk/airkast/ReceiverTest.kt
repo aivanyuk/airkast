@@ -24,15 +24,18 @@ class ReceiverTest {
     }
 
     @Test
-    fun aCodeOnTheScreenPairsButAPasswordIsNotSupportedYet() {
+    fun aCodeOnTheScreenOrAPasswordPairs() {
         val pin = receiver("features" to lgFeatures, "flags" to "0x8")
         assertThat(pin.compatibility).isEqualTo(Compatibility.NeedsPin)
+        assertThat(pin.secret).isEqualTo(Secret.Pin)
         assertThat(pin.isSupported).isTrue()
         assertThat(receiver("features" to lgFeatures, "flags" to "0x80").compatibility)
             .isEqualTo(Compatibility.NeedsPassword)
-        assertThat(receiver("features" to lgFeatures, "pw" to "TRUE").compatibility)
-            .isEqualTo(Compatibility.NeedsPassword)
-        assertThat(receiver("features" to lgFeatures, "pw" to "TRUE").isSupported).isFalse()
+        val password = receiver("features" to lgFeatures, "pw" to "TRUE")
+        assertThat(password.compatibility).isEqualTo(Compatibility.NeedsPassword)
+        assertThat(password.secret).isEqualTo(Secret.Password)
+        assertThat(password.isSupported).isTrue()
+        assertThat(receiver("features" to lgFeatures, "flags" to "0x244").secret).isNull()
     }
 
     @Test

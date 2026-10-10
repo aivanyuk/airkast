@@ -2,6 +2,7 @@ package io.github.aivanyuk.airkast.sample.views
 
 import android.content.ComponentName
 import android.os.Bundle
+import android.text.InputType
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -22,6 +23,7 @@ import com.google.common.util.concurrent.MoreExecutors
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.Receiver
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
 import io.github.aivanyuk.airkast.android.LocalNetwork
@@ -30,7 +32,7 @@ import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.CastService
 import io.github.aivanyuk.airkast.sample.cast
 import io.github.aivanyuk.airkast.sample.views.databinding.ActivityMainBinding
-import io.github.aivanyuk.airkast.sample.views.databinding.DialogPinBinding
+import io.github.aivanyuk.airkast.sample.views.databinding.DialogSecretBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.DialogTracksBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.ItemReceiverBinding
 import kotlinx.coroutines.Job
@@ -45,7 +47,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var connecting: ListenableFuture<MediaController>? = null
     private var scanning: Job? = null
-    private var pinDialog: AlertDialog? = null
+    private var secretDialog: AlertDialog? = null
 
     /** Android 17's local network permission, which the app declares and asks for itself. */
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { scan() }
@@ -81,9 +83,8 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch { cast.attempt { "${playbackInfo()}\nvolume ${volume()}" }?.let(::showInfo) }
         }
         binding.disconnect.setOnClickListener { cast.player.disconnect() }
-        binding.pairWithPin.setOnClickListener {
-            (cast.player.connection.value as? Connection.Idle)?.receiver?.let { cast.start(it, url(), withPin = true) }
-        }
+        binding.pairWithPin.setOnClickListener { pairWith(Secret.Pin) }
+        binding.pairWithPassword.setOnClickListener { pairWith(Secret.Password) }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -108,8 +109,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         // A recreated activity shows it again from the state.
-        pinDialog?.dismiss()
-        pinDialog = null
+        secretDialog?.dismiss()
+        secretDialog = null
         super.onDestroy()
     }
 
@@ -165,40 +166,51 @@ class MainActivity : AppCompatActivity() {
         val failure = (state as? Connection.Idle)?.failure
         binding.failure.text = failure?.let(::describe)
         binding.failure.isVisible = failure != null
-        // A receiver may ask for a PIN without saying so in its TXT record.
-        binding.pairWithPin.isVisible =
+        // A receiver may ask for a PIN or password without saying so in its TXT record.
+        binding.pair.isVisible =
             state is Connection.Idle &&
             state.receiver != null &&
-            (failure is AirkastException.PairingFailed || failure is AirkastException.PinRejected)
+            (failure is AirkastException.PairingFailed || failure is AirkastException.SecretRejected)
         binding.status.text =
             when (state) {
                 is Connection.Idle -> null
                 is Connection.Connecting -> getString(R.string.connecting, state.receiver.name)
-                is Connection.AwaitingPin -> getString(R.string.awaiting_pin, state.receiver.name)
+                is Connection.AwaitingSecret -> getString(R.string.awaiting_secret, state.receiver.name)
                 is Connection.Connected -> getString(R.string.casting, state.session.receiver.name)
             }
         binding.status.isVisible = state !is Connection.Idle
         binding.casting.isVisible = state is Connection.Connected
-        if (state is Connection.AwaitingPin) {
-            if (pinDialog == null) pinDialog = showPin(state.receiver)
+        if (state is Connection.AwaitingSecret) {
+            if (secretDialog == null) secretDialog = showSecret(state.receiver, state.secret)
         } else {
-            pinDialog?.dismiss()
-            pinDialog = null
+            secretDialog?.dismiss()
+            secretDialog = null
         }
     }
 
-    /** The PIN [receiver] shows on its screen, typed in once to pair. */
-    private fun showPin(receiver: Receiver): AlertDialog {
-        val view = DialogPinBinding.inflate(layoutInflater)
+    /** Connects again to the receiver that refused, pairing first with [secret]. */
+    private fun pairWith(secret: Secret) {
+        (cast.player.connection.value as? Connection.Idle)?.receiver?.let { cast.start(it, url(), pairWith = secret) }
+    }
+
+    /** The PIN [receiver] shows on its screen, or the password set on it, typed in once to pair. */
+    private fun showSecret(
+        receiver: Receiver,
+        secret: Secret,
+    ): AlertDialog {
+        val view = DialogSecretBinding.inflate(layoutInflater)
+        val pin = secret == Secret.Pin
+        if (!pin) {
+            view.root.hint = getString(R.string.password_hint)
+            view.code.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
         return MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.pin_title, receiver.name))
+            .setTitle(getString(if (pin) R.string.pin_title else R.string.password_title, receiver.name))
             .setView(view.root)
             .setPositiveButton(R.string.pair) { _, _ ->
-                cast.player.enterPin(
-                    view.pin.text
-                        .toString()
-                        .trim(),
-                )
+                val code = view.code.text.toString()
+                // A password may start or end with a space; a PIN is digits.
+                cast.player.enterSecret(if (pin) code.trim() else code)
             }.setNegativeButton(android.R.string.cancel) { _, _ -> cast.player.disconnect() }
             .setOnCancelListener { cast.player.disconnect() }
             .show()
@@ -274,12 +286,32 @@ class MainActivity : AppCompatActivity() {
     /** Every failure is an [AirkastException]; new subclasses may join, so there is an `else`. */
     private fun describe(failure: AirkastException): String =
         when (failure) {
-            is AirkastException.NotPermitted -> getString(R.string.failed_not_permitted)
-            is AirkastException.Unreachable -> getString(R.string.failed_unreachable)
-            is AirkastException.PairingFailed -> getString(R.string.failed_pairing)
-            is AirkastException.PinRejected -> getString(R.string.failed_pin)
-            is AirkastException.Disconnected -> getString(R.string.failed_disconnected)
-            is AirkastException.DiscoveryFailed -> getString(R.string.discovery_failed, failure.code)
-            else -> getString(R.string.failed_other, failure.message ?: failure.javaClass.simpleName)
+            is AirkastException.NotPermitted -> {
+                getString(R.string.failed_not_permitted)
+            }
+
+            is AirkastException.Unreachable -> {
+                getString(R.string.failed_unreachable)
+            }
+
+            is AirkastException.PairingFailed -> {
+                getString(R.string.failed_pairing)
+            }
+
+            is AirkastException.SecretRejected -> {
+                getString(if (failure.secret == Secret.Pin) R.string.failed_pin else R.string.failed_password)
+            }
+
+            is AirkastException.Disconnected -> {
+                getString(R.string.failed_disconnected)
+            }
+
+            is AirkastException.DiscoveryFailed -> {
+                getString(R.string.discovery_failed, failure.code)
+            }
+
+            else -> {
+                getString(R.string.failed_other, failure.message ?: failure.javaClass.simpleName)
+            }
         }
 }

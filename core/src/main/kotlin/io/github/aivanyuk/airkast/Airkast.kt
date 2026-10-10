@@ -21,7 +21,7 @@ import kotlin.time.TimeSource
  *
  * ```
  * val airkast = Airkast { logger = Airkast.Logger.println() }
- * val session = airkast.connect(receiver) { askTheUserForThePin() }
+ * val session = airkast.connect(receiver) { secret -> askTheUserFor(secret) }
  * ```
  */
 public class Airkast private constructor(
@@ -57,16 +57,16 @@ public class Airkast private constructor(
     public val socketFactory: (Receiver) -> SocketFactory? = builder.socketFactory
 
     /**
-     * Where [pair] keeps the credentials a PIN leaves, and [connect] finds them. In memory by
-     * default; `Airkast(context)` keeps them in the app's files.
+     * Where [pair] keeps the credentials a PIN or password leaves, and [connect] finds them. In
+     * memory by default; `Airkast(context)` keeps them in the app's files.
      */
     public val credentialStore: CredentialStore = builder.credentialStore
 
     /**
      * Takes the client's debugging lines, from every connect, pairing and session: one per protocol
      * step at [Logger.Level.Debug], and every message on the wire at [Logger.Level.Verbose]. A line
-     * never holds the media URL, a key, a PIN or anything a pairing derives. Null, the default,
-     * logs nothing.
+     * never holds the media URL, a key, a PIN, a password or anything a pairing derives. Null, the
+     * default, logs nothing.
      */
     public val logger: Logger? = builder.logger
 
@@ -79,9 +79,19 @@ public class Airkast private constructor(
     /**
      * Pairs with [receiver] and opens a session in the protocol it speaks. A receiver this client
      * paired with before proves that pairing with the credentials in [credentialStore]. One that
-     * asks for a PIN ([Compatibility.NeedsPin]) and has none pairs first, as [pair] does, when
-     * [pin] is given; without [pin], it fails with [AirkastException.PairingFailed]. Any other
-     * receiver pairs transiently.
+     * asks for a PIN ([Compatibility.NeedsPin]) or a password ([Compatibility.NeedsPassword]) and
+     * has none pairs first, as [pair] does, when [ask] is given; without [ask], it fails with
+     * [AirkastException.PairingFailed]. Any other receiver pairs transiently.
+     *
+     * [ask] returns what the user typed for the [Secret] it is given. It runs in the caller's
+     * context, so it may show a dialog and wait, and cancelling it gives up the connect. A wrong
+     * secret throws [AirkastException.SecretRejected].
+     *
+     * A receiver may ask for its password again when the session starts, with an HTTP Digest
+     * challenge: a Mac does, after pairing with it. It gets the password kept with the
+     * credentials, and [ask] is asked only when there is none or the receiver refuses it; the one
+     * it takes is kept for the next connect. A receiver that pairs transiently leaves no
+     * credentials to keep it with, so it is asked on every connect.
      *
      * A receiver that refuses its credentials has forgotten this sender, or is not the receiver
      * they are for: they leave [credentialStore], and the next connect pairs again. Any other
@@ -90,27 +100,45 @@ public class Airkast private constructor(
      */
     public suspend fun connect(
         receiver: Receiver,
-        pin: (suspend () -> String)? = null,
+        ask: (suspend (Secret) -> String)? = null,
     ): AirkastSession {
         val log = Log(logger, "connect")
         val start = TimeSource.Monotonic.markNow()
-        var pairing = Duration.ZERO
+        // The user's typing, left out of how long the connect took.
+        var asking = Duration.ZERO
         var credentials: Credentials? = null
         try {
+            val secret = receiver.secret
             credentials = credentialStore.get(receiver)
-                ?: if (pin != null && receiver.compatibility == Compatibility.NeedsPin) {
+                ?: if (ask != null && secret != null) {
                     val mark = TimeSource.Monotonic.markNow()
                     try {
-                        pair(receiver, pin)
+                        pair(receiver, secret) { ask(secret) }
                     } finally {
-                        pairing = mark.elapsedNow()
+                        asking = mark.elapsedNow()
                     }
                 } else {
                     null
                 }
             val options = options(receiver, credentials)
-            val session = opening { DefaultVideoSession.open(receiver, identity, options) }
-            val took = start.elapsedNow() - pairing
+            val session =
+                try {
+                    opening { DefaultVideoSession.open(receiver, identity, options) }
+                } catch (e: AirkastException) {
+                    if (ask == null || !asksForPassword(e)) throw e
+                    log.debug { "the receiver asks for its password when the session starts" }
+                    val mark = TimeSource.Monotonic.markNow()
+                    val password =
+                        try {
+                            ask(Secret.Password)
+                        } finally {
+                            asking += mark.elapsedNow()
+                        }
+                    opening { DefaultVideoSession.open(receiver, identity, options.withPassword(password)) }.also {
+                        keep(receiver, credentials, password, it)
+                    }
+                }
+            val took = start.elapsedNow() - asking
             val how = if (credentials != null) Event.Pairing.Verified else Event.Pairing.Transient
             log.info { "connected in ${took.inWholeMilliseconds} ms, ${how.name.lowercase()}" }
             eventListener.report(Event.Connected(receiver, how, took), log)
@@ -121,7 +149,7 @@ public class Airkast private constructor(
                 log.warn { "the receiver refused its credentials, which leave the store" }
                 eventListener.report(Event.CredentialsDropped(receiver), log)
             }
-            val took = start.elapsedNow() - pairing
+            val took = start.elapsedNow() - asking
             log.error(e) { "connect failed after ${took.inWholeMilliseconds} ms" }
             eventListener.report(Event.ConnectFailed(receiver, e, took), log)
             throw e
@@ -129,25 +157,51 @@ public class Airkast private constructor(
     }
 
     /**
-     * Pairs once with a receiver that asks for a PIN, and keeps the [Credentials] in
-     * [credentialStore] for every [connect] after. The receiver shows a PIN on its screen, and
-     * [pin] returns what the user typed; it runs in the caller's context, so it may show a dialog
-     * and wait, and cancelling it gives up the pairing. [connect] calls this itself for a receiver
-     * that says it asks for a PIN; call it directly for one that asks without saying so, such as a
-     * receiver typed in by hand. A wrong PIN throws [AirkastException.PinRejected].
+     * Whether the receiver asked for a password when the session started: with none to give, or
+     * refusing the one kept with the credentials.
+     */
+    private fun asksForPassword(e: AirkastException): Boolean =
+        (e is AirkastException.PairingFailed && e.passwordAsked) ||
+            (e is AirkastException.SecretRejected && e.secret == Secret.Password)
+
+    /** Keeps the [password] [session] opened with in [credentials], for the next connect. */
+    private suspend fun keep(
+        receiver: Receiver,
+        credentials: Credentials?,
+        password: String,
+        session: AirkastSession,
+    ) {
+        if (credentials == null) return
+        try {
+            credentialStore.put(receiver, credentials.withPassword(password))
+        } catch (failure: Throwable) {
+            session.close()
+            throw failure
+        }
+    }
+
+    /**
+     * Pairs once with a receiver that asks for a [secret], and keeps the [Credentials] in
+     * [credentialStore] for every [connect] after. A receiver asked for a [Secret.Pin] shows one
+     * on its screen; a [Secret.Password] is the one set in its AirPlay settings. [ask] returns what
+     * the user typed; it runs in the caller's context, so it may show a dialog and wait, and
+     * cancelling it gives up the pairing. [connect] calls this itself for a receiver that says
+     * what it asks for; call it directly for one that asks without saying so, such as a receiver
+     * typed in by hand. A wrong secret throws [AirkastException.SecretRejected].
      */
     public suspend fun pair(
         receiver: Receiver,
-        pin: suspend () -> String,
+        secret: Secret = Secret.Pin,
+        ask: suspend () -> String,
     ): Credentials {
         val log = Log(logger, "pairing")
         val start = TimeSource.Monotonic.markNow()
         val credentials =
             try {
                 val options = options(receiver, null)
-                opening { DefaultVideoSession.startPairing(receiver, identity, options) }.use { pairing ->
-                    log.debug { "the receiver shows a PIN" }
-                    val code = pin()
+                opening { DefaultVideoSession.startPairing(receiver, identity, options, secret) }.use { pairing ->
+                    log.debug { if (secret == Secret.Pin) "the receiver shows a PIN" else "pairing with a password" }
+                    val code = ask()
                     withContext(Dispatchers.IO) { DefaultVideoSession.finishPairing(pairing, code) }
                 }
             } catch (e: AirkastException) {
@@ -252,8 +306,9 @@ public class Airkast private constructor(
         public val receiver: Receiver
 
         /**
-         * [Airkast.connect] opened a session, [pairing] says how, in [took]. A PIN pairing it ran
-         * first is left out of [took]: [Event.Paired] reports it.
+         * [Airkast.connect] opened a session, [pairing] says how, in [took]. A pairing it ran first
+         * is left out of [took], as [Event.Paired] reports it, and so is the user typing a password
+         * the receiver asked for when the session started.
          */
         @Poko
         public class Connected(
@@ -263,8 +318,8 @@ public class Airkast private constructor(
         ) : Event
 
         /**
-         * [Airkast.connect] failed with [failure] after [took], a PIN pairing it ran first left
-         * out. A pairing that failed there reports [Event.PairingFailed] first. A connect that was
+         * [Airkast.connect] failed with [failure] after [took], a pairing it ran first and the user's
+         * typing left out. A pairing that failed there reports [Event.PairingFailed] first. A connect that was
          * cancelled reports nothing.
          */
         @Poko
@@ -274,14 +329,20 @@ public class Airkast private constructor(
             public val took: Duration,
         ) : Event
 
-        /** A PIN pairing kept new [Credentials], [took] after it began, the user's typing included. */
+        /**
+         * A pairing with a PIN or password kept new [Credentials], [took] after it began, the user's
+         * typing included.
+         */
         @Poko
         public class Paired(
             override val receiver: Receiver,
             public val took: Duration,
         ) : Event
 
-        /** A PIN pairing failed with [failure]: [AirkastException.PinRejected] for a wrong PIN. */
+        /**
+         * A pairing with a PIN or password failed with [failure]: [AirkastException.SecretRejected]
+         * for a wrong one.
+         */
         @Poko
         public class PairingFailed(
             override val receiver: Receiver,
@@ -328,10 +389,10 @@ public class Airkast private constructor(
 
         /** How a session's keys were made. New ways may join in a minor release. */
         public enum class Pairing {
-            /** A pairing for this connection alone, as for a receiver that asks for no PIN. */
+            /** A pairing for this connection alone, as for a receiver that asks for no PIN or password. */
             Transient,
 
-            /** Proof of a pairing made before with a PIN, from the [Airkast.credentialStore]. */
+            /** Proof of a pairing made before with a PIN or password, from the [Airkast.credentialStore]. */
             Verified,
         }
     }

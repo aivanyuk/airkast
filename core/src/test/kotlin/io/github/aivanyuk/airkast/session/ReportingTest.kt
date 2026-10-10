@@ -126,7 +126,22 @@ class ReportingTest {
             FakeReceiver().use { fake ->
                 runCatching { airkast().pair(Receiver("fake", "127.0.0.1", fake.port)) { "0000" } }
                 val failed = events.single() as Event.PairingFailed
-                assertThat(failed.failure).isInstanceOf(AirkastException.PinRejected::class.java)
+                assertThat(failed.failure).isInstanceOf(AirkastException.SecretRejected::class.java)
+            }
+        }
+
+    @Test
+    fun aPasswordTypedWhenTheSessionStartsIsLeftOutOfTheConnectTime() =
+        runBlocking {
+            FakeReceiver(digestPassword = "hunter2").use { fake ->
+                airkast()
+                    .connect(Receiver("fake", "127.0.0.1", fake.port)) {
+                        delay(1_000)
+                        "hunter2"
+                    }.close()
+                val connected = events.first() as Event.Connected
+                assertThat(connected.pairing).isEqualTo(Event.Pairing.Transient)
+                assertThat(connected.took).isLessThan(1.seconds)
             }
         }
 

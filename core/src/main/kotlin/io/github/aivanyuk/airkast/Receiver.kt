@@ -21,13 +21,23 @@ public class Receiver(
     public val compatibility: Compatibility get() = compatibilityOf(features, statusFlags, properties)
 
     /**
-     * Whether airkast can play on it, so a picker lists it: [Compatibility.Supported], or
-     * [Compatibility.NeedsPin]. A `NeedsPin` receiver plays once paired: [Airkast.connect] pairs
-     * it when given a way to ask for the PIN, and fails with [AirkastException.PairingFailed]
-     * without one. A receiver typed in by hand is [Compatibility.Unknown], not supported.
+     * Whether airkast can play on it, so a picker lists it: [Compatibility.Supported],
+     * [Compatibility.NeedsPin] or [Compatibility.NeedsPassword]. The last two play once paired:
+     * [Airkast.connect] pairs when given a way to ask for the PIN or password, and fails with
+     * [AirkastException.PairingFailed] without one. A receiver typed in by hand is
+     * [Compatibility.Unknown], not supported.
      */
     public val isSupported: Boolean
-        get() = compatibility == Compatibility.Supported || compatibility == Compatibility.NeedsPin
+        get() = compatibility == Compatibility.Supported || secret != null
+
+    /** What the receiver says it asks for before it pairs, or null for nothing. */
+    internal val secret: Secret?
+        get() =
+            when (compatibility) {
+                Compatibility.NeedsPin -> Secret.Pin
+                Compatibility.NeedsPassword -> Secret.Password
+                else -> null
+            }
 
     public val model: String? get() = properties["model"]
     public val deviceId: String? get() = properties["deviceid"]
@@ -109,9 +119,10 @@ public class Receiver(
 }
 
 /**
- * Whether airkast can play on a receiver, read from its service record. A picker lists only
- * [Supported] receivers, and [Unknown] ones the user typed in. docs/compatibility.md has the
- * receivers behind each case. New cases may join in a minor release, as support grows.
+ * Whether airkast can play on a receiver, read from its service record. A picker lists the
+ * receivers whose [Receiver.isSupported] is true, and [Unknown] ones the user typed in.
+ * docs/compatibility.md has the receivers behind each case. New cases may join in a minor
+ * release, as support grows.
  */
 public enum class Compatibility {
     /** Speaks AirPlay video v2 and pairs without a code. */
@@ -126,7 +137,10 @@ public enum class Compatibility {
      */
     NeedsPin,
 
-    /** Asks for a password set on the receiver, which this version cannot send. */
+    /**
+     * Asks for a password set in its AirPlay settings, once: [Airkast.connect] pairs with it,
+     * given a way to ask the user, and keeps the [Credentials] for every connect after.
+     */
     NeedsPassword,
 
     /**

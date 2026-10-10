@@ -11,6 +11,7 @@ import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event.EndReason
@@ -55,22 +56,36 @@ class ConnectTest {
 
     @Test
     fun aReceiverThatAsksForAPinWaitsForIt() {
-        connector.asksForPin = true
+        connector.asksFor = Secret.Pin
         player.connect(tv)
         idle()
-        assertThat((player.connection.value as Connection.AwaitingPin).receiver).isEqualTo(tv)
-        player.enterPin("2468")
+        val awaiting = player.connection.value as Connection.AwaitingSecret
+        assertThat(awaiting.receiver).isEqualTo(tv)
+        assertThat(awaiting.secret).isEqualTo(Secret.Pin)
+        player.enterSecret("2468")
         idle()
-        assertThat(connector.pin).isEqualTo("2468")
+        assertThat(connector.typed).isEqualTo("2468")
         assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
     }
 
     @Test
-    fun withPinPairsAnyReceiver() {
-        player.connect(tv, withPin = true)
+    fun aReceiverThatAsksForAPasswordSaysSo() {
+        connector.asksFor = Secret.Password
+        player.connect(tv)
         idle()
-        assertThat(player.connection.value).isInstanceOf(Connection.AwaitingPin::class.java)
-        assertThat(connector.asked.single().second).isTrue()
+        assertThat((player.connection.value as Connection.AwaitingSecret).secret).isEqualTo(Secret.Password)
+        player.enterSecret("hunter2")
+        idle()
+        assertThat(connector.typed).isEqualTo("hunter2")
+        assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
+    }
+
+    @Test
+    fun pairWithPairsAnyReceiver() {
+        player.connect(tv, pairWith = Secret.Password)
+        idle()
+        assertThat((player.connection.value as Connection.AwaitingSecret).secret).isEqualTo(Secret.Password)
+        assertThat(connector.asked.single().second).isEqualTo(Secret.Password)
     }
 
     @Test
@@ -122,13 +137,13 @@ class ConnectTest {
 
     @Test
     fun disconnectGivesUpAPinPrompt() {
-        connector.asksForPin = true
+        connector.asksFor = Secret.Pin
         player.connect(tv)
         idle()
         player.disconnect()
-        player.enterPin("2468")
+        player.enterSecret("2468")
         idle()
-        assertThat(connector.pin).isNull()
+        assertThat(connector.typed).isNull()
         assertThat(player.connection.value).isInstanceOf(Connection.Idle::class.java)
     }
 
@@ -276,14 +291,14 @@ class ConnectTest {
 
     @Test
     fun aPinPromptGivenUpIsReported() {
-        connector.asksForPin = true
+        connector.asksFor = Secret.Pin
         player.connect(tv)
         idle()
         player.disconnect()
         idle()
         val abandoned = heard.single() as Event.CastAbandoned
         assertThat(abandoned.receiver).isEqualTo(tv)
-        assertThat(abandoned.atPin).isTrue()
+        assertThat(abandoned.atSecret).isEqualTo(Secret.Pin)
     }
 
     @Test
@@ -332,20 +347,20 @@ class ConnectTest {
 
     private class FakeConnector : Connector {
         val sessions = mutableListOf<FakeSession>()
-        val asked = mutableListOf<Pair<Receiver, Boolean>>()
+        val asked = mutableListOf<Pair<Receiver, Secret?>>()
         var failure: AirkastException? = null
-        var asksForPin = false
-        var pin: String? = null
+        var asksFor: Secret? = null
+        var typed: String? = null
         var hold: CompletableDeferred<Unit>? = null
 
         override suspend fun connect(
             receiver: Receiver,
-            withPin: Boolean,
-            pin: suspend () -> String,
+            pairWith: Secret?,
+            ask: suspend (Secret) -> String,
         ): AirkastSession {
-            asked += receiver to withPin
+            asked += receiver to pairWith
             hold?.await()
-            if (asksForPin || withPin) this.pin = pin()
+            (pairWith ?: asksFor)?.let { typed = ask(it) }
             failure?.let { throw it }
             return FakeSession(receiver).also { sessions += it }
         }
