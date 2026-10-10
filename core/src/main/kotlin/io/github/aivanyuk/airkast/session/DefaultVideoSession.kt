@@ -1,18 +1,17 @@
 package io.github.aivanyuk.airkast.session
 
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Credentials
+import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.PlaybackInfo
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.SenderIdentity
-import io.github.aivanyuk.airkast.SessionOptions
 import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
-import io.github.aivanyuk.airkast.VideoItem
-import io.github.aivanyuk.airkast.VideoSession
 import io.github.aivanyuk.airkast.crypto.Hkdf
 import io.github.aivanyuk.airkast.wire.BinaryPlist
 import io.github.aivanyuk.airkast.wire.HttpMessage
@@ -55,7 +54,7 @@ internal class DefaultVideoSession private constructor(
     private val options: SessionOptions,
     private val control: ControlConnection,
     private val timing: TimingResponder?,
-) : VideoSession {
+) : AirkastSession {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutableEvents = MutableSharedFlow<ReceiverEvent>(extraBufferCapacity = 64)
 
@@ -188,7 +187,7 @@ internal class DefaultVideoSession private constructor(
         }
     }
 
-    override suspend fun load(item: VideoItem) {
+    override suspend fun load(item: Media) {
         val id = UUID.randomUUID().toString().uppercase()
         val taken = CompletableDeferred<Unit>()
         itemId = id
@@ -470,7 +469,7 @@ internal class DefaultVideoSession private constructor(
             receiver: Receiver,
             identity: SenderIdentity,
             options: SessionOptions,
-        ): VideoSession {
+        ): AirkastSession {
             val control = control(receiver, identity, options)
             var timing: TimingResponder? = null
             var session: DefaultVideoSession? = null

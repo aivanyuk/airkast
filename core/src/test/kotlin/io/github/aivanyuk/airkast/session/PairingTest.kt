@@ -3,18 +3,18 @@ package io.github.aivanyuk.airkast.session
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.Credentials
+import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.Receiver
-import io.github.aivanyuk.airkast.SessionOptions
-import io.github.aivanyuk.airkast.VideoItem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import kotlin.time.Duration.Companion.seconds
 
 class PairingTest {
-    private val options =
-        SessionOptions {
+    private val airkast =
+        Airkast {
             keepAlive = false
             requestTimeout = 2.seconds
         }
@@ -25,16 +25,34 @@ class PairingTest {
             FakeReceiver().use { fake ->
                 val receiver = Receiver("fake", "127.0.0.1", fake.port)
                 val credentials =
-                    Airkast.pair(receiver, options = options) {
+                    airkast.pair(receiver) {
                         assertThat(fake.pinShown).isTrue()
                         fake.pin
                     }
                 assertThat(Credentials.decode(credentials.encoded)).isEqualTo(credentials)
+                assertThat(airkast.credentialStore.get(receiver)).isEqualTo(credentials)
 
-                Airkast.connect(receiver, options = options.copy { this.credentials = credentials }).use { session ->
-                    session.load(VideoItem("https://example.com/a.m3u8"))
+                airkast.connect(receiver).use { session ->
+                    session.load(Media("https://example.com/a.m3u8"))
                     assertThat(fake.commands.first()["type"]).isEqualTo("insertPlayQueueItem")
                 }
+                assertThat(fake.verified).isTrue()
+            }
+        }
+
+    @Test
+    fun aReceiverThatAsksForAPinPairsOnItsFirstConnectOnly() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                val receiver = asksForAPin(fake)
+                var asked = 0
+                val pin: suspend () -> String = {
+                    asked++
+                    fake.pin
+                }
+                airkast.connect(receiver, pin).close()
+                airkast.connect(receiver, pin).close()
+                assertThat(asked).isEqualTo(1)
                 assertThat(fake.verified).isTrue()
             }
         }
@@ -58,18 +76,19 @@ class PairingTest {
     }
 
     @Test
-    fun aReceiverThatForgotTheSenderRefusesItsCredentials() =
+    fun aReceiverThatForgotTheSenderLosesItsCredentialsAndPairsAgain() =
         runBlocking {
             FakeReceiver().use { fake ->
-                val receiver = Receiver("fake", "127.0.0.1", fake.port)
-                val credentials = Airkast.pair(receiver, options = options) { fake.pin }
+                val receiver = asksForAPin(fake)
+                airkast.pair(receiver) { fake.pin }
                 fake.forgetSenders()
-                val error =
-                    runCatching {
-                        Airkast.connect(receiver, options = options.copy { this.credentials = credentials })
-                    }.exceptionOrNull()
+                val error = runCatching { airkast.connect(receiver) { fake.pin } }.exceptionOrNull()
                 assertThat(error).isInstanceOf(AirkastException.PairingFailed::class.java)
                 assertThat(fake.verified).isFalse()
+                assertThat(airkast.credentialStore.get(receiver)).isNull()
+
+                airkast.connect(receiver) { fake.pin }.close()
+                assertThat(fake.verified).isTrue()
             }
         }
 
@@ -78,18 +97,32 @@ class PairingTest {
         runBlocking {
             val credentials =
                 FakeReceiver().use { other ->
-                    Airkast.pair(Receiver("other", "127.0.0.1", other.port), options = options) { other.pin }
+                    airkast.pair(Receiver("other", "127.0.0.1", other.port)) { other.pin }
                 }
             FakeReceiver().use { fake ->
-                val error =
-                    runCatching {
-                        Airkast.connect(
-                            Receiver("fake", "127.0.0.1", fake.port),
-                            options = options.copy { this.credentials = credentials },
-                        )
-                    }.exceptionOrNull()
+                val receiver = Receiver("fake", "127.0.0.1", fake.port)
+                airkast.credentialStore.put(receiver, credentials)
+                val error = runCatching { airkast.connect(receiver) }.exceptionOrNull()
                 assertThat(error).isInstanceOf(AirkastException.PairingFailed::class.java)
                 assertThat(error).hasMessageThat().contains("not the one")
+                assertThat(airkast.credentialStore.get(receiver)).isNull()
+            }
+        }
+
+    @Test
+    fun aReceiverThatFailsToVerifyForAnotherReasonKeepsTheCredentials() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                val receiver = asksForAPin(fake)
+                val credentials = airkast.pair(receiver) { fake.pin }
+                fake.verifyStatus = 503
+                val error = runCatching { airkast.connect(receiver) { error("No PIN is asked for") } }.exceptionOrNull()
+                assertThat(error).isInstanceOf(AirkastException.PairingFailed::class.java)
+                assertThat(airkast.credentialStore.get(receiver)).isEqualTo(credentials)
+
+                fake.verifyStatus = null
+                airkast.connect(receiver).close()
+                assertThat(fake.verified).isTrue()
             }
         }
 
@@ -106,18 +139,21 @@ class PairingTest {
         assertThat(Credentials.decode("$key:$key::4344")).isNull()
     }
 
+    /** [fake] as discovery would describe a receiver that asks for a PIN. */
+    private fun asksForAPin(fake: FakeReceiver) =
+        Receiver(
+            "fake",
+            "127.0.0.1",
+            fake.port,
+            mapOf("features" to "0x7F8AD0,0x38BCB46", "flags" to "0x8", "deviceid" to fake.receiverId),
+        ).also { check(it.compatibility == Compatibility.NeedsPin) }
+
     /** What pairing with [fake] threw, or null when it paired. */
     private fun pairing(
         fake: FakeReceiver,
         pin: suspend () -> String,
     ): Throwable? =
         runCatching {
-            runBlocking {
-                Airkast.pair(
-                    Receiver("fake", "127.0.0.1", fake.port),
-                    options = options,
-                    pin = pin,
-                )
-            }
+            runBlocking { airkast.pair(Receiver("fake", "127.0.0.1", fake.port), pin) }
         }.exceptionOrNull()
 }

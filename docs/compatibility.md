@@ -13,6 +13,7 @@ what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRI
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-09, at c2ceb0f | desktop JVM 21 | `Supported`. Live test passes on a `streaming` item, now the default: start position, seek, pause (reported `Paused`), play, tracks read and subtitles off, volume read, stop. Probed the same day: for a `streaming` item tracks are read and switched (subtitles, audio with a rebuffer, subtitles off) on Apple's bipbop stream and on a kino.pub hls4 master; for a `file` item none are reported and a selection is ignored; a paused `streaming` item reads as `loading` with rate 0 |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-09, at be15526 | Xiaomi 2201117TY, Android 13, the sample app | `Supported`. Found by `ReceiverDiscovery`, cast and played the default stream through `AirkastPlayer`, by hand |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-10, before 0.3.0 | desktop JVM 21 (WSL) | `Supported` with `ntpTiming = true`. Live test passes: start position, seek, pause, play, tracks switched, stop |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 as on 2026-10-09, not read again | 2026-10-10, at 4104649 | Xiaomi 2201117TY, Android 13, the sample app | `Supported`, then `NeedsPin` with its AirPlay settings set to ask for a PIN. By hand, through `AirkastPlayer.connect`: cast transiently first; with the PIN on, the sample listed it as asking for a PIN, asked for the one on the screen, paired (pair-setup M1 to M6), verified the pairing (pair-verify), and played. The credentials stayed in the app's no-backup files, readable by the app only |
 | MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app with `ntpTiming = true` | Plays with NTP timing, set to "Anyone on the same network". Transient pairing, load, play, pause from the Mac, the next item, tracks read and switched (closed captions, subtitles, subtitles off), playback info, stop, by hand. At "Current User" transient pairing is refused |
 
 ### How `Receiver.compatibility` decides
@@ -26,7 +27,7 @@ From the `_airplay._tcp` TXT record, in this order. Bit numbers follow pyatv's `
 | `VideoV1Only` | Video v1 without v2 | older Apple TVs; some third-party receivers |
 | `AccessRestricted` | `act=2`, which pyatv reads as "Current User" | a Mac's AirPlay Receiver at its default, "Current User" |
 | `NeedsPassword` | `pw=true`, or status flag `0x80` | a receiver with a password set |
-| `NeedsPin` | Status flag `0x8`. `Airkast.pair` once, then connect with the `Credentials` | a receiver set to require a code |
+| `NeedsPin` | Status flag `0x8`. The first `Airkast.connect` with a `pin` prompt pairs, and later ones use the stored `Credentials` | the LG CX set to ask for a PIN; a receiver set to require a code |
 | `NoTransientPairing` | Neither system pairing (bit 43) nor CoreUtils pairing (bit 48) | none seen yet |
 | `Supported` | Anything else | the LG CX |
 
@@ -40,18 +41,20 @@ transient pairing then fails with `PairingFailed`, and pairing with a PIN is the
 | How | When | Wire |
 | --- | --- | --- |
 | Transient | Every connect without credentials | `X-Apple-HKP: 4`, pair-setup M1 to M4 with the transient flag and PIN 3939 |
-| With a PIN | `Airkast.pair` | `X-Apple-HKP: 3`, `/pair-pin-start` shows the PIN, pair-setup M1 to M6: SRP, then Ed25519 long-term keys exchanged under ChaCha20-Poly1305 |
-| Pair-verify | Every connect with `SessionOptions.credentials` | `X-Apple-HKP: 3`, `/pair-verify` M1 to M4: X25519, signed with both long-term keys |
+| With a PIN | `Airkast.pair`, or a connect that pairs first | `X-Apple-HKP: 3`, `/pair-pin-start` shows the PIN, pair-setup M1 to M6: SRP, then Ed25519 long-term keys exchanged under ChaCha20-Poly1305 |
+| Pair-verify | Every connect with credentials in the client's `CredentialStore` | `X-Apple-HKP: 3`, `/pair-verify` M1 to M4: X25519, signed with both long-term keys |
 
 The PIN pairing and pair-verify follow pyatv's AirPlay HAP procedures, and `Credentials.encoded`
 is pyatv's credential string, `ltpk:ltsk:atv_id:client_id`. They are tested against
-`FakeReceiver` only: no receiver that asks for a PIN has been checked yet.
+`FakeReceiver`, and checked by hand on the LG CX set to ask for a PIN.
 
 ### LG CX (webOS 04.64.00)
 
 - It speaks AirPlay video v2 only. Its features are `0x7F8AD0,0x38BCB46`, and every AirPlay 1
   video endpoint (`/play`, `/playback-info`, `/scrub`, `/reverse`) answers 404.
 - Before pairing, everything but `GET /info` answers 470. Transient pairing needs no PIN.
+- Set to ask for a PIN in its AirPlay settings, it reads as `NeedsPin` (status flag `0x8`), shows
+  a PIN for `/pair-pin-start`, pairs with it, and lets the sender in with pair-verify after.
 - Without RECORD after the event channel opens, it plays but sends no events.
 - It plays with or without NTP timing. With `timingProtocol: NTP` its SETUP answer adds a
   `timingPort`. No timing request was seen, but the one run with NTP (2026-10-10, the live test)
@@ -103,8 +106,8 @@ is pyatv's credential string, `ltpk:ltsk:atv_id:client_id`. They are tested agai
 ### Not checked yet
 
 - **Apple TV (tvOS).** send-airplay2 reports the same `/command` flow on tvOS 26, and that SETUP
-  stalls without NTP timing (`SessionOptions.ntpTiming`, on by default). Depending on its AirPlay access setting
-  it may ask for a PIN once (`Airkast.pair`), or, set to "Only people sharing this home", let in
+  stalls without NTP timing (`Airkast.ntpTiming`, on by default). Depending on its AirPlay access setting
+  it may ask for a PIN once (`Airkast.connect` with a `pin` prompt, or `Airkast.pair`), or, set to "Only people sharing this home", let in
   only members of its Home.
 - **Other TVs with AirPlay 2** (Samsung, Sony, Vizio, Roku, other LG years): whatever their TXT
   record says. A report with the record, the firmware and the live test's result is welcome.
@@ -127,7 +130,7 @@ tests run under Robolectric at API 23, 34, 36 and 37.
 | below 9 (API 28) | The JCA has no ChaCha20-Poly1305 | Carries its own (RFC 8439) |
 | below 14 (API 34) | `NsdManager` resolves one service at a time, and a resolved service has one `host` | Resolves services one after another |
 | 14 (API 34) and later | A resolved service has `hostAddresses`, which may list IPv6 before IPv4 | Takes the first IPv4 address |
-| 17 (API 37), when the app targets 37 | The local network is blocked until the user grants `ACCESS_LOCAL_NETWORK`. A TCP connection times out with no error that names the cause, and `NsdManager` is blocked too | `ReceiverDiscovery` and `Airkast.connect(context, …)` fail at once with `AirkastException.NotPermitted`. `LocalNetwork.isAccessible` tells an app when to ask |
+| 17 (API 37), when the app targets 37 | The local network is blocked until the user grants `ACCESS_LOCAL_NETWORK`. A TCP connection times out with no error that names the cause, and `NsdManager` is blocked too | `ReceiverDiscovery`, and a connect through `Airkast(context)`, fail at once with `AirkastException.NotPermitted`. `LocalNetwork.isAccessible` tells an app when to ask |
 
 The app declares `ACCESS_LOCAL_NETWORK` itself, and only when it targets SDK 37 or more, since
 Android's guidance is to leave it out below that. It is in the `NEARBY_DEVICES` group, so a user
@@ -139,8 +142,8 @@ who granted Bluetooth's nearby devices permission is not asked again.
   sender over UDP. A sender behind a firewall that drops them, such as WSL behind Windows'
   firewall, gets a SETUP that a Mac never answers. A phone on the receiver's Wi-Fi is reachable.
 - **Wi-Fi without internet.** Android may keep mobile data as the default network, and a socket
-  that is not bound to Wi-Fi then goes over mobile data and times out. `Airkast.connect(context,
-  …)` binds the session to the Wi-Fi or Ethernet network whose subnet holds the receiver.
+  that is not bound to Wi-Fi then goes over mobile data and times out. A connect through
+  `Airkast(context)` binds the session to the Wi-Fi or Ethernet network whose subnet holds the receiver.
 - **VPN.** A VPN that takes all traffic takes LAN connections too. Binding to the Wi-Fi network
   gets around it when the VPN allows apps to bypass it. When it doesn't, casting may fail while
   the VPN is on.
@@ -156,8 +159,8 @@ off, the CPU sleeps unless something holds a wake lock. How long the LG keeps a 
 gone quiet has not been measured. An app that casts in the background runs a foreground service
 of type `mediaPlayback`, which keeps network access under Doze, and holds a partial wake lock and
 a Wi-Fi lock while a session plays. `AirkastPlayer` (`airkast-media3`) takes both locks while
-an item loads, plays or is paused, and declares `WAKE_LOCK` for it. An app that drives a
-`VideoSession` without the player takes them itself. No phone has yet been checked through a
+an item loads, plays or is paused, and declares `WAKE_LOCK` for it. An app that drives an
+`AirkastSession` without the player takes them itself. No phone has yet been checked through a
 whole episode with its screen locked.
 
 ## Callers

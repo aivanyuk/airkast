@@ -26,8 +26,8 @@ import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
 import io.github.aivanyuk.airkast.android.LocalNetwork
 import io.github.aivanyuk.airkast.android.ReceiverDiscovery
+import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.CastService
-import io.github.aivanyuk.airkast.sample.CastState
 import io.github.aivanyuk.airkast.sample.cast
 import io.github.aivanyuk.airkast.sample.views.databinding.ActivityMainBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.DialogPinBinding
@@ -79,14 +79,14 @@ class MainActivity : AppCompatActivity() {
         binding.info.setOnClickListener {
             lifecycleScope.launch { cast.attempt { "${playbackInfo()}\nvolume ${volume()}" }?.let(::showInfo) }
         }
-        binding.disconnect.setOnClickListener { cast.stop() }
+        binding.disconnect.setOnClickListener { cast.player.disconnect() }
         binding.pairWithPin.setOnClickListener {
-            (cast.state.value as? CastState.Idle)?.receiver?.let { cast.start(it, url(), withPin = true) }
+            (cast.player.connection.value as? Connection.Idle)?.receiver?.let { cast.start(it, url(), withPin = true) }
         }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { cast.state.collect(::showState) }
+                launch { cast.player.connection.collect(::showState) }
                 launch { cast.log.collect { binding.log.text = it.joinToString("\n") } }
             }
         }
@@ -160,25 +160,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showState(state: CastState) {
-        val failure = (state as? CastState.Idle)?.failure
+    private fun showState(state: Connection) {
+        val failure = (state as? Connection.Idle)?.failure
         binding.failure.text = failure?.let(::describe)
         binding.failure.isVisible = failure != null
         // A receiver may ask for a PIN without saying so in its TXT record.
         binding.pairWithPin.isVisible =
-            state is CastState.Idle &&
+            state is Connection.Idle &&
             state.receiver != null &&
             (failure is AirkastException.PairingFailed || failure is AirkastException.PinRejected)
         binding.status.text =
             when (state) {
-                is CastState.Idle -> null
-                is CastState.Connecting -> getString(R.string.connecting, state.receiver.name)
-                is CastState.AwaitingPin -> getString(R.string.awaiting_pin, state.receiver.name)
-                is CastState.Casting -> getString(R.string.casting, state.session.receiver.name)
+                is Connection.Idle -> null
+                is Connection.Connecting -> getString(R.string.connecting, state.receiver.name)
+                is Connection.AwaitingPin -> getString(R.string.awaiting_pin, state.receiver.name)
+                is Connection.Connected -> getString(R.string.casting, state.session.receiver.name)
             }
-        binding.status.isVisible = state !is CastState.Idle
-        binding.casting.isVisible = state is CastState.Casting
-        if (state is CastState.AwaitingPin) {
+        binding.status.isVisible = state !is Connection.Idle
+        binding.casting.isVisible = state is Connection.Connected
+        if (state is Connection.AwaitingPin) {
             if (pinDialog == null) pinDialog = showPin(state.receiver)
         } else {
             pinDialog?.dismiss()
@@ -193,13 +193,13 @@ class MainActivity : AppCompatActivity() {
             .setTitle(getString(R.string.pin_title, receiver.name))
             .setView(view.root)
             .setPositiveButton(R.string.pair) { _, _ ->
-                cast.enterPin(
+                cast.player.enterPin(
                     view.pin.text
                         .toString()
                         .trim(),
                 )
-            }.setNegativeButton(android.R.string.cancel) { _, _ -> cast.cancelPin() }
-            .setOnCancelListener { cast.cancelPin() }
+            }.setNegativeButton(android.R.string.cancel) { _, _ -> cast.player.disconnect() }
+            .setOnCancelListener { cast.player.disconnect() }
             .show()
     }
 

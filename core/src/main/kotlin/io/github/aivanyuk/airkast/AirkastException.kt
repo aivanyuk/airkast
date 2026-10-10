@@ -9,9 +9,13 @@ public sealed class AirkastException(
     cause: Throwable? = null,
 ) : Exception(message, cause) {
     /** The receiver refused the pairing, or answered it with something unexpected. */
-    public class PairingFailed(
+    public class PairingFailed internal constructor(
         message: String,
-    ) : AirkastException(message)
+        /** The receiver refused the credentials themselves, so only pairing again gets in. */
+        internal val credentialsRefused: Boolean,
+    ) : AirkastException(message) {
+        public constructor(message: String) : this(message, credentialsRefused = false)
+    }
 
     /** The receiver did not take the PIN given to [Airkast.pair]. Pairing again starts over. */
     public class PinRejected : AirkastException("The receiver did not take the PIN")

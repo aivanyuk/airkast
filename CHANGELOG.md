@@ -8,20 +8,56 @@ caller sees adds its line under "Unreleased".
 
 ### Added
 
-- Pairing with a PIN: `Airkast.pair(receiver) { pin }` (and `Airkast.pair(context, …)` on
-  Android) pairs once with a receiver that shows a PIN, and returns `Credentials`. With them in
-  `SessionOptions.credentials`, `connect` proves the pairing instead of pairing transiently.
-  `Credentials.encoded` and `Credentials.decode` store them, in pyatv's format. A wrong PIN
-  throws `AirkastException.PinRejected`. Not yet checked on a receiver that asks for a PIN.
+- `AirkastPlayer` runs a whole cast: `connect(receiver)` opens a session through the app's
+  `Airkast`, asks for a PIN when the receiver needs one (`connection` turns `AwaitingPin` until
+  `enterPin`), plays the media item, and `disconnect()` stops the TV's player, closes the session
+  and clears the item. `connection` is a `StateFlow` of `Idle` (with the failure), `Connecting`,
+  `AwaitingPin` and `Connected`. BACK on the TV's remote ends a cast the player opened, unless
+  `disconnectOnBack = false`. After a dropped cast, `prepare()` connects again. Setting
+  `session` by hand works as before: the app keeps that session.
+- Pairing with a PIN: `airkast.connect(receiver) { pin }` pairs a receiver that asks for a PIN on
+  its first connect, keeps the `Credentials` in the client's `CredentialStore`, and proves the
+  pairing on every connect after. `airkast.pair(receiver) { pin }` pairs one that asks without
+  saying so. A wrong PIN throws `AirkastException.PinRejected`, and credentials a receiver refuses
+  leave the store. `Credentials.encoded` and `Credentials.decode` store them, in pyatv's format.
+  Checked on the LG CX set to ask for a PIN, from the sample app.
+- `CredentialStore`, where a client keeps pairings: `CredentialStore.inMemory()`, the default,
+  `CredentialStore.file(file)`, or the app's own over its secrets. `Airkast(context)` keeps them
+  in a file in the app's no-backup files.
 - `Compatibility.AccessRestricted`, for a receiver that lets in only its owner's devices (`act=2`):
   a Mac's AirPlay Receiver at its default, "Current User".
 
 ### Changed
 
+Breaking, under the rules for a minor release before 1.0 ([releasing](docs/releasing.md)):
+
+- `Airkast` is a client, configured once and shared, in place of an object with
+  `connect(receiver, identity, options)`: `Airkast { … }` builds one, `airkast.connect(receiver)`
+  opens a session, and `airkast.copy { … }` makes a variant. `SessionOptions` and its builder are
+  gone: their options, with `identity`, `socketFactory` and `credentialStore`, are properties of
+  `Airkast.Builder`. One client keeps one `SenderIdentity`, where every connect made a new random
+  device id.
+- On Android, `Airkast(context) { … }` replaces `Airkast.connect(context, …)` and
+  `Airkast.pair(context, …)`. The TV shows the app's label in place of "airkast". Its
+  `socketFactory` checks the local network permission and binds to the receiver's network, as
+  the overloads did.
+- `socketFactory` takes the receiver: `(Receiver) -> SocketFactory?`, and may refuse a connect
+  with an `AirkastException`.
+- `VideoSession` is `AirkastSession` and `VideoItem` is `Media`, so a receiver that plays only
+  audio, or a protocol other than AirPlay video v2, can join without another rename.
+- `AirkastPlayer(context, airkast)` takes the client it connects through.
 - `Receiver.isSupported` is true for `Compatibility.NeedsPin` too, since such a receiver now
   plays once paired.
-- `SessionOptions.ntpTiming` is on by default. A Mac answers SETUP with 500 without it, and the LG
-  CX plays either way. The receiver now needs to reach the sender over UDP.
+- `ntpTiming` is on by default. A Mac answers SETUP with 500 without it, and the LG CX plays
+  either way. The receiver now needs to reach the sender over UDP.
+
+### Fixed
+
+- A connect cancelled midway closes the session it opened, where it used to leave it open and
+  unreferenced, and a pairing cancelled while it connects closes its connection.
+- `AirkastPlayer.disconnect()` clears the media item, which takes a `MediaSession`'s notification
+  down. `clearMediaItems()` cannot: the player offers no `COMMAND_CHANGE_MEDIA_ITEMS`, so media3
+  ignores it, and the sample's cast left its notification up after it ended.
 
 ## 0.2.0 - 2026-10-09
 

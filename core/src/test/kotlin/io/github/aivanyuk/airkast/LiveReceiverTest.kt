@@ -27,9 +27,9 @@ class LiveReceiverTest {
     fun playsSeeksPausesAndStops() =
         runBlocking {
             assumeTrue("Set AIRKAST_RECEIVER to run against a real receiver", host.isNotBlank())
-            val options = SessionOptions { logger = { log("wire", it) } }
-            Airkast.connect(Receiver("live", host), options = options).use { session ->
-                session.load(VideoItem(url, startAt = 30.seconds))
+            val airkast = Airkast { logger = { log("wire", it) } }
+            airkast.connect(Receiver("live", host)).use { session ->
+                session.load(Media(url, startAt = 30.seconds))
                 withTimeout(30_000) { session.state.first { it == PlaybackState.Playing } }
                 // The receiver reports playing a moment before the picture moves after a start jump.
                 delay(5_000)
@@ -65,8 +65,8 @@ class LiveReceiverTest {
     fun switchesTracksOnAStreamingItem() =
         runBlocking {
             assumeTrue("Set AIRKAST_RECEIVER to run against a real receiver", host.isNotBlank())
-            Airkast.connect(Receiver("live", host)).use { session ->
-                session.load(VideoItem(url, startAt = 30.seconds))
+            Airkast().connect(Receiver("live", host)).use { session ->
+                session.load(Media(url, startAt = 30.seconds))
                 withTimeout(30_000) { session.state.first { it == PlaybackState.Playing } }
                 delay(4_000)
                 val selected = session.tracks()
@@ -93,10 +93,10 @@ class LiveReceiverTest {
             val wire: (String) -> Unit = { line ->
                 if (!line.startsWith("event channel:")) logFile?.appendText("${System.currentTimeMillis()} $line\n")
             }
-            Airkast.connect(Receiver("live", host), options = SessionOptions { logger = wire }).use { session ->
+            Airkast { logger = wire }.connect(Receiver("live", host)).use { session ->
                 val ended =
                     async { session.events.first { it is ReceiverEvent.ItemEnded || it is ReceiverEvent.Disconnected } }
-                session.load(VideoItem(url))
+                session.load(Media(url))
                 withTimeout(60_000) { session.state.first { it == PlaybackState.Playing } }
                 delay(10_000)
                 val first = session.playbackInfo()

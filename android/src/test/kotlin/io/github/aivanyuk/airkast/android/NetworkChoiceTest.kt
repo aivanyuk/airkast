@@ -50,6 +50,13 @@ class NetworkChoiceTest {
     }
 
     @Test
+    fun theClientConnectsOverTheNetworkThatHoldsTheReceiver() {
+        network(NetworkCapabilities.TRANSPORT_CELLULAR, "100.64.3.9", 10)
+        val home = network(NetworkCapabilities.TRANSPORT_WIFI, "192.168.50.17", 24)
+        assertThat(Airkast(app).socketFactory(Receiver("tv", "192.168.50.241"))).isSameInstanceAs(home)
+    }
+
+    @Test
     fun ethernetCounts() {
         val wired = network(NetworkCapabilities.TRANSPORT_ETHERNET, "192.168.1.4", 24)
         assertThat(LocalNetwork.socketFactory(app, "192.168.1.30")).isSameInstanceAs(wired)
@@ -67,10 +74,10 @@ class NetworkChoiceTest {
     fun connectingAndPairingFailAtOnceWithoutTheLocalNetworkPermission() {
         app.applicationInfo.targetSdkVersion = 37
         assertThrows(AirkastException.NotPermitted::class.java) {
-            runBlocking { Airkast.connect(app, Receiver("tv", "192.168.50.241")) }
+            runBlocking { Airkast(app).connect(Receiver("tv", "192.168.50.241")) }
         }
         assertThrows(AirkastException.NotPermitted::class.java) {
-            runBlocking { Airkast.pair(app, Receiver("tv", "192.168.50.241")) { error("No PIN is asked for") } }
+            runBlocking { Airkast(app).pair(Receiver("tv", "192.168.50.241")) { error("No PIN is asked for") } }
         }
     }
 

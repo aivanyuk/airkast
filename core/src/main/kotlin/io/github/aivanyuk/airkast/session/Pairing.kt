@@ -155,6 +155,7 @@ internal object PairVerify {
                 HEADERS,
                 Tlv8.SEQUENCE to byteArrayOf(1),
                 Tlv8.PUBLIC_KEY to public,
+                rejected = ::refused,
             )
         val receiverPublic = m2.require(Tlv8.PUBLIC_KEY, "public key")
         val secret = X25519.sharedSecret(ephemeral, receiverPublic)
@@ -162,11 +163,14 @@ internal object PairVerify {
         val receiver = Tlv8.decode(open(key, "PV-Msg02", m2.require(Tlv8.ENCRYPTED_DATA, "encrypted data")))
         val receiverId = receiver.require(Tlv8.IDENTIFIER, "identifier")
         if (!receiverId.contentEquals(credentials.receiverId)) {
-            throw AirkastException.PairingFailed("The receiver is not the one the credentials are for")
+            throw AirkastException.PairingFailed(
+                "The receiver is not the one the credentials are for",
+                credentialsRefused = true,
+            )
         }
         val signature = receiver.require(Tlv8.SIGNATURE, "signature")
         if (!Ed25519.verify(credentials.receiverKey, receiverPublic + receiverId + public, signature)) {
-            throw AirkastException.PairingFailed("The receiver's signature does not match")
+            throw AirkastException.PairingFailed("The receiver's signature does not match", credentialsRefused = true)
         }
         val m3 =
             Tlv8.encode(
@@ -179,9 +183,21 @@ internal object PairVerify {
             HEADERS,
             Tlv8.SEQUENCE to byteArrayOf(3),
             Tlv8.ENCRYPTED_DATA to ChaCha20Poly1305.seal(key, nonce("PV-Msg03"), m3, ByteArray(0)),
+            rejected = ::refused,
         )
         return secret
     }
+
+    /**
+     * HomeKit's Authentication error, which a receiver answers when it does not know the sender or
+     * its proof fails. Any other error, such as a busy receiver's, says nothing of the credentials.
+     */
+    private fun refused(code: Int): AirkastException? =
+        if (code == Tlv8.ERROR_AUTHENTICATION) {
+            AirkastException.PairingFailed("The receiver no longer knows this sender", credentialsRefused = true)
+        } else {
+            null
+        }
 }
 
 private const val TLV = "application/octet-stream"

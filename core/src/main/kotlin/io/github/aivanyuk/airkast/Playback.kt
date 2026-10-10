@@ -5,12 +5,12 @@ import kotlin.time.Duration
 
 /** What to play: a URL the receiver fetches itself, from [startAt]. */
 @Poko
-public class VideoItem(
+public class Media(
     public val url: String,
     public val startAt: Duration = Duration.ZERO,
     /**
      * Loads the item as `streaming`, the default, rather than `file`. The LG reports what it has
-     * buffered, and reports and switches tracks ([VideoSession.tracks]), only for a `streaming`
+     * buffered, and reports and switches tracks ([AirkastSession.tracks]), only for a `streaming`
      * item. See docs/compatibility.md.
      */
     public val streaming: Boolean = true,
@@ -102,7 +102,7 @@ public sealed interface ReceiverEvent {
 
     /**
      * BACK on the TV's remote, which the receiver leaves to the sender: the TV leaves its player
-     * only once the sender calls [VideoSession.stop].
+     * only once the sender calls [AirkastSession.stop].
      */
     public data object Back : ReceiverEvent
 

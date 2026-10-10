@@ -38,7 +38,7 @@ Authority: CONTRIBUTING.md § Branches and pull requests, docs/releasing.md.
 | A1 | A declaration is public only if a caller needs it. Public types live in `io.github.aivanyuk.airkast` or `.android`; `crypto`, `wire`, `session` and `internal` hold `internal` code only. | New or changed `public` declaration, new package |
 | A2 | A changed `*/api/*.api` dump is deliberate: every removed or changed line is a break, so the PR is aimed at a minor release before 1.0 (a major after), and P3 records it. Before 1.0 no deprecation or shim is expected; from 1.0 a removal goes through the deprecation cycle. An added line is fine. | Diff touches `api/*.api` |
 | A3 | No `data class` in the public API. A public value is a `@Poko` class. From 1.0, a property added to one goes last with a default, and the old constructor stays as a `@Deprecated(level = DeprecationLevel.HIDDEN)` secondary constructor. | New public class, new constructor parameter |
-| A4 | Options that will grow are builder properties with defaults, as in `SessionOptions.Builder`, never new parameters on `connect`. | New option, new parameter on a public function |
+| A4 | Options that will grow are builder properties with defaults, as in `Airkast.Builder`, never new parameters on `connect`. A platform's defaults fill the same builder (`Airkast(context) { … }`); an app can change each one. | New option, new parameter on a public function |
 | A5 | Every failure the public API reports is an `AirkastException` subclass (or a `CancellationException`). A new failure is a new subclass with KDoc saying when it happens. No raw `IOException`, `IllegalStateException` or `SecurityException` escapes a public call. | New `throw`, new public call that does I/O |
 | A6 | A new member of a sealed type or enum that callers switch on (`ReceiverEvent`, `AirkastException`, `Compatibility`, `PlaybackState`) is fine, and its KDoc says when it happens. | New subclass or enum entry |
 | A7 | Public declarations carry KDoc that says what a caller needs and the receivers or platforms it depends on, unless the name says it all. | New public declaration |
@@ -55,8 +55,8 @@ Authority: CONTRIBUTING.md § The public API, docs/releasing.md § What counts a
 | T2 | The control connection serves one exchange at a time: a new caller goes through `ControlConnection.exchange`, never writes to its link directly. | Changes in `session/` |
 | T3 | The event channel's reader never suspends or blocks on a collector: events go out through `tryEmit` on the buffered flow and the state through the `StateFlow`. | Changes to `onMessage`, `EventChannel` |
 | T4 | An I/O failure ends the session through `end(cause)`: pending requests fail with `Disconnected`, the state goes to `Stopped`, `ReceiverEvent.Disconnected` comes last, and the scope is cancelled. Nothing swallows an `IOException` and carries on with a socket in an unknown state. | New `catch`, new connection, new coroutine |
-| T5 | The session does not reconnect by itself; a retry policy, if one comes, is a `SessionOptions` option that defaults to off. | Retry or reconnect logic |
-| T6 | A log line (`SessionOptions.logger`) never holds a media URL, a key, a pairing secret or the bytes a pairing derives. | New `logger?.invoke`, `log(` |
+| T5 | The session does not reconnect by itself; a retry policy, if one comes, is an `Airkast.Builder` option that defaults to off. `AirkastPlayer` connects again only on `prepare()`, which the user starts. | Retry or reconnect logic |
+| T6 | A log line (`Airkast.Builder.logger`) never holds a media URL, a key, a pairing secret or the bytes a pairing derives. | New `logger?.invoke`, `log(` |
 
 Authority: docs/architecture.md § Threading and § Failure, CONTRIBUTING.md § The public API.
 
@@ -67,7 +67,7 @@ Authority: docs/architecture.md § Threading and § Failure, CONTRIBUTING.md § 
 | C1 | `airkast-core` stays plain JVM: no `android.*` import, and no new runtime dependency beyond kotlin-stdlib and kotlinx-coroutines. `airkast-android` adds only the Android platform; `airkast-media3` adds media3-common and kotlinx-coroutines-android, with media3's unstable API in internal classes only. A module never depends on a sibling other than `:core`. | New import, new `dependencies` line |
 | C2 | Raising a floor (minSdk, JVM bytecode or class library level, Kotlin language or API version, the stdlib or coroutines minimum) is a break: P3 and A2's release rules apply, and docs/compatibility.md § Callers or § Senders changes with it. | `build-logic/`, `libs.versions.toml` floor entries |
 | C3 | An Android call above minSdk sits behind a `Build.VERSION.SDK_INT` check, and a Robolectric test pins the levels on both sides with `@Config(sdk = [...])`. Lint's NewApi decides the call; the reviewer checks the test. | New `SDK_INT` branch, new platform API |
-| C4 | Network code on Android goes through `SessionOptions.socketFactory` and `LocalNetwork`, so the session binds to the receiver's network and fails with `NotPermitted` when Android 17 withholds `ACCESS_LOCAL_NETWORK`. A new path that opens a socket or starts `NsdManager` does both. | New socket, new `NsdManager` call |
+| C4 | Network code on Android goes through `Airkast.Builder.socketFactory` and `LocalNetwork`, so the session binds to the receiver's network and fails with `NotPermitted` when Android 17 withholds `ACCESS_LOCAL_NETWORK`. A new path that opens a socket or starts `NsdManager` does both. | New socket, new `NsdManager` call |
 | C5 | A setting shared by modules lives in a `build-logic` convention, not in one module's build file. | New block in a module's `build.gradle.kts` |
 
 Authority: CONTRIBUTING.md § Compatibility floors, docs/compatibility.md § Senders, docs/architecture.md § Seams.

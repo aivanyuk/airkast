@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The player holds a partial wake lock and a Wi-Fi lock while a cast plays, so the session's
-         keepalive goes on with the screen off. AirkastPlayer.Builder.setKeepAwake(false) turns
-         them off. -->
+         keepalive goes on with the screen off. AirkastPlayer(context, airkast) { keepAwake = false }
+         turns them off. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 </manifest>
