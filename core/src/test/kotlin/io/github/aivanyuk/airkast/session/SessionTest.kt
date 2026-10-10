@@ -7,6 +7,7 @@ import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.SenderIdentity
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -82,6 +83,21 @@ class SessionTest {
                     val error = runCatching { session.load(Media("https://example.com/a.m3u8")) }.exceptionOrNull()
                     assertThat(error).isInstanceOf(AirkastException.Timeout::class.java)
                 }
+            }
+        }
+
+    @Test
+    fun theSenderNamesItselfInAHeaderAMacPromptsWith() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                val named = airkast.copy { identity = SenderIdentity(name = "Кино · 映画") }
+                named.connect(Receiver("fake", "127.0.0.1", fake.port)).close()
+                assertThat(fake.clientName).isEqualTo("Кино · 映画")
+            }
+            FakeReceiver().use { fake ->
+                val broken = airkast.copy { identity = SenderIdentity(name = "two\r\nlines") }
+                broken.connect(Receiver("fake", "127.0.0.1", fake.port)).close()
+                assertThat(fake.clientName).isEqualTo("two  lines")
             }
         }
 

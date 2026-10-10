@@ -90,6 +90,11 @@ internal class FakeReceiver(
     val port: Int get() = control.localPort
     val commands = CopyOnWriteArrayList<Map<String, Any?>>()
 
+    /** The sender's name from the base SETUP's `X-Apple-Client-Name`, read as UTF-8. */
+    @Volatile
+    var clientName: String? = null
+        private set
+
     @Volatile
     var feedbacks = 0
         private set
@@ -256,6 +261,9 @@ internal class FakeReceiver(
 
                 request.startLine.startsWith("SETUP") -> {
                     signedIn = signedIn || signed
+                    request.header("X-Apple-Client-Name")?.let {
+                        clientName = String(it.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8)
+                    }
                     val body = BinaryPlist.decode(request.body) as Map<*, *>
                     if (body.containsKey("streams")) {
                         link.reply(

@@ -93,6 +93,8 @@ Breaking, under the rules for a minor release before 1.0 ([releasing](docs/relea
 - A load on a Mac ends when the Mac takes the item. Its `currentItemChanged` names no item, so
   `load` timed out after `loadTimeout` while the Mac played, and `AirkastPlayer` never polled the
   position: its notification and controls stood still.
+- A Mac's "Allow … to AirPlay" prompt names the app, from `SenderIdentity.name`, where it showed
+  "". The name now goes in an `X-Apple-Client-Name` header on every request.
 
 ## 0.2.0 - 2026-10-09
 

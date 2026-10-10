@@ -18,6 +18,7 @@ what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRI
 | LG OLED CX (webOS) | 04.64.00 as on 2026-10-08, not read again; 377.25.06 from `/info` | 2026-10-10, at 54cce4b | Xiaomi 2201117TY, Android 13, the sample app | `Supported`. By hand, through `AirkastPlayer` with an `ExoPlayer` as `localPlayer`: played on the phone, moved to the TV at the same point when it was tapped, and came back to the phone paused where the TV was on BACK and on Disconnect, then resumed with play |
 | MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app with `ntpTiming = true` | Plays with NTP timing, set to "Anyone on the same network". Transient pairing, load, play, pause from the Mac, the next item, tracks read and switched (closed captions, subtitles, subtitles off), playback info, stop, by hand. At "Current User" transient pairing is refused |
 | MacBook Pro (MacBookPro18,1, macOS build 25G241 as above, not read again) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app | `NeedsPassword` with "Require password" on. By hand, through `AirkastPlayer.connect`: transient pairing refused; a wrong password refused at pair-setup M4 (`SecretRejected`); the right one paired (M1 to M6) with no `/pair-pin-start`, and later connects verified the pairing (pair-verify). Every base SETUP, even after pair-verify, answered 401 with a Digest challenge, a second 401 to a wrong password, and 200 to the right one, which the credentials then kept: later connects went in without asking. Played; `AirkastPlayer`'s notification did not follow, since the Mac's `currentItemChanged` carries no item uuid |
+| MacBook Pro (MacBookPro18,1, macOS build 25G241 as above, not read again) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app | With `X-Apple-Client-Name` sent: the "Allow … to AirPlay" prompt for a new sender named the app ("airkast sample - compose"), where it showed "" without the header. An ASCII name only |
 
 ### How `Receiver.compatibility` decides
 
@@ -111,6 +112,9 @@ tested against `FakeReceiver`, and checked by hand on a Mac set to "Require pass
   the record from before the password was set, and the receiver then reads as `Supported` until
   it is resolved again.
 - `GET /info` answers 403 without an AirPlay `User-Agent`.
+- It asks its user before it lets a new sender play, holding SETUP until they answer, and names
+  the sender from the `X-Apple-Client-Name` header, as owntone sends it, not from SETUP's `name`.
+  Without the header it shows "".
 - It answers the base SETUP with 500 when `timingProtocol` is `None`. With `NTP` it asks for the
   time three times, within a second, and answers 200 once it has it, then asks again every two to
   three seconds for as long as the session lasts. A sender it cannot reach over UDP (WSL behind Windows' firewall, for
