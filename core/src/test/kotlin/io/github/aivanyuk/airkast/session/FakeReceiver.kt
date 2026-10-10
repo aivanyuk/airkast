@@ -32,6 +32,11 @@ private val RANDOM = SecureRandom()
  */
 internal class FakeReceiver(
     private val takesItems: Boolean = true,
+    /**
+     * Whether `currentItemChanged` names the item it took, as the LG's does. The Mac's names none,
+     * and names the item only in the notifications around it.
+     */
+    private val namesTheNewItem: Boolean = true,
     private val corruptProof: Boolean = false,
     /** Milliseconds to wait before the first answer to a path or a command type. */
     lateAnswers: Map<String, Long> = emptyMap(),
@@ -287,16 +292,29 @@ internal class FakeReceiver(
                     val item = command["item"] as Map<*, *>
                     streaming = item["mediaType"] == "streaming"
                     position = DefaultVideoSession.duration(item["Start-Position"]) ?: Duration.ZERO
-                    event(
-                        mapOf(
-                            "type" to "notification",
-                            "name" to "currentItemChanged",
-                            "item" to mapOf("uuid" to item["uuid"]),
-                        ),
-                    )
-                    event(
-                        mapOf("type" to "playbackState", "name" to "playing", "item" to mapOf("uuid" to item["uuid"])),
-                    )
+                    val named = mapOf("item" to mapOf("uuid" to item["uuid"]))
+                    if (namesTheNewItem) {
+                        event(mapOf("type" to "notification", "name" to "currentItemChanged") + named)
+                        event(mapOf("type" to "playbackState", "name" to "playing") + named)
+                    } else {
+                        // The order the Mac sent them in, on 2026-10-10.
+                        event(
+                            mapOf(
+                                "type" to "notification",
+                                "name" to "playbackLikelyToKeepUp",
+                                "value" to false,
+                            ) + named,
+                        )
+                        event(mapOf("type" to "playbackState", "name" to "loading"))
+                        event(
+                            mapOf(
+                                "type" to "notification",
+                                "name" to "currentItemChanged",
+                                "reason" to "ReasonAddToPlayQueue",
+                            ),
+                        )
+                        event(mapOf("type" to "playbackState", "name" to "playing"))
+                    }
                 }
             }
 

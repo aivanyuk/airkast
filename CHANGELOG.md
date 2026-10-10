@@ -69,6 +69,9 @@ Breaking, under the rules for a minor release before 1.0 ([releasing](docs/relea
 - `AirkastPlayer.disconnect()` clears the media item, which takes a `MediaSession`'s notification
   down. `clearMediaItems()` cannot: the player offers no `COMMAND_CHANGE_MEDIA_ITEMS`, so media3
   ignores it, and the sample's cast left its notification up after it ended.
+- A load on a Mac ends when the Mac takes the item. Its `currentItemChanged` names no item, so
+  `load` timed out after `loadTimeout` while the Mac played, and `AirkastPlayer` never polled the
+  position: its notification and controls stood still.
 
 ## 0.2.0 - 2026-10-09
 

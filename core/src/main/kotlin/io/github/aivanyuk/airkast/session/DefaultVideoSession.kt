@@ -421,7 +421,9 @@ internal class DefaultVideoSession private constructor(
                     ReceiverEvent.Other(message)
                 }
             }
-        if (event is ReceiverEvent.ItemChanged && item != null && item == itemId) itemTaken?.complete(Unit)
+        // Any message about the item says the receiver took it. The Mac (960.13.25) names it in
+        // every notification but `currentItemChanged`, the one the LG CX names it in first.
+        if (item != null && item == itemId) itemTaken?.complete(Unit)
         if (event is ReceiverEvent.StateChanged) mutableState.value = event.state
         mutableEvents.tryEmit(event)
     }
