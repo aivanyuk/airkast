@@ -25,6 +25,10 @@ internal class ControlConnection(
     private val dacpId = HEX.let { digits -> String(CharArray(16) { digits[RANDOM.nextInt(16)] }) }
     private val activeRemote = (RANDOM.nextInt().toLong() and 0xffffffffL).toString()
 
+    // A Mac (960.13.25) names the sender in its "Allow … to AirPlay" prompt from this header, not
+    // SETUP's `name`, and shows "" without it. Its UTF-8 bytes go out as they are.
+    private val clientName = String(identity.name.toByteArray(Charsets.UTF_8), Charsets.ISO_8859_1)
+
     val localAddress get() = link.localAddress
     val remoteAddress get() = link.remoteAddress
 
@@ -51,6 +55,7 @@ internal class ControlConnection(
                 if (headers.none { it.first.equals("User-Agent", ignoreCase = true) }) {
                     add("User-Agent" to identity.userAgent)
                 }
+                add("X-Apple-Client-Name" to clientName)
                 if (contentType != null) add("Content-Type" to contentType)
                 addAll(headers)
             }

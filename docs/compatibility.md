@@ -90,6 +90,9 @@ is pyatv's credential string, `ltpk:ltsk:atv_id:client_id`. They are tested agai
   on the same network" it pairs transiently without a PIN, and `GET /info` reports
   `statusFlags = 4`. "Everyone" and "Require password" are not checked yet.
 - `GET /info` answers 403 without an AirPlay `User-Agent`.
+- It asks its user before it lets a new sender play, holding SETUP until they answer, and names
+  the sender from the `X-Apple-Client-Name` header, as owntone sends it, not from SETUP's `name`.
+  Without the header it shows "".
 - It answers the base SETUP with 500 when `timingProtocol` is `None`. With `NTP` it asks for the
   time three times, within a second, and answers 200 once it has it, then asks again every two to
   three seconds for as long as the session lasts. A sender it cannot reach over UDP (WSL behind Windows' firewall, for

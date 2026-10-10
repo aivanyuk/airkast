@@ -69,6 +69,8 @@ Breaking, under the rules for a minor release before 1.0 ([releasing](docs/relea
 - `AirkastPlayer.disconnect()` clears the media item, which takes a `MediaSession`'s notification
   down. `clearMediaItems()` cannot: the player offers no `COMMAND_CHANGE_MEDIA_ITEMS`, so media3
   ignores it, and the sample's cast left its notification up after it ended.
+- A Mac's "Allow … to AirPlay" prompt names the app, from `SenderIdentity.name`, where it showed
+  "". The name now goes in an `X-Apple-Client-Name` header on every request.
 
 ## 0.2.0 - 2026-10-09
 
