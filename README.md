@@ -91,8 +91,9 @@ On a desktop JVM, `Airkast.connect(Receiver("TV", "192.168.1.20"))` takes a rece
 hand.
 
 A receiver that asks for a PIN ([`Compatibility.NeedsPin`](docs/compatibility.md)) pairs once.
-It shows the PIN on its screen while `pin` waits for the user, and the credentials it leaves let
-every later connect in without one:
+`isSupported` counts it, so a picker lists it, but a plain `connect` to it fails until it is
+paired. It shows the PIN on its screen while `pin` waits for the user, and the credentials it
+leaves let every later connect in without one:
 
 ```kotlin
 val credentials = Airkast.pair(context, receiver) { askTheUserForThePin() }  // suspends until typed

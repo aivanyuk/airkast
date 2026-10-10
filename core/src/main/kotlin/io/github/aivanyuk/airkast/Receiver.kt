@@ -21,8 +21,12 @@ public class Receiver(
     public val compatibility: Compatibility get() = compatibilityOf(features, statusFlags, properties)
 
     /**
-     * Whether airkast plays on it: [Compatibility.Supported], or [Compatibility.NeedsPin] once
-     * paired. A receiver typed in by hand is [Compatibility.Unknown], not supported.
+     * Whether airkast can play on it, so a picker lists it: [Compatibility.Supported], or
+     * [Compatibility.NeedsPin]. A `NeedsPin` receiver plays only once the caller has paired with
+     * it: [Airkast.pair] first, then [Airkast.connect] with the [Credentials] in
+     * [SessionOptions.credentials]. A plain connect to it fails with
+     * [AirkastException.PairingFailed]. A receiver typed in by hand is [Compatibility.Unknown],
+     * not supported.
      */
     public val isSupported: Boolean
         get() = compatibility == Compatibility.Supported || compatibility == Compatibility.NeedsPin
