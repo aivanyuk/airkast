@@ -12,6 +12,8 @@ import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
+import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event
+import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event.EndReason
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Test
@@ -27,6 +29,7 @@ import kotlin.time.Duration.Companion.seconds
 @Config(sdk = [34])
 class ConnectTest {
     private val connector = FakeConnector()
+    private val heard = mutableListOf<Event>()
     private val player = player()
     private val tv = Receiver("tv", "192.0.2.1")
     private val item = MediaItem.fromUri("https://example.com/master.m3u8")
@@ -215,9 +218,104 @@ class ConnectTest {
         assertThat(connector.sessions.single().closed).isTrue()
     }
 
+    @Test
+    fun aCastReportsItsStartAndItsEnd() {
+        casting()
+        player.disconnect()
+        idle()
+        assertThat(heard.map { it::class }).containsExactly(Event.CastStarted::class, Event.CastEnded::class).inOrder()
+        assertThat(heard.map { it.receiver }.distinct()).containsExactly(tv)
+        val ended = heard[1] as Event.CastEnded
+        assertThat(ended.reason).isEqualTo(EndReason.Disconnect)
+        assertThat(ended.failure).isNull()
+    }
+
+    @Test
+    fun eachWayACastEndsIsReported() {
+        casting().emit(ReceiverEvent.Back)
+        idle()
+        casting().emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
+        idle()
+        casting()
+        player.connect(Receiver("bedroom", "192.0.2.2"))
+        idle()
+        player.session = FakeSession()
+        player.session = null
+        player.release()
+        val ended = heard.filterIsInstance<Event.CastEnded>()
+        assertThat(ended.map { it.reason })
+            .containsExactly(
+                EndReason.Back,
+                EndReason.Lost,
+                EndReason.Replaced,
+                EndReason.Replaced,
+                EndReason.Disconnect,
+            ).inOrder()
+        assertThat(ended[1].failure).isInstanceOf(AirkastException.Disconnected::class.java)
+        assertThat(ended.filter { it.reason != EndReason.Lost }.map { it.failure }.distinct()).containsExactly(null)
+    }
+
+    @Test
+    fun releaseEndsTheCast() {
+        val own = player()
+        own.setMediaItem(item)
+        own.connect(tv)
+        idle()
+        own.release()
+        assertThat((heard.last() as Event.CastEnded).reason).isEqualTo(EndReason.Released)
+    }
+
+    @Test
+    fun aFailedConnectIsReported() {
+        connector.failure = AirkastException.Unreachable(IOException("No route to host"))
+        player.connect(tv)
+        idle()
+        val failed = heard.single() as Event.CastFailed
+        assertThat(failed.failure).isSameInstanceAs(connector.failure)
+    }
+
+    @Test
+    fun aPinPromptGivenUpIsReported() {
+        connector.asksForPin = true
+        player.connect(tv)
+        idle()
+        player.disconnect()
+        idle()
+        val abandoned = heard.single() as Event.CastAbandoned
+        assertThat(abandoned.receiver).isEqualTo(tv)
+        assertThat(abandoned.atPin).isTrue()
+    }
+
+    @Test
+    fun thePlayerLogsThroughItsClientUnderItsOwnTag() {
+        val lines = mutableListOf<Pair<String, String>>()
+        val airkast = Airkast { logger = Airkast.Logger { _, tag, message, _ -> lines += tag to message } }
+        val own =
+            AirkastPlayer(ApplicationProvider.getApplicationContext(), airkast) {
+                connector = this@ConnectTest.connector
+            }
+        own.setMediaItem(item)
+        own.connect(tv)
+        idle()
+        own.release()
+        assertThat(lines).contains("player" to "cast started")
+        assertThat(lines.map { it.first }.distinct()).containsExactly("player")
+    }
+
+    @Test
+    fun aListenerThatThrowsLeavesTheCastAlone() {
+        val own = player { eventListener = { error("listener") } }
+        own.setMediaItem(item)
+        own.connect(tv)
+        idle()
+        assertThat(own.connection.value).isInstanceOf(Connection.Connected::class.java)
+        own.release()
+    }
+
     private fun player(block: AirkastPlayer.Builder.() -> Unit = {}): AirkastPlayer =
         AirkastPlayer(ApplicationProvider.getApplicationContext(), Airkast()) {
             connector = this@ConnectTest.connector
+            eventListener = { heard += it }
             block()
         }
 

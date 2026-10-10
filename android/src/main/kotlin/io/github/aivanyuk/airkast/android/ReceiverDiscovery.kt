@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Build
+import io.github.aivanyuk.airkast.Airkast
+import io.github.aivanyuk.airkast.Airkast.Logger.Level
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Receiver
 import kotlinx.coroutines.channels.awaitClose
@@ -13,10 +15,12 @@ import java.util.ArrayDeque
 
 /**
  * Finds receivers on the local network through `NsdManager`. Collect [receivers] while a picker
- * may show them; collection scans, and cancelling stops the scan.
+ * may show them; collection scans, and cancelling stops the scan. [logger] takes the scan's lines
+ * under the tag `discovery`, as an [Airkast.logger] does.
  */
 public class ReceiverDiscovery(
     context: Context,
+    private val logger: Airkast.Logger? = null,
 ) {
     private val context = context.applicationContext
     private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
@@ -29,10 +33,13 @@ public class ReceiverDiscovery(
      */
     public val receivers: Flow<List<Receiver>> =
         callbackFlow {
-            if (!LocalNetwork.isAccessible(context)) throw notPermitted()
+            if (!LocalNetwork.isAccessible(context)) {
+                throw notPermitted().also { log(Level.Error, it) { "no local network permission" } }
+            }
             val found = LinkedHashMap<String, Receiver>()
             val resolving =
-                Resolver(nsd) { receiver ->
+                Resolver(nsd, ::log) { receiver ->
+                    log(Level.Debug) { "resolved ${receiver.name}: ${receiver.model} ${receiver.compatibility}" }
                     synchronized(found) {
                         found[receiver.name] = receiver
                         trySend(found.values.sortedBy { it.name.lowercase() })
@@ -40,9 +47,13 @@ public class ReceiverDiscovery(
                 }
             val listener =
                 object : NsdManager.DiscoveryListener {
-                    override fun onServiceFound(service: NsdServiceInfo) = resolving.add(service)
+                    override fun onServiceFound(service: NsdServiceInfo) {
+                        log(Level.Debug) { "found ${service.serviceName}" }
+                        resolving.add(service)
+                    }
 
                     override fun onServiceLost(service: NsdServiceInfo) {
+                        log(Level.Debug) { "lost ${service.serviceName}" }
                         synchronized(found) {
                             if (found.remove(service.serviceName) !=
                                 null
@@ -56,17 +67,19 @@ public class ReceiverDiscovery(
                         serviceType: String,
                         errorCode: Int,
                     ) {
-                        close(AirkastException.DiscoveryFailed(errorCode))
+                        val failure = AirkastException.DiscoveryFailed(errorCode)
+                        log(Level.Error, failure) { "the scan failed to start" }
+                        close(failure)
                     }
 
                     override fun onStopDiscoveryFailed(
                         serviceType: String,
                         errorCode: Int,
-                    ) = Unit
+                    ) = log(Level.Warn) { "the scan failed to stop: $errorCode" }
 
-                    override fun onDiscoveryStarted(serviceType: String) = Unit
+                    override fun onDiscoveryStarted(serviceType: String) = log(Level.Debug) { "scanning" }
 
-                    override fun onDiscoveryStopped(serviceType: String) = Unit
+                    override fun onDiscoveryStopped(serviceType: String) = log(Level.Debug) { "stopped" }
                 }
             trySend(emptyList())
             nsd.discoverServices(Receiver.SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
@@ -76,9 +89,24 @@ public class ReceiverDiscovery(
             }
         }
 
+    /** Writes a line to [logger], if it takes [level]. A logger that throws loses the line. */
+    private fun log(
+        level: Level,
+        error: Throwable? = null,
+        message: () -> String,
+    ) {
+        val logger = logger ?: return
+        if (level < logger.minLevel) return
+        try {
+            logger.log(level, "discovery", message(), error)
+        } catch (_: Exception) {
+        }
+    }
+
     /** Resolves services one at a time, since NsdManager refuses a second resolve in flight before API 34. */
     private class Resolver(
         private val nsd: NsdManager,
+        private val log: (Level, Throwable?, () -> String) -> Unit,
         private val onResolved: (Receiver) -> Unit,
     ) {
         private val queue = ArrayDeque<NsdServiceInfo>()
@@ -120,7 +148,10 @@ public class ReceiverDiscovery(
                     override fun onResolveFailed(
                         info: NsdServiceInfo,
                         errorCode: Int,
-                    ) = done()
+                    ) {
+                        log(Level.Warn, null) { "resolving ${info.serviceName} failed: $errorCode" }
+                        done()
+                    }
                 },
             )
         }

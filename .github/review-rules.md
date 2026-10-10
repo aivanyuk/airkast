@@ -56,7 +56,8 @@ Authority: CONTRIBUTING.md § The public API, docs/releasing.md § What counts a
 | T3 | The event channel's reader never suspends or blocks on a collector: events go out through `tryEmit` on the buffered flow and the state through the `StateFlow`. | Changes to `onMessage`, `EventChannel` |
 | T4 | An I/O failure ends the session through `end(cause)`: pending requests fail with `Disconnected`, the state goes to `Stopped`, `ReceiverEvent.Disconnected` comes last, and the scope is cancelled. Nothing swallows an `IOException` and carries on with a socket in an unknown state. | New `catch`, new connection, new coroutine |
 | T5 | The session does not reconnect by itself; a retry policy, if one comes, is an `Airkast.Builder` option that defaults to off. `AirkastPlayer` connects again only on `prepare()`, which the user starts. | Retry or reconnect logic |
-| T6 | A log line (`Airkast.Builder.logger`) never holds a media URL, a key, a pairing secret or the bytes a pairing derives. | New `logger?.invoke`, `log(` |
+| T6 | A log line (`Airkast.Builder.logger`) never holds a media URL, a key, a PIN, a pairing secret or the bytes a pairing derives. Lines go through `Log` (or `PlayerLog`), never `logger.log` directly, so a logger that throws never reaches a session, and a message is a lambda wherever it runs per message on the wire. | New `log.…`, `logger`, `Log(` |
+| T7 | An event (`Airkast.Event`, `AirkastPlayer.Event`) goes to its listener through `report`, which catches what the listener throws. An event never carries a media URL or a key. | New `report(`, new event class |
 
 Authority: docs/architecture.md § Threading and § Failure, CONTRIBUTING.md § The public API.
 
