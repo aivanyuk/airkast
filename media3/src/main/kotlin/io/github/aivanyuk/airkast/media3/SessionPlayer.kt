@@ -69,11 +69,11 @@ internal class SessionPlayer(
     private var lastReceiver: Receiver? = null
     private var connecting: Job? = null
     private var pin: CompletableDeferred<String>? = null
+    private var sessionJob: Job? = null
+    private var loadJob: Job? = null
 
     /** The local player's side, when the player has one: see [HandoffPlayer]. */
     internal var handoff: Handoff? = null
-    private var sessionJob: Job? = null
-    private var loadJob: Job? = null
 
     private var item: MediaItem? = null
     private var itemUid = Any()
