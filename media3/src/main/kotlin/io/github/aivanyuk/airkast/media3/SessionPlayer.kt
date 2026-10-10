@@ -72,6 +72,9 @@ internal class SessionPlayer(
     private var sessionJob: Job? = null
     private var loadJob: Job? = null
 
+    /** The local player's side, when the player has one: see [HandoffPlayer]. */
+    internal var handoff: Handoff? = null
+
     private var item: MediaItem? = null
     private var itemUid = Any()
 
@@ -103,9 +106,10 @@ internal class SessionPlayer(
             // The app's own session it keeps as it is; one the player opened ends.
             letGo(stop = owned != null)
             error = null
-            if (value != null) attach(value)
+            if (value != null) attach(value) else handBack()
             mutableConnection.value = if (value != null) Connection.Connected(value) else Connection.Idle(null, null)
             changed()
+            if (value != null) handoff?.attached()
         }
 
     override fun connect(
@@ -127,6 +131,7 @@ internal class SessionPlayer(
         giveUpConnecting()
         lastReceiver = null
         letGo(stop = true)
+        handBack()
         setItem(null, 0)
         mutableConnection.value = Connection.Idle(null, null)
         changed()
@@ -289,6 +294,7 @@ internal class SessionPlayer(
                         connecting = null
                         error = playbackException(e)
                         mutableConnection.value = Connection.Idle(receiver, e)
+                        handBack()
                         changed()
                         return@launch
                     }
@@ -297,6 +303,7 @@ internal class SessionPlayer(
                 attach(s)
                 mutableConnection.value = Connection.Connected(s)
                 changed()
+                handoff?.attached()
             }
     }
 
@@ -346,6 +353,13 @@ internal class SessionPlayer(
                 s.close()
             }
         }
+    }
+
+    /** With a local player, the cast that ended gives it the item, and this player is left empty. */
+    private fun handBack() {
+        val local = handoff ?: return
+        local.ended(item, position.get())
+        setItem(null, 0)
     }
 
     private fun setItem(
@@ -489,6 +503,7 @@ internal class SessionPlayer(
                         )
                     }
                 mutableConnection.value = Connection.Idle(s.receiver, AirkastException.Disconnected(event.cause))
+                handBack()
             }
 
             else -> {

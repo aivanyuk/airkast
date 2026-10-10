@@ -8,8 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -59,8 +59,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * Finds TVs, casts a URL to the one tapped, and shows what the TV reports. [player] is the
- * MediaController to [io.github.aivanyuk.airkast.sample.CastService], while one is connected.
+ * Plays a URL on the phone or casts it to the TV tapped, and shows what the TV reports. [player] is
+ * the MediaController to [io.github.aivanyuk.airkast.sample.CastService], while one is connected.
  */
 @Composable
 fun CastScreen(
@@ -93,7 +93,9 @@ fun CastScreen(
             maxLines = 3,
             modifier = Modifier.fillMaxWidth(),
         )
-        CastStatus(cast, connection, player, onPair = { cast.start(it, url, withPin = true) })
+        Button(onClick = { cast.playHere(url) }) { Text(stringResource(R.string.play_here)) }
+        PlayerControls(player)
+        CastStatus(cast, connection, onPair = { cast.start(it, url, withPin = true) })
         EventLog(log)
     }
 }
@@ -222,7 +224,6 @@ private fun AddressEntry(onConnect: (String) -> Unit) {
 private fun CastStatus(
     cast: Cast,
     state: Connection,
-    player: Player?,
     onPair: (Receiver) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -255,7 +256,6 @@ private fun CastStatus(
                     stringResource(R.string.casting, state.session.receiver.name),
                     style = MaterialTheme.typography.titleMedium,
                 )
-                PlayerControls(player)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { scope.launch { selected = cast.attempt { tracks() } } }) {
                         Text(stringResource(R.string.renditions))
@@ -316,7 +316,7 @@ private fun PinDialog(
     )
 }
 
-/** media3's controls over the MediaController, with no surface: the picture is on the TV. */
+/** media3's controls over the MediaController, on the phone's picture, which a cast moves to the TV. */
 @Composable
 private fun PlayerControls(player: Player?) {
     AndroidView(
@@ -325,7 +325,7 @@ private fun PlayerControls(player: Player?) {
         },
         update = { view -> view.player = player },
         onRelease = { view -> view.player = null },
-        modifier = Modifier.fillMaxWidth().height(140.dp),
+        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9),
     )
 }
 

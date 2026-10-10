@@ -27,6 +27,9 @@ import kotlin.time.Duration.Companion.seconds
  * device volume can be read but not set. What a `Player` has no place for, such as switching
  * tracks, the app takes from [session].
  *
+ * With a [Builder.localPlayer], it plays on the phone too: the app's own player plays until a cast
+ * starts and takes the item back when it ends, and a `MediaSession` over this player drives both.
+ *
  * Call it on its application looper, as any `Player`.
  */
 public interface AirkastPlayer : Player {
@@ -57,7 +60,8 @@ public interface AirkastPlayer : Player {
     /**
      * Ends the cast: stops the item on the receiver, which leaves its player, lets go of the
      * session, closing it if the player opened it, and clears the media item, which takes a
-     * `MediaSession`'s notification down. A connect in progress, or its PIN prompt, is given up.
+     * `MediaSession`'s notification down. With a [Builder.localPlayer], the item goes back to it
+     * instead. A connect in progress, or its PIN prompt, is given up.
      */
     public fun disconnect()
 
@@ -142,19 +146,36 @@ public interface AirkastPlayer : Player {
          */
         public var disconnectOnBack: Boolean = true
 
+        /**
+         * The player that plays while no cast does, such as the app's `ExoPlayer`, or null to play
+         * only on receivers. With one, the [AirkastPlayer] forwards to it until a session attaches,
+         * then stops it and plays its current item on the receiver from the position it reached.
+         * When the cast ends, by [AirkastPlayer.disconnect], BACK on the TV, a failure, or
+         * [AirkastPlayer.session] set to null, the item comes back to it paused at the position
+         * the receiver reached: the notification stays, and play resumes on the phone rather than
+         * connecting again. Commands, the timeline and the device info follow whichever plays, so
+         * one `MediaSession` serves both, and the video surface always goes to it. It runs on
+         * [looper], and releasing the [AirkastPlayer] releases it.
+         */
+        public var localPlayer: Player? = null
+
         /** Opens the sessions [connect] asks for; tests replace it. */
         internal var connector: Connector = airkast.connector()
 
         public fun build(): AirkastPlayer {
             require(positionPollInterval.isPositive()) { "The poll interval must be positive" }
-            return SessionPlayer(
-                looper = looper,
-                awake = if (keepAwake) KeepAwake(context) else null,
-                pollInterval = positionPollInterval,
-                streaming = streaming,
-                disconnectOnBack = disconnectOnBack,
-                connector = connector,
-            )
+            val remote =
+                SessionPlayer(
+                    looper = looper,
+                    awake = if (keepAwake) KeepAwake(context) else null,
+                    pollInterval = positionPollInterval,
+                    streaming = streaming,
+                    disconnectOnBack = disconnectOnBack,
+                    connector = connector,
+                )
+            val local = localPlayer ?: return remote
+            require(local.applicationLooper == looper) { "The local player runs on another looper" }
+            return HandoffPlayer(local, remote)
         }
     }
 }

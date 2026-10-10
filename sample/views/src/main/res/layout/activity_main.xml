@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- TVs found or typed in, the URL, the cast with media3's controls, and what the TV reports. -->
+<!-- TVs found or typed in, the URL, media3's player, the cast, and what the TV reports. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -104,6 +104,25 @@
                 android:text="@string/default_url" />
         </com.google.android.material.textfield.TextInputLayout>
 
+        <Button
+            android:id="@+id/play_here"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/play_here" />
+
+        <!-- media3's controls over the MediaController, always shown, on the phone's picture. While
+             casting, the picture is on the TV. -->
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/player_view"
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:layout_marginTop="8dp"
+            app:hide_on_touch="false"
+            app:show_buffering="never"
+            app:show_timeout="0"
+            app:use_artwork="false" />
+
         <TextView
             android:id="@+id/failure"
             android:layout_width="match_parent"
@@ -134,20 +153,6 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone">
-
-            <!-- media3's controls over the MediaController, always shown, with no surface: the
-                 picture is on the TV. -->
-            <androidx.media3.ui.PlayerView
-                android:id="@+id/player_view"
-                android:layout_width="match_parent"
-                android:layout_height="140dp"
-                android:layout_marginTop="8dp"
-                app:hide_on_touch="false"
-                app:show_buffering="never"
-                app:show_timeout="0"
-                app:shutter_background_color="@android:color/transparent"
-                app:surface_type="none"
-                app:use_artwork="false" />
 
             <LinearLayout
                 style="?attr/buttonBarStyle"

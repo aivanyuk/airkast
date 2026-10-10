@@ -15,6 +15,12 @@ caller sees adds its line under "Unreleased".
   `AwaitingPin` and `Connected`. BACK on the TV's remote ends a cast the player opened, unless
   `disconnectOnBack = false`. After a dropped cast, `prepare()` connects again. Setting
   `session` by hand works as before: the app keeps that session.
+- `AirkastPlayer.Builder.localPlayer`, as media3's `CastPlayer.Builder.setLocalPlayer`: the app's
+  own player, such as an `ExoPlayer`, plays until a cast starts. Its current item then moves to
+  the receiver at the position it reached, and comes back paused where the receiver left it when
+  the cast ends, by `disconnect()`, BACK, a failure or `session = null`. One `MediaSession` over
+  the `AirkastPlayer` serves both, and the video surface stays with the local player. The sample
+  apps play on the phone and hand over.
 - Pairing with a PIN: `airkast.connect(receiver) { pin }` pairs a receiver that asks for a PIN on
   its first connect, keeps the `Credentials` in the client's `CredentialStore`, and proves the
   pairing on every connect after. `airkast.pair(receiver) { pin }` pairs one that asks without

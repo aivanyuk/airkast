@@ -13,11 +13,13 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public final fun build ()Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
 	public final fun getDisconnectOnBack ()Z
 	public final fun getKeepAwake ()Z
+	public final fun getLocalPlayer ()Landroidx/media3/common/Player;
 	public final fun getLooper ()Landroid/os/Looper;
 	public final fun getPositionPollInterval-UwyO8pc ()J
 	public final fun getStreaming ()Z
 	public final fun setDisconnectOnBack (Z)V
 	public final fun setKeepAwake (Z)V
+	public final fun setLocalPlayer (Landroidx/media3/common/Player;)V
 	public final fun setLooper (Landroid/os/Looper;)V
 	public final fun setPositionPollInterval-LRDsOJo (J)V
 	public final fun setStreaming (Z)V

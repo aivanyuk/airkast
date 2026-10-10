@@ -6,8 +6,8 @@
 | --- | --- | --- | --- |
 | `:core` | `airkast-core` | The protocol: pairing, the session, its commands and events. Plain JVM | kotlin-stdlib, kotlinx-coroutines-core |
 | `:android` | `airkast-android` | Discovery through `NsdManager`, the local network permission, binding to the receiver's network, and `Airkast(context)`, a client with those as its defaults | `:core` |
-| `:media3` | `airkast-media3` | `AirkastPlayer`, a media3 `Player` that runs a cast through an `Airkast`, so a media3 UI and `MediaSession` drive a receiver, and the wake and Wi-Fi locks a cast needs | `:core`, media3-common, kotlinx-coroutines-android |
-| `:sample:cast` | none | The reference integration: `Cast` builds the app's `Airkast` and `AirkastPlayer`, and `CastService` puts a `MediaSession` over the player | `:android`, `:media3` |
+| `:media3` | `airkast-media3` | `AirkastPlayer`, a media3 `Player` that runs a cast through an `Airkast`, so a media3 UI and `MediaSession` drive a receiver, hands the item to and from the app's local player, and holds the wake and Wi-Fi locks a cast needs | `:core`, media3-common, kotlinx-coroutines-android |
+| `:sample:cast` | none | The reference integration: `Cast` builds the app's `Airkast` and an `AirkastPlayer` over an `ExoPlayer`, and `CastService` puts a `MediaSession` over the player | `:android`, `:media3`, media3-exoplayer |
 | `:sample:compose`, `:sample:views` | none | The sample apps: one screen over `Cast`, in Compose and in views | `:sample:cast` |
 
 Modules depend on `:core` and never on each other. An app that draws its own controls doesn't
@@ -27,8 +27,9 @@ level for one thing and keep the rest.
    pairings in its `CredentialStore`. Its builder holds every option, and `copy { }` makes a
    variant. `Airkast(context)` in `:android` builds the same class with Android's defaults.
 3. **`AirkastPlayer`**: a media3 `Player` that runs a cast through a client: the connect, the
-   PIN, BACK on the TV's remote and the end, with a `connection` flow for the UI. Setting its
-   `session` by hand steps down to level 1 and keeps the player.
+   PIN, BACK on the TV's remote and the end, with a `connection` flow for the UI. With a local
+   player, it plays on the phone between casts. Setting its `session` by hand steps down to
+   level 1 and keeps the player.
 
 A default lives in the level that knows it: Android's in `Airkast(context)`, the player's in
 `AirkastPlayer.Builder`, the protocol's in the session. Each one is a builder property an app
@@ -111,7 +112,8 @@ The protocol facts, with the receivers they were seen on, are in
 - A session never reconnects by itself. Whether to reconnect depends on whether the user still
   wants the cast, which only the app knows. A later `ReconnectPolicy` may change this, as an
   option. `AirkastPlayer` connects again on `prepare()` after a cast it opened dropped, since that
-  is media3's retry, which only the user starts.
+  is media3's retry, which only the user starts. With a local player, the item goes back to the
+  phone instead, and `prepare()` plays it there.
 
 ## The media3 player
 
@@ -133,6 +135,15 @@ internal and no unstable type reaches airkast's API dump.
 - **`disconnect` clears the item.** The player offers no `COMMAND_CHANGE_MEDIA_ITEMS`, so media3's
   `clearMediaItems()` does nothing on it. `disconnect` clears the item itself, which takes a
   `MediaSession`'s notification down: media3 keeps one up for an idle player that has played.
+  With a local player, the item goes to it instead, and the notification stays.
+- **A local player, as `CastPlayer` has one.** With `localPlayer`, `build()` returns
+  `HandoffPlayer`, a `ForwardingSimpleBasePlayer` over the local player or `SessionPlayer`,
+  whichever plays. `SessionPlayer` tells it when a session has attached, once its state shows
+  the session, and when a cast has ended, before it lets go of the item, so a handoff never
+  shows an empty player in between. Only the current item moves: the local player keeps its
+  playlist, unless the cast moved on to another item. The item comes back paused, since a cast
+  may end with nobody at the phone, by BACK on the TV or a dropped network. The video surface
+  always goes to the local player, so one set during a cast is there when it ends.
 - **It connects through `Airkast`, never `airkast-android`.** The app passes the client in, so
   `:media3` depends on `:core` alone.
 - **Locks follow the state.** A partial wake lock and a Wi-Fi lock are held while a session is
