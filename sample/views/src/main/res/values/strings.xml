@@ -13,6 +13,7 @@
     <string name="connect">Connect</string>
     <string name="url_title">Video URL (HLS, with CORS headers)</string>
     <string name="default_url" translatable="false">https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8</string>
+    <string name="play_here">Play on this phone</string>
     <string name="typed_in">Typed in</string>
 
     <string name="receiver_detail">%1$s · %2$s</string>

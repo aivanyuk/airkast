@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Receiver
@@ -23,10 +24,10 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * One cast for the whole process: the [AirkastPlayer] that [CastService]'s MediaSession and the
- * UI's controls drive. The player connects, asks for a PIN, plays and ends the cast itself, and
- * [AirkastPlayer.connection] says where it stands; this adds a log of what the TV reported. Call it
- * on the main thread.
+ * One player for the whole process: the [AirkastPlayer] that [CastService]'s MediaSession and the
+ * UI's controls drive. It plays on the phone through an ExoPlayer until a cast starts, connects,
+ * asks for a PIN, moves the item to the TV and back, and [AirkastPlayer.connection] says where it
+ * stands; this adds a log of what the TV reported. Call it on the main thread.
  */
 class Cast(
     context: Context,
@@ -40,7 +41,7 @@ class Cast(
      */
     val airkast = Airkast(context) { logger = { Log.d(TAG, it) } }
 
-    val player: AirkastPlayer = AirkastPlayer(context, airkast)
+    val player: AirkastPlayer = AirkastPlayer(context, airkast) { localPlayer = ExoPlayer.Builder(context).build() }
 
     private val mutableLog = MutableStateFlow<List<String>>(emptyList())
 
@@ -63,17 +64,34 @@ class Cast(
     }
 
     /**
-     * Plays [url] on [receiver], ending the cast before. A receiver that asks for a PIN, or any
-     * receiver when [withPin] is set, pairs first unless it paired before.
+     * Plays [url] on [receiver], from where the phone was in it, ending the cast before. A
+     * receiver that asks for a PIN, or any receiver when [withPin] is set, pairs first unless it
+     * paired before.
      */
     fun start(
         receiver: Receiver,
         url: String,
         withPin: Boolean = false,
     ) {
-        player.connect(receiver, withPin)
-        player.setMediaItem(MediaItem.fromUri(url))
+        show(url)
+        // The phone stops while the TV connects, and the TV plays from where it stopped.
+        player.stop()
         player.playWhenReady = true
+        player.connect(receiver, withPin)
+    }
+
+    /** Plays [url] on the phone, from where the TV was in it when casting. */
+    fun playHere(url: String) {
+        player.disconnect()
+        show(url)
+        player.prepare()
+        player.play()
+    }
+
+    /** Makes [url] the item unless it is already, so moving it between phone and TV keeps its position. */
+    private fun show(url: String) {
+        val current = player.currentMediaItem?.localConfiguration
+        if (current?.uri?.toString() != url) player.setMediaItem(MediaItem.fromUri(url))
     }
 
     /** Runs [block] on the session, or notes why it failed. Every failure is an [AirkastException]. */

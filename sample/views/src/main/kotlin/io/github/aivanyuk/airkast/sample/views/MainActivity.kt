@@ -37,9 +37,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
- * Finds TVs, casts a URL to the one tapped, and shows what the TV reports: the Compose flavor's
- * `CastScreen`, in views. It runs over the process's [Cast], and holds a MediaController to
- * [CastService] while shown, for media3's controls in the layout.
+ * Plays a URL on the phone or casts it to the TV tapped, and shows what the TV reports: the Compose
+ * flavor's `CastScreen`, in views. It runs over the process's [Cast], and holds a MediaController
+ * to [CastService] while shown, for media3's player in the layout.
  */
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -75,6 +75,7 @@ class MainActivity : AppCompatActivity() {
                 url(),
             )
         }
+        binding.playHere.setOnClickListener { cast.playHere(url()) }
         binding.tracks.setOnClickListener { lifecycleScope.launch { cast.attempt { tracks() }?.let(::showTracks) } }
         binding.info.setOnClickListener {
             lifecycleScope.launch { cast.attempt { "${playbackInfo()}\nvolume ${volume()}" }?.let(::showInfo) }

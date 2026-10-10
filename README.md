@@ -9,7 +9,8 @@ smart TVs with an AirPlay 2 receiver built in.
 - **`airkast-android`**: receiver discovery through `NsdManager`, Android 17's local network
   permission, and connections bound to the network the receiver is on.
 - **`airkast-media3`**: `AirkastPlayer`, a media3 `Player` that runs a whole cast, so media3's UI
-  and a `MediaSession` drive the TV. It keeps the phone awake while a cast plays.
+  and a `MediaSession` drive the TV. Given the app's own player, it plays on the phone too, and
+  moves the item to the TV and back. It keeps the phone awake while a cast plays.
 
 ## Status
 
@@ -79,6 +80,16 @@ dropped connection, `prepare()`, which a notification's play button calls, conne
 picks up where the cast left off. An app that opens its own sessions sets `player.session`
 instead, and keeps them: the player then only plays.
 
+An app that plays on the phone too hands the player its own, as media3's `CastPlayer` takes one:
+
+```kotlin
+val player = AirkastPlayer(context, airkast) { localPlayer = ExoPlayer.Builder(context).build() }
+```
+
+The ExoPlayer plays until a cast starts. Then the item moves to the TV from the position it
+reached, and when the cast ends it comes back, paused where the TV left it. Commands, the
+timeline and the device info follow whichever plays, so one `MediaSession` serves both.
+
 ### A client, configured once
 
 `Airkast(context)` names the sender after the app's label, checks Android 17's local network
@@ -145,7 +156,8 @@ in Compose and one in views, so a reader in either toolkit sees the same calls i
 
 - [`sample/cast`](sample/cast) is the integration, which both apps drive.
   [`Cast.kt`](sample/cast/src/main/kotlin/io/github/aivanyuk/airkast/sample/Cast.kt) builds the
-  app's `Airkast` and the `AirkastPlayer` that runs the cast, and keeps a log of what the TV says;
+  app's `Airkast` and the `AirkastPlayer` that plays on the phone and runs the cast, and keeps a
+  log of what the TV says;
   [`CastService.kt`](sample/cast/src/main/kotlin/io/github/aivanyuk/airkast/sample/CastService.kt)
   puts a `MediaSession` over it, for the notification and the lock screen.
 - [`sample/compose`](sample/compose) is one screen in Compose over `Cast`: its flows, the
