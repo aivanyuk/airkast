@@ -20,8 +20,16 @@ public class Receiver(
     /** Whether this library can play on the receiver, and if not, why. */
     public val compatibility: Compatibility get() = compatibilityOf(features, statusFlags, properties)
 
-    /** `compatibility == Supported`. A receiver typed in by hand is [Compatibility.Unknown], not supported. */
-    public val isSupported: Boolean get() = compatibility == Compatibility.Supported
+    /**
+     * Whether airkast can play on it, so a picker lists it: [Compatibility.Supported], or
+     * [Compatibility.NeedsPin]. A `NeedsPin` receiver plays only once the caller has paired with
+     * it: [Airkast.pair] first, then [Airkast.connect] with the [Credentials] in
+     * [SessionOptions.credentials]. A plain connect to it fails with
+     * [AirkastException.PairingFailed]. A receiver typed in by hand is [Compatibility.Unknown],
+     * not supported.
+     */
+    public val isSupported: Boolean
+        get() = compatibility == Compatibility.Supported || compatibility == Compatibility.NeedsPin
 
     public val model: String? get() = properties["model"]
     public val deviceId: String? get() = properties["deviceid"]
@@ -43,6 +51,9 @@ public class Receiver(
         private const val PIN_REQUIRED = 0x8L
         private const val PASSWORD_REQUIRED = 0x80L
 
+        /** `act`, the access control type: pyatv reads 2 as a Mac's "Current User". */
+        private const val ACCESS_CURRENT_USER = "2"
+
         internal fun compatibilityOf(
             features: Long,
             flags: Long,
@@ -56,6 +67,10 @@ public class Receiver(
 
                 !has(VIDEO_V2) -> {
                     if (has(VIDEO_V1)) Compatibility.VideoV1Only else Compatibility.NoVideo
+                }
+
+                properties["act"] == ACCESS_CURRENT_USER -> {
+                    Compatibility.AccessRestricted
                 }
 
                 properties["pw"].equals("true", ignoreCase = true) || flags and PASSWORD_REQUIRED != 0L -> {
@@ -107,11 +122,21 @@ public enum class Compatibility {
     /** No TXT record to read, as for a receiver typed in by hand. Connecting is the only test. */
     Unknown,
 
-    /** Asks for a PIN shown on its screen, which this version cannot enter. */
+    /**
+     * Asks for a PIN shown on its screen: [Airkast.pair] once, then connect with the [Credentials]
+     * it returns in [SessionOptions.credentials].
+     */
     NeedsPin,
 
     /** Asks for a password set on the receiver, which this version cannot send. */
     NeedsPassword,
+
+    /**
+     * Lets in only the devices of its owner's Apple Account, which no third-party sender can be:
+     * a Mac's AirPlay Receiver set to "Current User", its default. Setting it to "Anyone on the
+     * same network" or "Everyone" changes that.
+     */
+    AccessRestricted,
 
     /** Speaks AirPlay video v2 but advertises no transient pairing, the only kind this version does. */
     NoTransientPairing,

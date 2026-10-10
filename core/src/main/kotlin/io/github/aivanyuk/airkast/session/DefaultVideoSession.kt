@@ -1,6 +1,7 @@
 package io.github.aivanyuk.airkast.session
 
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.Credentials
 import io.github.aivanyuk.airkast.PlaybackInfo
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
@@ -470,27 +471,20 @@ internal class DefaultVideoSession private constructor(
             identity: SenderIdentity,
             options: SessionOptions,
         ): VideoSession {
-            options.logger?.invoke(
-                "receiver ${receiver.model} srcvers ${receiver.sourceVersion} " +
-                    "features 0x${receiver.features.toString(16)} ${receiver.compatibility}",
-            )
-            val socket =
-                connect(InetSocketAddress(receiver.host, receiver.port), options).apply {
-                    soTimeout = options.requestTimeout.inWholeMilliseconds.toInt()
-                    tcpNoDelay = true
-                }
-            val control = ControlConnection(socket, identity) { options.logger?.invoke(it) }
+            val control = control(receiver, identity, options)
             var timing: TimingResponder? = null
             var session: DefaultVideoSession? = null
             try {
-                val sessionKey = TransientPairing.pair(control)
+                val credentials = options.credentials
+                val sessionKey =
+                    if (credentials != null) PairVerify.verify(control, credentials) else TransientPairing.pair(control)
                 control.encrypt(
                     Hkdf.sha512(sessionKey, "Control-Salt", "Control-Write-Encryption-Key"),
                     Hkdf.sha512(sessionKey, "Control-Salt", "Control-Read-Encryption-Key"),
                 )
-                options.logger?.invoke("paired")
+                options.logger?.invoke(if (credentials != null) "verified" else "paired")
                 if (options.ntpTiming) {
-                    timing = TimingResponder(socket.localAddress, socket.inetAddress) { options.logger?.invoke(it) }
+                    timing = TimingResponder(control.localAddress, control.remoteAddress) { options.logger?.invoke(it) }
                 }
                 session = DefaultVideoSession(receiver, options, control, timing)
                 session.start(identity, sessionKey)
@@ -500,14 +494,60 @@ internal class DefaultVideoSession private constructor(
                 runCatching { session?.close() }
                 runCatching { timing?.close() }
                 runCatching { control.close() }
-                throw when (e) {
-                    is AirkastException -> e
-                    is LateReply -> AirkastException.Timeout(e.message.orEmpty())
-                    is IOException -> AirkastException.Disconnected(e)
-                    else -> AirkastException.UnexpectedReply(e)
-                }
+                throw failure(e)
             }
         }
+
+        /** Shows a PIN on [receiver] and takes it over the connection the pairing then finishes on. */
+        fun startPairing(
+            receiver: Receiver,
+            identity: SenderIdentity,
+            options: SessionOptions,
+        ): PinPairing {
+            val control = control(receiver, identity, options)
+            try {
+                return PinPairing.start(control)
+            } catch (e: Exception) {
+                runCatching { control.close() }
+                throw failure(e)
+            }
+        }
+
+        /** [PinPairing.finish], failing as the rest of the API does. */
+        fun finishPairing(
+            pairing: PinPairing,
+            pin: String,
+        ): Credentials =
+            try {
+                pairing.finish(pin)
+            } catch (e: Exception) {
+                throw failure(e)
+            }
+
+        private fun control(
+            receiver: Receiver,
+            identity: SenderIdentity,
+            options: SessionOptions,
+        ): ControlConnection {
+            options.logger?.invoke(
+                "receiver ${receiver.model} srcvers ${receiver.sourceVersion} " +
+                    "features 0x${receiver.features.toString(16)} ${receiver.compatibility}",
+            )
+            val socket =
+                connect(InetSocketAddress(receiver.host, receiver.port), options).apply {
+                    soTimeout = options.requestTimeout.inWholeMilliseconds.toInt()
+                    tcpNoDelay = true
+                }
+            return ControlConnection(socket, identity) { options.logger?.invoke(it) }
+        }
+
+        private fun failure(e: Exception): AirkastException =
+            when (e) {
+                is AirkastException -> e
+                is LateReply -> AirkastException.Timeout(e.message.orEmpty())
+                is IOException -> AirkastException.Disconnected(e)
+                else -> AirkastException.UnexpectedReply(e)
+            }
 
         /** A connected socket, or [AirkastException.Unreachable]. */
         private fun connect(

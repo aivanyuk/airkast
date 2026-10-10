@@ -12,6 +12,8 @@ what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRI
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-08, at 8dd8c77 | desktop JVM 21 | `Supported`. Live test passes: start position, seek, pause, play, tracks, volume read, stop. A whole 51-minute episode to its end, position within 2 s of the wall clock |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-09, at c2ceb0f | desktop JVM 21 | `Supported`. Live test passes on a `streaming` item, now the default: start position, seek, pause (reported `Paused`), play, tracks read and subtitles off, volume read, stop. Probed the same day: for a `streaming` item tracks are read and switched (subtitles, audio with a rebuffer, subtitles off) on Apple's bipbop stream and on a kino.pub hls4 master; for a `file` item none are reported and a selection is ignored; a paused `streaming` item reads as `loading` with rate 0 |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-09, at be15526 | Xiaomi 2201117TY, Android 13, the sample app | `Supported`. Found by `ReceiverDiscovery`, cast and played the default stream through `AirkastPlayer`, by hand |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-10, before 0.3.0 | desktop JVM 21 (WSL) | `Supported` with `ntpTiming = true`. Live test passes: start position, seek, pause, play, tracks switched, stop |
+| MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app with `ntpTiming = true` | Plays with NTP timing, set to "Anyone on the same network". Transient pairing, load, play, pause from the Mac, the next item, tracks read and switched (closed captions, subtitles, subtitles off), playback info, stop, by hand. At "Current User" transient pairing is refused |
 
 ### How `Receiver.compatibility` decides
 
@@ -22,13 +24,28 @@ From the `_airplay._tcp` TXT record, in this order. Bit numbers follow pyatv's `
 | `Unknown` | No TXT record: typed in by hand | any |
 | `NoVideo` | No video v2 (feature bit 49) and no video v1 (bit 0) | speakers; mirroring-only receivers |
 | `VideoV1Only` | Video v1 without v2 | older Apple TVs; some third-party receivers |
+| `AccessRestricted` | `act=2`, which pyatv reads as "Current User" | a Mac's AirPlay Receiver at its default, "Current User" |
 | `NeedsPassword` | `pw=true`, or status flag `0x80` | a receiver with a password set |
-| `NeedsPin` | Status flag `0x8` | a receiver set to require a code |
+| `NeedsPin` | Status flag `0x8`. `Airkast.pair` once, then connect with the `Credentials` | a receiver set to require a code |
 | `NoTransientPairing` | Neither system pairing (bit 43) nor CoreUtils pairing (bit 48) | none seen yet |
 | `Supported` | Anything else | the LG CX |
 
 pyatv also reads status flag `0x200` as "pairing mandatory". The LG CX sets it (flags `0x244`) and
-pairs without a PIN, so airkast ignores it.
+pairs without a PIN, so airkast ignores it. A receiver may also ask for a PIN without flag `0x8`;
+transient pairing then fails with `PairingFailed`, and pairing with a PIN is the caller's choice
+(the sample offers it).
+
+### Pairing
+
+| How | When | Wire |
+| --- | --- | --- |
+| Transient | Every connect without credentials | `X-Apple-HKP: 4`, pair-setup M1 to M4 with the transient flag and PIN 3939 |
+| With a PIN | `Airkast.pair` | `X-Apple-HKP: 3`, `/pair-pin-start` shows the PIN, pair-setup M1 to M6: SRP, then Ed25519 long-term keys exchanged under ChaCha20-Poly1305 |
+| Pair-verify | Every connect with `SessionOptions.credentials` | `X-Apple-HKP: 3`, `/pair-verify` M1 to M4: X25519, signed with both long-term keys |
+
+The PIN pairing and pair-verify follow pyatv's AirPlay HAP procedures, and `Credentials.encoded`
+is pyatv's credential string, `ltpk:ltsk:atv_id:client_id`. They are tested against
+`FakeReceiver` only: no receiver that asks for a PIN has been checked yet.
 
 ### LG CX (webOS 04.64.00)
 
@@ -36,7 +53,9 @@ pairs without a PIN, so airkast ignores it.
   video endpoint (`/play`, `/playback-info`, `/scrub`, `/reverse`) answers 404.
 - Before pairing, everything but `GET /info` answers 470. Transient pairing needs no PIN.
 - Without RECORD after the event channel opens, it plays but sends no events.
-- It never asks for NTP timing, so the sender needs no inbound UDP.
+- It plays with or without NTP timing. With `timingProtocol: NTP` its SETUP answer adds a
+  `timingPort`. No timing request was seen, but the one run with NTP (2026-10-10, the live test)
+  was from WSL, where Windows' firewall would have dropped them.
 - `Start-Position` must be a CMTime. `Start-Position-Seconds` is ignored.
 - A seek without the item's UUID and both tolerances is ignored.
 - `selectedMediaArray` lists the selected audio and subtitle renditions, and a `setProperty` on
@@ -57,11 +76,36 @@ pairs without a PIN, so airkast ignores it.
   A late answer therefore costs the sender one `Timeout`, and the session ends only if the
   receiver is still silent at the next request.
 
+### Mac (macOS AirPlay Receiver, 960.13.25)
+
+- Its "Allow AirPlay for" setting decides who gets in. At "Current User", the default, it lets in
+  only the owner's devices, which a third-party sender cannot be, and refuses transient pairing:
+  an iPhone on the owner's Apple Account casts, airkast cannot. pyatv reads that setting as TXT
+  `act=2` (`AccessRestricted`); the Mac's record at "Current User" is not checked yet. At "Anyone
+  on the same network" it pairs transiently without a PIN, and `GET /info` reports
+  `statusFlags = 4`. "Everyone" and "Require password" are not checked yet.
+- `GET /info` answers 403 without an AirPlay `User-Agent`.
+- It answers the base SETUP with 500 when `timingProtocol` is `None`. With `NTP` it asks for the
+  time three times, within a second, and answers 200 once it has it, then asks again every two to
+  three seconds for as long as the session lasts. A sender it cannot reach over UDP (WSL behind Windows' firewall, for
+  one) waits on an unanswered SETUP.
+- Its features are `0x4A7FCFD5,0x38174FDE`. Video v2 plays through the same `/command` flow as on
+  the LG, with the same events, and a `selectedMediaArrayChanged` notification after a track
+  switch.
+- Track ids follow the master's `EXT-X-MEDIA` order, but renditions that differ only in their
+  group appear to count once. On Apple's `bipbop_adv_example_hevc`, whose three English audio renditions
+  differ only in channels, the ids are audio 0, closed captions 1 (reported as `sbtl`, with
+  `TaggedMediaCharacteristics` for the hard of hearing) and subtitles 2. An id that names no
+  rendition, or one of another kind, is answered 200 and ignored.
+- With subtitles off, `selectedMediaArray` lists the audio rendition alone. The LG lists a forced
+  subtitle as well.
+
 ### Not checked yet
 
 - **Apple TV (tvOS).** send-airplay2 reports the same `/command` flow on tvOS 26, and that SETUP
-  stalls without NTP timing (`SessionOptions.ntpTiming`). It may ask for a PIN, depending on its
-  AirPlay access setting.
+  stalls without NTP timing (`SessionOptions.ntpTiming`, on by default). Depending on its AirPlay access setting
+  it may ask for a PIN once (`Airkast.pair`), or, set to "Only people sharing this home", let in
+  only members of its Home.
 - **Other TVs with AirPlay 2** (Samsung, Sony, Vizio, Roku, other LG years): whatever their TXT
   record says. A report with the record, the firmware and the live test's result is welcome.
 
@@ -91,6 +135,9 @@ who granted Bluetooth's nearby devices permission is not asked again.
 
 ### Networks
 
+- **Inbound UDP.** With `ntpTiming` on, the default, the receiver sends timing requests to the
+  sender over UDP. A sender behind a firewall that drops them, such as WSL behind Windows'
+  firewall, gets a SETUP that a Mac never answers. A phone on the receiver's Wi-Fi is reachable.
 - **Wi-Fi without internet.** Android may keep mobile data as the default network, and a socket
   that is not bound to Wi-Fi then goes over mobile data and times out. `Airkast.connect(context,
   …)` binds the session to the Wi-Fi or Ethernet network whose subnet holds the receiver.

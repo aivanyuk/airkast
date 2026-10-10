@@ -64,10 +64,13 @@ class NetworkChoiceTest {
 
     @Test
     @Config(sdk = [37])
-    fun connectingFailsAtOnceWithoutTheLocalNetworkPermission() {
+    fun connectingAndPairingFailAtOnceWithoutTheLocalNetworkPermission() {
         app.applicationInfo.targetSdkVersion = 37
         assertThrows(AirkastException.NotPermitted::class.java) {
             runBlocking { Airkast.connect(app, Receiver("tv", "192.168.50.241")) }
+        }
+        assertThrows(AirkastException.NotPermitted::class.java) {
+            runBlocking { Airkast.pair(app, Receiver("tv", "192.168.50.241")) { error("No PIN is asked for") } }
         }
     }
 

@@ -1,6 +1,8 @@
 public final class io/github/aivanyuk/airkast/android/AirkastAndroid {
 	public static final fun connect (Lio/github/aivanyuk/airkast/Airkast;Landroid/content/Context;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/SenderIdentity;Lio/github/aivanyuk/airkast/SessionOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/Airkast;Landroid/content/Context;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/SenderIdentity;Lio/github/aivanyuk/airkast/SessionOptions;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun pair (Lio/github/aivanyuk/airkast/Airkast;Landroid/content/Context;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/SenderIdentity;Lio/github/aivanyuk/airkast/SessionOptions;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun pair$default (Lio/github/aivanyuk/airkast/Airkast;Landroid/content/Context;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/SenderIdentity;Lio/github/aivanyuk/airkast/SessionOptions;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class io/github/aivanyuk/airkast/android/LocalNetwork {

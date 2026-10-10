@@ -5,12 +5,18 @@ import java.io.ByteArrayOutputStream
 /** HomeKit's TLV8: a value longer than 255 bytes goes as consecutive fragments of one type. */
 internal object Tlv8 {
     const val METHOD = 0x00
+    const val IDENTIFIER = 0x01
     const val SALT = 0x02
     const val PUBLIC_KEY = 0x03
     const val PROOF = 0x04
+    const val ENCRYPTED_DATA = 0x05
     const val SEQUENCE = 0x06
     const val ERROR = 0x07
+    const val SIGNATURE = 0x0A
     const val FLAGS = 0x13
+
+    /** The [ERROR] a receiver answers a wrong PIN with. */
+    const val ERROR_AUTHENTICATION = 2
 
     const val FLAG_TRANSIENT = 0x10
 

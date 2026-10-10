@@ -112,6 +112,14 @@
             android:textColor="?attr/colorError"
             android:visibility="gone" />
 
+        <!-- After a refused pairing or a wrong PIN: pairs with the PIN the TV shows. -->
+        <Button
+            android:id="@+id/pair_with_pin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/pair_with_pin"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/status"
             android:layout_width="match_parent"

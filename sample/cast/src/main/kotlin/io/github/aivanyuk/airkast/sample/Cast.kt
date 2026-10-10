@@ -7,13 +7,17 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.Compatibility
+import io.github.aivanyuk.airkast.Credentials
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.SessionOptions
 import io.github.aivanyuk.airkast.VideoSession
 import io.github.aivanyuk.airkast.android.connect
+import io.github.aivanyuk.airkast.android.pair
 import io.github.aivanyuk.airkast.media3.AirkastPlayer
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,12 +30,18 @@ import java.util.Date
 import java.util.Locale
 
 sealed interface CastState {
-    /** Not casting. [failure] says why the last cast ended, when it failed. */
+    /** Not casting. [failure] says why the last cast to [receiver] ended, when it failed. */
     data class Idle(
         val failure: AirkastException? = null,
+        val receiver: Receiver? = null,
     ) : CastState
 
     data class Connecting(
+        val receiver: Receiver,
+    ) : CastState
+
+    /** [receiver] shows a PIN: [Cast.enterPin] or [Cast.cancelPin]. */
+    data class AwaitingPin(
         val receiver: Receiver,
     ) : CastState
 
@@ -61,6 +71,10 @@ class Cast(
     val log: StateFlow<List<String>> = mutableLog.asStateFlow()
 
     private var following: Job? = null
+    private var pin: CompletableDeferred<String>? = null
+
+    /** What pairing with a PIN left, by receiver. A real app keeps them where it keeps secrets. */
+    private val pairings = context.getSharedPreferences("pairings", Context.MODE_PRIVATE)
 
     init {
         player.addListener(
@@ -71,25 +85,37 @@ class Cast(
     }
 
     /**
-     * Pairs with [receiver] and plays [url] on it, ending the cast before. A connect runs to its end:
-     * it is not cancelled, so the session it opens is never left open and unreferenced.
+     * Pairs with [receiver] and plays [url] on it, ending the cast before. A receiver that asks for
+     * a PIN, or any receiver when [withPin] is set, pairs with one first, unless it paired before.
+     * A connect runs to its end: it is not cancelled, so the session it opens is never left open
+     * and unreferenced.
      */
     fun start(
         receiver: Receiver,
         url: String,
+        withPin: Boolean = false,
     ) {
-        if (state.value is CastState.Connecting) return
+        if (state.value is CastState.Connecting || state.value is CastState.AwaitingPin) return
         val previous = (state.value as? CastState.Casting)?.session
         mutableState.value = CastState.Connecting(receiver)
         scope.launch {
             previous?.let { end(it) }
+            val stored = pairings.getString(key(receiver), null)?.let(Credentials::decode)
             val session =
                 try {
+                    val credentials =
+                        if (stored == null && (withPin || receiver.compatibility == Compatibility.NeedsPin)) {
+                            pair(receiver)
+                        } else {
+                            stored
+                        }
                     // Checks Android 17's local network permission, and binds the session to the
                     // Wi-Fi the receiver is on, off mobile data and out of a VPN.
-                    Airkast.connect(context, receiver, IDENTITY, OPTIONS)
+                    Airkast.connect(context, receiver, IDENTITY, OPTIONS.copy { this.credentials = credentials })
                 } catch (e: AirkastException) {
-                    mutableState.value = CastState.Idle(e)
+                    // A receiver that refuses its credentials has forgotten this sender: pair again.
+                    if (e is AirkastException.PairingFailed && stored != null) forget(receiver)
+                    mutableState.value = CastState.Idle(e, receiver)
                     return@launch
                 }
             mutableState.value = CastState.Casting(session)
@@ -99,6 +125,19 @@ class Cast(
             // Attaching the session loads the item on the TV.
             player.session = session
         }
+    }
+
+    /** The PIN the TV shows, for [CastState.AwaitingPin]. */
+    fun enterPin(code: String) {
+        pin?.complete(code)
+    }
+
+    /** Gives up the pairing that [CastState.AwaitingPin] waits on. */
+    fun cancelPin() {
+        val receiver = (state.value as? CastState.AwaitingPin)?.receiver ?: return
+        mutableState.value = CastState.Idle(receiver = receiver)
+        // Cancels the start that waits for it, which closes the pairing's connection.
+        pin?.cancel()
     }
 
     /** Stops playback, which takes the TV out of its player, and closes the session. */
@@ -123,6 +162,22 @@ class Cast(
         val time = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
         mutableLog.update { (it + "$time $line").takeLast(LOG_LINES) }
     }
+
+    /** Pairs with [receiver] once, asking the UI for the PIN, and keeps what it leaves. */
+    private suspend fun pair(receiver: Receiver): Credentials {
+        val credentials =
+            Airkast.pair(context, receiver, IDENTITY, OPTIONS) {
+                val code = CompletableDeferred<String>().also { pin = it }
+                mutableState.value = CastState.AwaitingPin(receiver)
+                code.await().also { mutableState.value = CastState.Connecting(receiver) }
+            }
+        pairings.edit().putString(key(receiver), credentials.encoded).apply()
+        return credentials
+    }
+
+    private fun forget(receiver: Receiver) = pairings.edit().remove(key(receiver)).apply()
+
+    private fun key(receiver: Receiver) = receiver.deviceId ?: receiver.host
 
     private suspend fun end(session: VideoSession) {
         following?.cancel()
