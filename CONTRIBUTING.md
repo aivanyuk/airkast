@@ -71,8 +71,8 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
   holds a media URL, a key or anything a pairing derives.
 - **No new runtime dependency** in `airkast-core` beyond the Kotlin standard library and
   kotlinx-coroutines. `airkast-android` adds only the Android platform. `airkast-media3` adds
-  media3-common and kotlinx-coroutines-android, and uses media3's unstable API only in internal
-  classes.
+  media3-common, media3-session and kotlinx-coroutines-android, and uses media3's unstable API
+  only in internal classes.
 
 ## Compatibility floors
 

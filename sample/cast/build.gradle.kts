@@ -38,7 +38,6 @@ dependencies {
     // airkast-media3 likewise.
     api(project(":android"))
     api(project(":media3"))
-    api(libs.androidx.media3.session)
     // The phone's own player, which the AirkastPlayer hands the item to and from.
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.exoplayer.hls)

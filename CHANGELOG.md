@@ -8,6 +8,11 @@ caller sees adds its line under "Unreleased".
 
 ### Added
 
+- `AirkastSessionService`, a `MediaSessionService` over the app's `AirkastPlayer`, which keeps a
+  cast going with the app in the background: subclass it with the player and declare it in the
+  manifest. Its notification has a Stop casting button while a cast is on, and it releases only
+  the session, never the player. `sessionActivity()` and `buildSession(builder)` change the
+  session. `airkast-media3` now depends on media3-session, and the sample's `CastService` is one.
 - `AirkastPlayer` runs a whole cast: `connect(receiver)` opens a session through the app's
   `Airkast`, asks for a PIN when the receiver needs one (`connection` turns `AwaitingPin` until
   `enterPin`), plays the media item, and `disconnect()` stops the TV's player, closes the session

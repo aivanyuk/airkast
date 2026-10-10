@@ -10,7 +10,8 @@ smart TVs with an AirPlay 2 receiver built in.
   permission, and connections bound to the network the receiver is on.
 - **`airkast-media3`**: `AirkastPlayer`, a media3 `Player` that runs a whole cast, so media3's UI
   and a `MediaSession` drive the TV. Given the app's own player, it plays on the phone too, and
-  moves the item to the TV and back. It keeps the phone awake while a cast plays.
+  moves the item to the TV and back. It keeps the phone awake while a cast plays, and
+  `AirkastSessionService` keeps it going with the app in the background.
 
 ## Status
 
@@ -90,6 +91,34 @@ The ExoPlayer plays until a cast starts. Then the item moves to the TV from the 
 reached, and when the cast ends it comes back, paused where the TV left it. Commands, the
 timeline and the device info follow whichever plays, so one `MediaSession` serves both.
 
+`AirkastSessionService` is that `MediaSession`, in a `MediaSessionService`: media3 runs it in the
+foreground while the player plays, which keeps a cast going with the app in the background, and
+its notification has a Stop casting button while a cast is on. The app subclasses it with its
+player, which outlives the service:
+
+```kotlin
+class PlaybackService : AirkastSessionService() {
+    override val player get() = (application as App).player
+}
+```
+
+```xml
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+<service
+    android:name=".PlaybackService"
+    android:exported="true"
+    android:foregroundServiceType="mediaPlayback">
+    <intent-filter>
+        <action android:name="androidx.media3.session.MediaSessionService" />
+    </intent-filter>
+</service>
+```
+
+Overriding `sessionActivity()` changes what tapping the notification opens, the app's launcher
+activity by default, and `buildSession(builder)` sets anything else on the session.
+
 ### A client, configured once
 
 `Airkast(context)` names the sender after the app's label, checks Android 17's local network
@@ -159,7 +188,7 @@ in Compose and one in views, so a reader in either toolkit sees the same calls i
   app's `Airkast` and the `AirkastPlayer` that plays on the phone and runs the cast, and keeps a
   log of what the TV says;
   [`CastService.kt`](sample/cast/src/main/kotlin/io/github/aivanyuk/airkast/sample/CastService.kt)
-  puts a `MediaSession` over it, for the notification and the lock screen.
+  is the `AirkastSessionService` over it, for the notification and the lock screen.
 - [`sample/compose`](sample/compose) is one screen in Compose over `Cast`: its flows, the
   player's `connection` among them, are
   collected with `collectAsStateWithLifecycle`, and media3's `PlayerView` sits in an `AndroidView`.

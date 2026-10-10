@@ -62,3 +62,13 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayerKt {
 	public static synthetic fun AirkastPlayer$default (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
 }
 
+public abstract class io/github/aivanyuk/airkast/media3/AirkastSessionService : androidx/media3/session/MediaSessionService {
+	public fun <init> ()V
+	protected fun buildSession (Landroidx/media3/session/MediaSession$Builder;)Landroidx/media3/session/MediaSession;
+	protected abstract fun getPlayer ()Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
+	public fun onCreate ()V
+	public fun onDestroy ()V
+	public fun onGetSession (Landroidx/media3/session/MediaSession$ControllerInfo;)Landroidx/media3/session/MediaSession;
+	protected fun sessionActivity ()Landroid/app/PendingIntent;
+}
+
