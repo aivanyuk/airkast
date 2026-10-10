@@ -37,6 +37,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -46,6 +48,7 @@ import androidx.media3.ui.PlayerView
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.Receiver
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
 import io.github.aivanyuk.airkast.android.LocalNetwork
@@ -95,7 +98,7 @@ fun CastScreen(
         )
         Button(onClick = { cast.playHere(url) }) { Text(stringResource(R.string.play_here)) }
         PlayerControls(player)
-        CastStatus(cast, connection, onPair = { cast.start(it, url, withPin = true) })
+        CastStatus(cast, connection, onPair = { receiver, secret -> cast.start(receiver, url, pairWith = secret) })
         EventLog(log)
     }
 }
@@ -224,7 +227,7 @@ private fun AddressEntry(onConnect: (String) -> Unit) {
 private fun CastStatus(
     cast: Cast,
     state: Connection,
-    onPair: (Receiver) -> Unit,
+    onPair: (Receiver, Secret) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<List<Track>?>(null) }
@@ -233,12 +236,19 @@ private fun CastStatus(
         when (state) {
             is Connection.Idle -> {
                 state.failure?.let { Text(describe(it), color = MaterialTheme.colorScheme.error) }
-                // A receiver may ask for a PIN without saying so in its TXT record.
+                // A receiver may ask for a PIN or password without saying so in its TXT record.
                 val receiver = state.receiver
                 val refused =
-                    state.failure is AirkastException.PairingFailed || state.failure is AirkastException.PinRejected
+                    state.failure is AirkastException.PairingFailed || state.failure is AirkastException.SecretRejected
                 if (receiver != null && refused) {
-                    Button(onClick = { onPair(receiver) }) { Text(stringResource(R.string.pair_with_pin)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { onPair(receiver, Secret.Pin) }) {
+                            Text(stringResource(R.string.pair_with_pin))
+                        }
+                        Button(onClick = { onPair(receiver, Secret.Password) }) {
+                            Text(stringResource(R.string.pair_with_password))
+                        }
+                    }
                 }
             }
 
@@ -246,9 +256,14 @@ private fun CastStatus(
                 Text(stringResource(R.string.connecting, state.receiver.name))
             }
 
-            is Connection.AwaitingPin -> {
-                Text(stringResource(R.string.awaiting_pin, state.receiver.name))
-                PinDialog(state.receiver, onEnter = cast.player::enterPin, onDismiss = cast.player::disconnect)
+            is Connection.AwaitingSecret -> {
+                Text(stringResource(R.string.awaiting_secret, state.receiver.name))
+                SecretDialog(
+                    state.receiver,
+                    state.secret,
+                    onEnter = cast.player::enterSecret,
+                    onDismiss = cast.player::disconnect,
+                )
             }
 
             is Connection.Connected -> {
@@ -289,24 +304,28 @@ private fun CastStatus(
     }
 }
 
-/** The PIN [receiver] shows on its screen, typed in once to pair. */
+/** The PIN [receiver] shows on its screen, or the password set on it, typed in once to pair. */
 @Composable
-private fun PinDialog(
+private fun SecretDialog(
     receiver: Receiver,
+    secret: Secret,
     onEnter: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var code by rememberSaveable { mutableStateOf("") }
+    val pin = secret == Secret.Pin
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.pin_title, receiver.name)) },
+        title = { Text(stringResource(if (pin) R.string.pin_title else R.string.password_title, receiver.name)) },
         text = {
             OutlinedTextField(
                 value = code,
-                onValueChange = { code = it.filter(Char::isDigit) },
-                label = { Text(stringResource(R.string.pin_hint)) },
+                onValueChange = { code = if (pin) it.filter(Char::isDigit) else it },
+                label = { Text(stringResource(if (pin) R.string.pin_hint else R.string.password_hint)) },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = if (pin) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions =
+                    KeyboardOptions(keyboardType = if (pin) KeyboardType.NumberPassword else KeyboardType.Password),
             )
         },
         confirmButton = {
@@ -407,11 +426,31 @@ private fun describe(compatibility: Compatibility): String =
 @Composable
 private fun describe(failure: AirkastException): String =
     when (failure) {
-        is AirkastException.NotPermitted -> stringResource(R.string.failed_not_permitted)
-        is AirkastException.Unreachable -> stringResource(R.string.failed_unreachable)
-        is AirkastException.PairingFailed -> stringResource(R.string.failed_pairing)
-        is AirkastException.PinRejected -> stringResource(R.string.failed_pin)
-        is AirkastException.Disconnected -> stringResource(R.string.failed_disconnected)
-        is AirkastException.DiscoveryFailed -> stringResource(R.string.discovery_failed, failure.code)
-        else -> stringResource(R.string.failed_other, failure.message ?: failure.javaClass.simpleName)
+        is AirkastException.NotPermitted -> {
+            stringResource(R.string.failed_not_permitted)
+        }
+
+        is AirkastException.Unreachable -> {
+            stringResource(R.string.failed_unreachable)
+        }
+
+        is AirkastException.PairingFailed -> {
+            stringResource(R.string.failed_pairing)
+        }
+
+        is AirkastException.SecretRejected -> {
+            stringResource(if (failure.secret == Secret.Pin) R.string.failed_pin else R.string.failed_password)
+        }
+
+        is AirkastException.Disconnected -> {
+            stringResource(R.string.failed_disconnected)
+        }
+
+        is AirkastException.DiscoveryFailed -> {
+            stringResource(R.string.discovery_failed, failure.code)
+        }
+
+        else -> {
+            stringResource(R.string.failed_other, failure.message ?: failure.javaClass.simpleName)
+        }
     }

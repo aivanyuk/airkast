@@ -11,7 +11,10 @@ import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
+import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event
+import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event.EndReason
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Test
@@ -27,6 +30,7 @@ import kotlin.time.Duration.Companion.seconds
 @Config(sdk = [34])
 class ConnectTest {
     private val connector = FakeConnector()
+    private val heard = mutableListOf<Event>()
     private val player = player()
     private val tv = Receiver("tv", "192.0.2.1")
     private val item = MediaItem.fromUri("https://example.com/master.m3u8")
@@ -52,22 +56,36 @@ class ConnectTest {
 
     @Test
     fun aReceiverThatAsksForAPinWaitsForIt() {
-        connector.asksForPin = true
+        connector.asksFor = Secret.Pin
         player.connect(tv)
         idle()
-        assertThat((player.connection.value as Connection.AwaitingPin).receiver).isEqualTo(tv)
-        player.enterPin("2468")
+        val awaiting = player.connection.value as Connection.AwaitingSecret
+        assertThat(awaiting.receiver).isEqualTo(tv)
+        assertThat(awaiting.secret).isEqualTo(Secret.Pin)
+        player.enterSecret("2468")
         idle()
-        assertThat(connector.pin).isEqualTo("2468")
+        assertThat(connector.typed).isEqualTo("2468")
         assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
     }
 
     @Test
-    fun withPinPairsAnyReceiver() {
-        player.connect(tv, withPin = true)
+    fun aReceiverThatAsksForAPasswordSaysSo() {
+        connector.asksFor = Secret.Password
+        player.connect(tv)
         idle()
-        assertThat(player.connection.value).isInstanceOf(Connection.AwaitingPin::class.java)
-        assertThat(connector.asked.single().second).isTrue()
+        assertThat((player.connection.value as Connection.AwaitingSecret).secret).isEqualTo(Secret.Password)
+        player.enterSecret("hunter2")
+        idle()
+        assertThat(connector.typed).isEqualTo("hunter2")
+        assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
+    }
+
+    @Test
+    fun pairWithPairsAnyReceiver() {
+        player.connect(tv, pairWith = Secret.Password)
+        idle()
+        assertThat((player.connection.value as Connection.AwaitingSecret).secret).isEqualTo(Secret.Password)
+        assertThat(connector.asked.single().second).isEqualTo(Secret.Password)
     }
 
     @Test
@@ -119,13 +137,13 @@ class ConnectTest {
 
     @Test
     fun disconnectGivesUpAPinPrompt() {
-        connector.asksForPin = true
+        connector.asksFor = Secret.Pin
         player.connect(tv)
         idle()
         player.disconnect()
-        player.enterPin("2468")
+        player.enterSecret("2468")
         idle()
-        assertThat(connector.pin).isNull()
+        assertThat(connector.typed).isNull()
         assertThat(player.connection.value).isInstanceOf(Connection.Idle::class.java)
     }
 
@@ -215,9 +233,104 @@ class ConnectTest {
         assertThat(connector.sessions.single().closed).isTrue()
     }
 
+    @Test
+    fun aCastReportsItsStartAndItsEnd() {
+        casting()
+        player.disconnect()
+        idle()
+        assertThat(heard.map { it::class }).containsExactly(Event.CastStarted::class, Event.CastEnded::class).inOrder()
+        assertThat(heard.map { it.receiver }.distinct()).containsExactly(tv)
+        val ended = heard[1] as Event.CastEnded
+        assertThat(ended.reason).isEqualTo(EndReason.Disconnect)
+        assertThat(ended.failure).isNull()
+    }
+
+    @Test
+    fun eachWayACastEndsIsReported() {
+        casting().emit(ReceiverEvent.Back)
+        idle()
+        casting().emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
+        idle()
+        casting()
+        player.connect(Receiver("bedroom", "192.0.2.2"))
+        idle()
+        player.session = FakeSession()
+        player.session = null
+        player.release()
+        val ended = heard.filterIsInstance<Event.CastEnded>()
+        assertThat(ended.map { it.reason })
+            .containsExactly(
+                EndReason.Back,
+                EndReason.Lost,
+                EndReason.Replaced,
+                EndReason.Replaced,
+                EndReason.Disconnect,
+            ).inOrder()
+        assertThat(ended[1].failure).isInstanceOf(AirkastException.Disconnected::class.java)
+        assertThat(ended.filter { it.reason != EndReason.Lost }.map { it.failure }.distinct()).containsExactly(null)
+    }
+
+    @Test
+    fun releaseEndsTheCast() {
+        val own = player()
+        own.setMediaItem(item)
+        own.connect(tv)
+        idle()
+        own.release()
+        assertThat((heard.last() as Event.CastEnded).reason).isEqualTo(EndReason.Released)
+    }
+
+    @Test
+    fun aFailedConnectIsReported() {
+        connector.failure = AirkastException.Unreachable(IOException("No route to host"))
+        player.connect(tv)
+        idle()
+        val failed = heard.single() as Event.CastFailed
+        assertThat(failed.failure).isSameInstanceAs(connector.failure)
+    }
+
+    @Test
+    fun aPinPromptGivenUpIsReported() {
+        connector.asksFor = Secret.Pin
+        player.connect(tv)
+        idle()
+        player.disconnect()
+        idle()
+        val abandoned = heard.single() as Event.CastAbandoned
+        assertThat(abandoned.receiver).isEqualTo(tv)
+        assertThat(abandoned.atSecret).isEqualTo(Secret.Pin)
+    }
+
+    @Test
+    fun thePlayerLogsThroughItsClientUnderItsOwnTag() {
+        val lines = mutableListOf<Pair<String, String>>()
+        val airkast = Airkast { logger = Airkast.Logger { _, tag, message, _ -> lines += tag to message } }
+        val own =
+            AirkastPlayer(ApplicationProvider.getApplicationContext(), airkast) {
+                connector = this@ConnectTest.connector
+            }
+        own.setMediaItem(item)
+        own.connect(tv)
+        idle()
+        own.release()
+        assertThat(lines).contains("player" to "cast started")
+        assertThat(lines.map { it.first }.distinct()).containsExactly("player")
+    }
+
+    @Test
+    fun aListenerThatThrowsLeavesTheCastAlone() {
+        val own = player { eventListener = { error("listener") } }
+        own.setMediaItem(item)
+        own.connect(tv)
+        idle()
+        assertThat(own.connection.value).isInstanceOf(Connection.Connected::class.java)
+        own.release()
+    }
+
     private fun player(block: AirkastPlayer.Builder.() -> Unit = {}): AirkastPlayer =
         AirkastPlayer(ApplicationProvider.getApplicationContext(), Airkast()) {
             connector = this@ConnectTest.connector
+            eventListener = { heard += it }
             block()
         }
 
@@ -234,20 +347,20 @@ class ConnectTest {
 
     private class FakeConnector : Connector {
         val sessions = mutableListOf<FakeSession>()
-        val asked = mutableListOf<Pair<Receiver, Boolean>>()
+        val asked = mutableListOf<Pair<Receiver, Secret?>>()
         var failure: AirkastException? = null
-        var asksForPin = false
-        var pin: String? = null
+        var asksFor: Secret? = null
+        var typed: String? = null
         var hold: CompletableDeferred<Unit>? = null
 
         override suspend fun connect(
             receiver: Receiver,
-            withPin: Boolean,
-            pin: suspend () -> String,
+            pairWith: Secret?,
+            ask: suspend (Secret) -> String,
         ): AirkastSession {
-            asked += receiver to withPin
+            asked += receiver to pairWith
             hold?.await()
-            if (asksForPin || withPin) this.pin = pin()
+            (pairWith ?: asksFor)?.let { typed = ask(it) }
             failure?.let { throw it }
             return FakeSession(receiver).also { sessions += it }
         }

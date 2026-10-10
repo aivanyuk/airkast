@@ -11,8 +11,14 @@ public final class io/github/aivanyuk/airkast/android/LocalNetwork {
 	public final fun socketFactory (Landroid/content/Context;Ljava/lang/String;)Ljavax/net/SocketFactory;
 }
 
+public final class io/github/aivanyuk/airkast/android/LogcatKt {
+	public static final fun logcat (Lio/github/aivanyuk/airkast/Airkast$Logger$Companion;Lio/github/aivanyuk/airkast/Airkast$Logger$Level;)Lio/github/aivanyuk/airkast/Airkast$Logger;
+	public static synthetic fun logcat$default (Lio/github/aivanyuk/airkast/Airkast$Logger$Companion;Lio/github/aivanyuk/airkast/Airkast$Logger$Level;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/Airkast$Logger;
+}
+
 public final class io/github/aivanyuk/airkast/android/ReceiverDiscovery {
-	public fun <init> (Landroid/content/Context;)V
+	public fun <init> (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;)V
+	public synthetic fun <init> (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getReceivers ()Lkotlinx/coroutines/flow/Flow;
 }
 

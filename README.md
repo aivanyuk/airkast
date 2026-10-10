@@ -22,15 +22,17 @@ no specification behind it. What works there:
 
 - transient pairing, with no PIN on the screen;
 - pairing once with the PIN the LG shows when set to ask for one, then pair-verify;
+- pairing once with the password a Mac asks for when set to require one, which it also asks for,
+  with HTTP Digest, on every connect after;
 - loading an HLS URL at a start position, then play, pause, seek, stop and the next item;
 - position, duration and buffered ranges;
 - reading and switching audio and subtitle tracks;
 - receiver events: state, end of item, the TV remote's pause, seek and BACK, and its volume.
 
-It does not yet support receivers that demand a password, receivers that let in only their
-owner's devices (a Mac at its default), receivers that take URLs only over AirPlay video v1,
-Apple TV's remote channel, or setting the volume (the LG reports it but ignores a change). [docs/compatibility.md](docs/compatibility.md) lists what has been
-checked, on which receivers and Android versions.
+It does not yet support receivers that let in only their owner's devices (a Mac at its default),
+receivers that take URLs only over AirPlay video v1, Apple TV's remote channel, or setting the
+volume (the LG reports it but ignores a change). [docs/compatibility.md](docs/compatibility.md)
+lists what has been checked, on which receivers and Android versions.
 
 ## Use
 
@@ -61,13 +63,13 @@ val player = AirkastPlayer(context, airkast)
 
 player.setMediaItem(MediaItem.fromUri("https://example.com/master.m3u8"), 600_000)
 player.playWhenReady = true
-player.connect(receiver)  // pairs, asks for a PIN when the receiver needs one, plays
+player.connect(receiver)  // pairs, asks for a PIN or password when the receiver needs one, plays
 
 player.connection.collect { connection ->  // for the UI
     when (connection) {
         is Connection.Idle -> show(connection.failure)  // null after disconnect()
         is Connection.Connecting -> showProgress()
-        is Connection.AwaitingPin -> askForPin { pin -> player.enterPin(pin) }
+        is Connection.AwaitingSecret -> askFor(connection.secret) { player.enterSecret(it) }
         is Connection.Connected -> showTracks(connection.session.tracks())
     }
 }
@@ -122,14 +124,14 @@ activity by default, and `buildSession(builder)` sets anything else on the sessi
 ### A client, configured once
 
 `Airkast(context)` names the sender after the app's label, checks Android 17's local network
-permission, binds the connections to the Wi-Fi the receiver is on, and keeps PIN pairings in the
+permission, binds the connections to the Wi-Fi the receiver is on, and keeps pairings in the
 app's no-backup files. Each of those is a builder property, as is everything else:
 
 ```kotlin
 val airkast = Airkast(context) {
     identity = SenderIdentity(name = "Living room remote")  // what the TV shows
     requestTimeout = 3.seconds
-    logger = { Log.d("airkast", it) }  // one line per protocol step, never a URL or a key
+    logger = Airkast.Logger.logcat()  // one line per protocol step, never a URL or a key
     credentialStore = MyKeystoreStore(context)  // a CredentialStore over the app's own secrets
 }
 val patient = airkast.copy { loadTimeout = 30.seconds }  // shares the credential store
@@ -146,7 +148,7 @@ given `CredentialStore.file(file)`, and connects to a receiver typed in by hand:
 val receiver = ReceiverDiscovery(context).receivers
     .mapNotNull { list -> list.firstOrNull { it.isSupported } }
     .first()
-val session = airkast.connect(receiver) { askTheUserForThePin() }  // asked once, if at all
+val session = airkast.connect(receiver) { secret -> askTheUserFor(secret) }  // once, if at all
 session.load(Media("https://example.com/master.m3u8", startAt = 10.minutes))
 scope.launch {
     session.events.collect { event ->  // completes when the session ends
@@ -165,18 +167,53 @@ session.close()
 Every time is a `kotlin.time.Duration`, and a volume runs from 0 to 1. Cancelling a connect
 closes whatever it opened.
 
-A receiver that asks for a PIN ([`Compatibility.NeedsPin`](docs/compatibility.md)) pairs on its
-first connect: it shows the PIN on its screen while `pin` waits for the user, and the credentials
-go to the client's `credentialStore`, so every later connect gets in without one. A wrong PIN
-throws `AirkastException.PinRejected`. A receiver that has forgotten the sender refuses its
-credentials with `PairingFailed`, which drops them, and the next connect pairs again. A receiver
-that asks for a PIN without saying so in its TXT record pairs with `airkast.pair(receiver) { … }`.
+A receiver that asks for a PIN or a password (`NeedsPin` or `NeedsPassword` in
+[compatibility](docs/compatibility.md)) pairs on its first connect. The prompt gets the `Secret`
+it asks for: a `Pin` the receiver shows on its screen while the prompt waits for the user, or the
+`Password` set in its AirPlay settings. The credentials go to the client's `credentialStore`, so
+every later connect gets in without asking. A wrong one throws `AirkastException.SecretRejected`. A receiver that has forgotten the
+sender refuses its credentials with `PairingFailed`, which drops them, and the next connect pairs
+again. A receiver that asks without saying so in its TXT record pairs with
+`airkast.pair(receiver, Secret.Pin) { … }`, or `Secret.Password`. A Mac with a password asks for
+it again with an HTTP Digest challenge whenever a session starts; the credentials keep the
+password for that, so the user types it once.
 
 The receiver fetches the stream itself. A receiver whose player is a web page (the LG's is)
 needs CORS headers on every playlist and segment.
 
 BACK on the TV's remote arrives as `ReceiverEvent.Back`, and the TV leaves its player only when
 the sender calls `stop()`.
+
+### Logs and statistics
+
+Two hooks, one for debugging and one for an app's statistics. Both are called on the thread
+where the thing happened, so they hand slow work, such as a network call, to a thread of their
+own. One that throws loses its line or event, never the session.
+
+```kotlin
+val airkast = Airkast(context) {
+    // Lines with a level and a tag (connect, pairing, session, control, events, timing, player,
+    // discovery). Airkast.Logger.println() writes them to standard output on a desktop JVM.
+    logger = Airkast.Logger.logcat(minLevel = Airkast.Logger.Level.Debug)
+    // What the client did, timed: Connected, ConnectFailed, Paired, Loaded, SessionEnded, …
+    eventListener = { event ->
+        when (event) {
+            is Airkast.Event.Connected -> stats.record("connect", event.took, event.receiver.model)
+            is Airkast.Event.ConnectFailed -> stats.record("connect_failed", event.failure::class.simpleName)
+            else -> Unit  // new events may join in a minor release
+        }
+    }
+}
+val player = AirkastPlayer(context, airkast) {
+    // How casts start and end: CastStarted, CastFailed, CastAbandoned, CastEnded with its reason.
+    eventListener = { event -> stats.record(event) }
+}
+```
+
+The player logs through the client's `logger` unless its builder sets another, and
+`ReceiverDiscovery(context, logger)` takes one too. A line never holds a media URL, a key, a PIN
+or anything a pairing derives. An event names its receiver, whose `model`, `sourceVersion` and
+`compatibility` describe the device, while its `name` and `host` are the user's own.
 
 ## Sample apps
 
@@ -186,7 +223,7 @@ in Compose and one in views, so a reader in either toolkit sees the same calls i
 - [`sample/cast`](sample/cast) is the integration, which both apps drive.
   [`Cast.kt`](sample/cast/src/main/kotlin/io/github/aivanyuk/airkast/sample/Cast.kt) builds the
   app's `Airkast` and the `AirkastPlayer` that plays on the phone and runs the cast, and keeps a
-  log of what the TV says;
+  log of what the TV says and how casts start and end;
   [`CastService.kt`](sample/cast/src/main/kotlin/io/github/aivanyuk/airkast/sample/CastService.kt)
   is the `AirkastSessionService` over it, for the notification and the lock screen.
 - [`sample/compose`](sample/compose) is one screen in Compose over `Cast`: its flows, the

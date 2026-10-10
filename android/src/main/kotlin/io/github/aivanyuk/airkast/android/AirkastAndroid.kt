@@ -17,9 +17,9 @@ import java.io.File
  *   the local network, and binds the session's connections to the network that holds the receiver
  *   ([LocalNetwork.socketFactory]).
  * - [Airkast.credentialStore] keeps pairings in the app's no-backup files, so a receiver asks for
- *   its PIN once, and no backup carries the private keys to another device.
+ *   its PIN or password once, and no backup carries the private keys to another device.
  *
- * Build one for the app and share it: `Airkast(context) { logger = { Log.d("airkast", it) } }`.
+ * Build one for the app and share it: `Airkast(context) { logger = Airkast.Logger.logcat() }`.
  */
 public fun Airkast(
     context: Context,

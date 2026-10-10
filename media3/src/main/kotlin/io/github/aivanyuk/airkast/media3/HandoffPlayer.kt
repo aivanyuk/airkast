@@ -13,6 +13,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Receiver
+import io.github.aivanyuk.airkast.Secret
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 internal class HandoffPlayer(
     private val local: Player,
     private val remote: SessionPlayer,
+    private val log: PlayerLog = PlayerLog(null),
 ) : ForwardingSimpleBasePlayer(local),
     AirkastPlayer,
     Handoff {
@@ -41,16 +43,17 @@ internal class HandoffPlayer(
 
     override fun connect(
         receiver: Receiver,
-        withPin: Boolean,
-    ) = remote.connect(receiver, withPin)
+        pairWith: Secret?,
+    ) = remote.connect(receiver, pairWith)
 
-    override fun enterPin(pin: String) = remote.enterPin(pin)
+    override fun enterSecret(value: String) = remote.enterSecret(value)
 
     override fun disconnect() = remote.disconnect()
 
     override fun attached() {
         if (player !== local) return
         local.currentMediaItem?.let { item ->
+            log.debug { "the local player's item moves to the receiver at ${local.currentPosition} ms" }
             remote.setMediaItem(item, local.currentPosition)
             remote.playWhenReady = local.playWhenReady
         }
@@ -66,6 +69,7 @@ internal class HandoffPlayer(
         // Paused: the cast may have ended with nobody at the phone, such as by BACK on the TV.
         local.playWhenReady = false
         if (item != null) {
+            log.debug { "the item comes back to the local player at $positionMs ms" }
             // The local playlist keeps its other items unless the cast moved on to another one.
             if (local.currentMediaItem == item) local.seekTo(positionMs) else local.setMediaItem(item, positionMs)
             local.prepare()

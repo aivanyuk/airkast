@@ -65,6 +65,17 @@ class SessionTest {
         }
 
     @Test
+    fun aReceiverThatNamesTheNewItemOnlyInOtherNotificationsTakesItAllTheSame() =
+        runBlocking<Unit> {
+            FakeReceiver(namesTheNewItem = false).use { fake ->
+                airkast.connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    session.load(Media("https://example.com/a.m3u8"))
+                    withTimeout(2_000) { session.state.first { it == PlaybackState.Playing } }
+                }
+            }
+        }
+
+    @Test
     fun aSilentReceiverTimesTheLoadOut() =
         runBlocking {
             FakeReceiver(takesItems = false).use { fake ->
@@ -82,6 +93,11 @@ class SessionTest {
                 val named = airkast.copy { identity = SenderIdentity(name = "Кино · 映画") }
                 named.connect(Receiver("fake", "127.0.0.1", fake.port)).close()
                 assertThat(fake.clientName).isEqualTo("Кино · 映画")
+            }
+            FakeReceiver().use { fake ->
+                val broken = airkast.copy { identity = SenderIdentity(name = "two\r\nlines") }
+                broken.connect(Receiver("fake", "127.0.0.1", fake.port)).close()
+                assertThat(fake.clientName).isEqualTo("two  lines")
             }
         }
 

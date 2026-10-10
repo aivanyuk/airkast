@@ -9,6 +9,7 @@ import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Secret
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -18,9 +19,9 @@ import kotlin.time.Duration.Companion.seconds
  * notification and lock screen, drive the TV as they drive a local player.
  *
  * [connect] runs a whole cast: it opens a session through the player's [Airkast], asks for a PIN
- * when the receiver needs one, plays the media item, and ends the cast when BACK is pressed on the
- * TV's remote. [connection] says where it stands. An app that opens its own sessions sets
- * [session] instead, and the player only plays on it.
+ * or password when the receiver needs one, plays the media item, and ends the cast when BACK is
+ * pressed on the TV's remote. [connection] says where it stands. An app that opens its own
+ * sessions sets [session] instead, and the player only plays on it.
  *
  * It plays one media item, whose URL the receiver fetches itself. A media item set while a session
  * is attached loads at once, as a Cast player's does, and one set before waits for a session. The
@@ -34,16 +35,18 @@ import kotlin.time.Duration.Companion.seconds
  */
 public interface AirkastPlayer : Player {
     /**
-     * Where the cast stands, for the UI: idle, connecting, waiting for a PIN, or connected. It
-     * follows [connect], [disconnect], a [session] set by hand, and a session that ends.
+     * Where the cast stands, for the UI: idle, connecting, waiting for a PIN or password, or
+     * connected. It follows [connect], [disconnect], a [session] set by hand, and a session that
+     * ends.
      */
     public val connection: StateFlow<Connection>
 
     /**
      * Connects to [receiver] and plays the media item on it. A cast to another receiver ends first,
      * and the item moves to [receiver] at the position it reached. A receiver that asks for a PIN
-     * ([Compatibility.NeedsPin]), or any receiver when [withPin] is set, pairs first unless it
-     * paired before: [connection] turns [Connection.AwaitingPin] until [enterPin].
+     * ([Compatibility.NeedsPin]) or a password ([Compatibility.NeedsPassword]), or any receiver
+     * when [pairWith] is set, pairs first unless it paired before: [connection] turns
+     * [Connection.AwaitingSecret] until [enterSecret].
      *
      * The player owns the session it opens: it closes it on [disconnect], on the next connect, and
      * on [release]. After a failure, or a session that ended by itself, [prepare] (the play button
@@ -51,17 +54,17 @@ public interface AirkastPlayer : Player {
      */
     public fun connect(
         receiver: Receiver,
-        withPin: Boolean = false,
+        pairWith: Secret? = null,
     )
 
-    /** The PIN the receiver shows, while [connection] is [Connection.AwaitingPin]. */
-    public fun enterPin(pin: String)
+    /** What the user typed for the secret [connection] asks for while it is [Connection.AwaitingSecret]. */
+    public fun enterSecret(value: String)
 
     /**
      * Ends the cast: stops the item on the receiver, which leaves its player, lets go of the
      * session, closing it if the player opened it, and clears the media item, which takes a
      * `MediaSession`'s notification down. With a [Builder.localPlayer], the item goes back to it
-     * instead. A connect in progress, or its PIN prompt, is given up.
+     * instead. A connect in progress, or its PIN or password prompt, is given up.
      */
     public fun disconnect()
 
@@ -97,11 +100,15 @@ public interface AirkastPlayer : Player {
             override fun toString(): String = "Connecting(receiver=${receiver.name})"
         }
 
-        /** [receiver] shows a PIN on its screen: pass what the user types to [enterPin], or [disconnect]. */
-        public class AwaitingPin(
+        /**
+         * [receiver] asks for a [secret]: the PIN on its screen, or the password set on it. Pass
+         * what the user types to [enterSecret], or [disconnect].
+         */
+        public class AwaitingSecret(
             public val receiver: Receiver,
+            public val secret: Secret,
         ) : Connection {
-            override fun toString(): String = "AwaitingPin(receiver=${receiver.name})"
+            override fun toString(): String = "AwaitingSecret(receiver=${receiver.name}, secret=$secret)"
         }
 
         public class Connected(
@@ -111,12 +118,96 @@ public interface AirkastPlayer : Player {
         }
     }
 
+    /**
+     * How casts start and end, for an app's statistics, as [Builder.eventListener] hears it. The
+     * client's [Airkast.eventListener] hears the protocol's side of the same casts: connects,
+     * pairings, loads and sessions, with how long each took. Each event names its [receiver]: its
+     * `model`, `sourceVersion` and `compatibility` describe the device, while its `name` and `host`
+     * are the user's own.
+     *
+     * An event comes on the player's looper, which the listener must not block: one that sends
+     * events to a server hands them to a thread or scope of its own. One that throws loses the
+     * event, never the cast. New events may join in a minor release, so a `when` over them keeps an
+     * `else` branch.
+     */
+    public sealed interface Event {
+        public val receiver: Receiver
+
+        /** A session attached, from [connect] or set by hand as [session], and the player plays on [receiver]. */
+        public class CastStarted(
+            override val receiver: Receiver,
+        ) : Event {
+            override fun toString(): String = "CastStarted(receiver=${receiver.name})"
+        }
+
+        /** A [connect] to [receiver] failed with [failure]. */
+        public class CastFailed(
+            override val receiver: Receiver,
+            public val failure: AirkastException,
+        ) : Event {
+            override fun toString(): String = "CastFailed(receiver=${receiver.name}, failure=$failure)"
+        }
+
+        /**
+         * A [connect] to [receiver] was given up before it finished: by [disconnect], another
+         * connect, a session set by hand, or `release()`. [atSecret] is the PIN or password the
+         * receiver was asking for, never entered, or null if it was given up while connecting.
+         */
+        public class CastAbandoned(
+            override val receiver: Receiver,
+            public val atSecret: Secret?,
+        ) : Event {
+            override fun toString(): String = "CastAbandoned(receiver=${receiver.name}, atSecret=$atSecret)"
+        }
+
+        /**
+         * A cast on [receiver] ended, [lasted] after its session attached, for [reason]. [failure]
+         * says why a session ended by itself ([EndReason.Lost]), and is null otherwise.
+         */
+        public class CastEnded(
+            override val receiver: Receiver,
+            public val reason: EndReason,
+            public val lasted: Duration,
+            public val failure: AirkastException?,
+        ) : Event {
+            override fun toString(): String =
+                "CastEnded(receiver=${receiver.name}, reason=$reason, lasted=$lasted, failure=$failure)"
+        }
+
+        /** What ended a cast. New reasons may join in a minor release. */
+        public enum class EndReason {
+            /** [disconnect], or [session] set to null. */
+            Disconnect,
+
+            /** BACK on the TV's remote, with [Builder.disconnectOnBack]. */
+            Back,
+
+            /** Another [connect], or another session set by hand. */
+            Replaced,
+
+            /** The session ended by itself: the network failed, the TV closed it, or another sender took it. */
+            Lost,
+
+            /** `release()`. */
+            Released,
+        }
+    }
+
     /** How to build an [AirkastPlayer]: `AirkastPlayer(context, airkast) { keepAwake = false }`. */
     public class Builder(
         context: Context,
         airkast: Airkast,
     ) {
         private val context = context.applicationContext
+
+        /**
+         * Takes the player's lines, under the tag `player`: connects, PIN and password prompts,
+         * handoffs and how casts end. The client's [Airkast.logger] by default.
+         */
+        public var logger: Airkast.Logger? = airkast.logger
+
+        /** Hears how casts start and end ([Event]), for an app's statistics. Null, the default, hears nothing. */
+        public var eventListener: ((Event) -> Unit)? = null
 
         /** The application looper. The current thread's, or the main one's, by default. */
         public var looper: Looper = Looper.myLooper() ?: Looper.getMainLooper()
@@ -164,18 +255,21 @@ public interface AirkastPlayer : Player {
 
         public fun build(): AirkastPlayer {
             require(positionPollInterval.isPositive()) { "The poll interval must be positive" }
+            val log = PlayerLog(logger)
             val remote =
                 SessionPlayer(
                     looper = looper,
-                    awake = if (keepAwake) KeepAwake(context) else null,
+                    awake = if (keepAwake) KeepAwake(context, log) else null,
                     pollInterval = positionPollInterval,
                     streaming = streaming,
                     disconnectOnBack = disconnectOnBack,
                     connector = connector,
+                    log = log,
+                    eventListener = eventListener,
                 )
             val local = localPlayer ?: return remote
             require(local.applicationLooper == looper) { "The local player runs on another looper" }
-            return HandoffPlayer(local, remote)
+            return HandoffPlayer(local, remote, log)
         }
     }
 }
@@ -194,13 +288,13 @@ public fun AirkastPlayer(
 internal fun interface Connector {
     suspend fun connect(
         receiver: Receiver,
-        withPin: Boolean,
-        pin: suspend () -> String,
+        pairWith: Secret?,
+        ask: suspend (Secret) -> String,
     ): AirkastSession
 }
 
 internal fun Airkast.connector() =
-    Connector { receiver, withPin, pin ->
-        if (withPin && credentialStore.get(receiver) == null) pair(receiver, pin)
-        connect(receiver, pin)
+    Connector { receiver, pairWith, ask ->
+        if (pairWith != null && credentialStore.get(receiver) == null) pair(receiver, pairWith) { ask(pairWith) }
+        connect(receiver, ask)
     }

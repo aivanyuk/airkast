@@ -1,15 +1,17 @@
 package io.github.aivanyuk.airkast.sample
 
 import android.content.Context
-import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Receiver
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.android.Airkast
+import io.github.aivanyuk.airkast.android.logcat
 import io.github.aivanyuk.airkast.media3.AirkastPlayer
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import kotlinx.coroutines.MainScope
@@ -26,7 +28,7 @@ import java.util.Locale
 /**
  * One player for the whole process: the [AirkastPlayer] that [CastService]'s MediaSession and the
  * UI's controls drive. It plays on the phone through an ExoPlayer until a cast starts, connects,
- * asks for a PIN, moves the item to the TV and back, and [AirkastPlayer.connection] says where it
+ * asks for a PIN or password, moves the item to the TV and back, and [AirkastPlayer.connection] says where it
  * stands; this adds a log of what the TV reported. Call it on the main thread.
  */
 class Cast(
@@ -37,11 +39,16 @@ class Cast(
     /**
      * The app's one client. `Airkast(context)` names the sender after the app's label, checks
      * Android 17's local network permission, binds sessions to the Wi-Fi the receiver is on, and
-     * keeps PIN pairings in the app's no-backup files. This only adds a logger.
+     * keeps pairings in the app's no-backup files. This only adds a logger: `adb logcat -s airkast`.
      */
-    val airkast = Airkast(context) { logger = { Log.d(TAG, it) } }
+    val airkast = Airkast(context) { logger = Airkast.Logger.logcat() }
 
-    val player: AirkastPlayer = AirkastPlayer(context, airkast) { localPlayer = ExoPlayer.Builder(context).build() }
+    val player: AirkastPlayer =
+        AirkastPlayer(context, airkast) {
+            localPlayer = ExoPlayer.Builder(context).build()
+            // Where an app would count its casts for its statistics.
+            eventListener = { note(it.toString()) }
+        }
 
     private val mutableLog = MutableStateFlow<List<String>>(emptyList())
 
@@ -65,19 +72,19 @@ class Cast(
 
     /**
      * Plays [url] on [receiver], from where the phone was in it, ending the cast before. A
-     * receiver that asks for a PIN, or any receiver when [withPin] is set, pairs first unless it
-     * paired before.
+     * receiver that asks for a PIN or password, or any receiver when [pairWith] is set, pairs
+     * first unless it paired before.
      */
     fun start(
         receiver: Receiver,
         url: String,
-        withPin: Boolean = false,
+        pairWith: Secret? = null,
     ) {
         show(url)
         // The phone stops while the TV connects, and the TV plays from where it stopped.
         player.stop()
         player.playWhenReady = true
-        player.connect(receiver, withPin)
+        player.connect(receiver, pairWith)
     }
 
     /** Plays [url] on the phone, from where the TV was in it when casting. */
@@ -111,7 +118,6 @@ class Cast(
     }
 
     private companion object {
-        const val TAG = "airkast"
         const val LOG_LINES = 100
     }
 }

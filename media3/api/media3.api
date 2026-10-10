@@ -1,8 +1,8 @@
 public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer : androidx/media3/common/Player {
-	public abstract fun connect (Lio/github/aivanyuk/airkast/Receiver;Z)V
-	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;ZILjava/lang/Object;)V
+	public abstract fun connect (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;)V
+	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;ILjava/lang/Object;)V
 	public abstract fun disconnect ()V
-	public abstract fun enterPin (Ljava/lang/String;)V
+	public abstract fun enterSecret (Ljava/lang/String;)V
 	public abstract fun getConnection ()Lkotlinx/coroutines/flow/StateFlow;
 	public abstract fun getSession ()Lio/github/aivanyuk/airkast/AirkastSession;
 	public abstract fun setSession (Lio/github/aivanyuk/airkast/AirkastSession;)V
@@ -12,14 +12,18 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public fun <init> (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast;)V
 	public final fun build ()Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
 	public final fun getDisconnectOnBack ()Z
+	public final fun getEventListener ()Lkotlin/jvm/functions/Function1;
 	public final fun getKeepAwake ()Z
 	public final fun getLocalPlayer ()Landroidx/media3/common/Player;
+	public final fun getLogger ()Lio/github/aivanyuk/airkast/Airkast$Logger;
 	public final fun getLooper ()Landroid/os/Looper;
 	public final fun getPositionPollInterval-UwyO8pc ()J
 	public final fun getStreaming ()Z
 	public final fun setDisconnectOnBack (Z)V
+	public final fun setEventListener (Lkotlin/jvm/functions/Function1;)V
 	public final fun setKeepAwake (Z)V
 	public final fun setLocalPlayer (Landroidx/media3/common/Player;)V
+	public final fun setLogger (Lio/github/aivanyuk/airkast/Airkast$Logger;)V
 	public final fun setLooper (Landroid/os/Looper;)V
 	public final fun setPositionPollInterval-LRDsOJo (J)V
 	public final fun setStreaming (Z)V
@@ -28,9 +32,10 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
 }
 
-public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$AwaitingPin : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
-	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;)V
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$AwaitingSecret : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;)V
 	public final fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public final fun getSecret ()Lio/github/aivanyuk/airkast/Secret;
 	public fun toString ()Ljava/lang/String;
 }
 
@@ -54,7 +59,51 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$Id
 }
 
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$DefaultImpls {
-	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;ZILjava/lang/Object;)V
+	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;ILjava/lang/Object;)V
+}
+
+public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer$Event {
+	public abstract fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Event$CastAbandoned : io/github/aivanyuk/airkast/media3/AirkastPlayer$Event {
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;)V
+	public final fun getAtSecret ()Lio/github/aivanyuk/airkast/Secret;
+	public fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Event$CastEnded : io/github/aivanyuk/airkast/media3/AirkastPlayer$Event {
+	public synthetic fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;JLio/github/aivanyuk/airkast/AirkastException;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getFailure ()Lio/github/aivanyuk/airkast/AirkastException;
+	public final fun getLasted-UwyO8pc ()J
+	public final fun getReason ()Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
+	public fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Event$CastFailed : io/github/aivanyuk/airkast/media3/AirkastPlayer$Event {
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/AirkastException;)V
+	public final fun getFailure ()Lio/github/aivanyuk/airkast/AirkastException;
+	public fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Event$CastStarted : io/github/aivanyuk/airkast/media3/AirkastPlayer$Event {
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;)V
+	public fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason : java/lang/Enum {
+	public static final field Back Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
+	public static final field Disconnect Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
+	public static final field Lost Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
+	public static final field Released Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
+	public static final field Replaced Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
+	public static fun values ()[Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
 }
 
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayerKt {

@@ -8,17 +8,32 @@ public sealed class AirkastException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause) {
-    /** The receiver refused the pairing, or answered it with something unexpected. */
+    /**
+     * The receiver refused the pairing, or answered it with something unexpected. A receiver that
+     * asks for a password ends a connect here when no prompt was given to ask for it.
+     */
     public class PairingFailed internal constructor(
         message: String,
         /** The receiver refused the credentials themselves, so only pairing again gets in. */
         internal val credentialsRefused: Boolean,
+        /** The receiver answered SETUP with an HTTP Digest challenge, which only a password answers. */
+        internal val passwordAsked: Boolean = false,
     ) : AirkastException(message) {
         public constructor(message: String) : this(message, credentialsRefused = false)
     }
 
-    /** The receiver did not take the PIN given to [Airkast.pair]. Pairing again starts over. */
-    public class PinRejected : AirkastException("The receiver did not take the PIN")
+    /**
+     * The receiver did not take the [secret] the user gave: a wrong PIN or password. Pairing again
+     * starts over.
+     */
+    public class SecretRejected(
+        public val secret: Secret,
+    ) : AirkastException(
+            when (secret) {
+                Secret.Pin -> "The receiver did not take the PIN"
+                Secret.Password -> "The receiver did not take the password"
+            },
+        )
 
     /** The receiver answered a request with an error status. */
     public class Rejected(

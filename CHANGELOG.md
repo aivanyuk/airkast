@@ -13,25 +13,41 @@ caller sees adds its line under "Unreleased".
   manifest. Its notification has a Stop casting button while a cast is on, and it releases only
   the session, never the player. `sessionActivity()` and `buildSession(builder)` change the
   session. `airkast-media3` now depends on media3-session, and the sample's `CastService` is one.
+- Statistics: `Airkast.Builder.eventListener` hears what the client did as typed `Airkast.Event`s,
+  each timed by the client: `Connected` (with how it paired), `ConnectFailed`, `Paired`,
+  `PairingFailed`, `CredentialsDropped`, `Loaded`, `LoadFailed` and `SessionEnded` (with the
+  failure when the receiver or the network ended it). `AirkastPlayer.Builder.eventListener` hears
+  how casts start and end: `CastStarted`, `CastFailed`, `CastAbandoned` (with the PIN or
+  password it was asking for, if any) and `CastEnded`, with its reason (`Disconnect`, `Back`, `Replaced`, `Lost`, `Released`)
+  and length. Both are called on the thread where the thing happened, and one that throws never
+  reaches the session.
+- `Airkast.Logger.println()` for a desktop JVM, and `Airkast.Logger.logcat()` in
+  `airkast-android`, which writes under the tag `airkast`. `AirkastPlayer` logs its connects,
+  PIN prompts, handoffs, wake locks and how casts end through the client's logger, or
+  `AirkastPlayer.Builder.logger`, and `ReceiverDiscovery(context, logger)` logs the scan.
 - `AirkastPlayer` runs a whole cast: `connect(receiver)` opens a session through the app's
-  `Airkast`, asks for a PIN when the receiver needs one (`connection` turns `AwaitingPin` until
-  `enterPin`), plays the media item, and `disconnect()` stops the TV's player, closes the session
-  and clears the item. `connection` is a `StateFlow` of `Idle` (with the failure), `Connecting`,
-  `AwaitingPin` and `Connected`. BACK on the TV's remote ends a cast the player opened, unless
-  `disconnectOnBack = false`. After a dropped cast, `prepare()` connects again. Setting
-  `session` by hand works as before: the app keeps that session.
+  `Airkast`, asks for a PIN or password when the receiver needs one (`connection` turns
+  `AwaitingSecret` until `enterSecret`), plays the media item, and `disconnect()` stops the TV's
+  player, closes the session and clears the item. `connection` is a `StateFlow` of `Idle` (with
+  the failure), `Connecting`, `AwaitingSecret` and `Connected`. BACK on the TV's remote ends a
+  cast the player opened, unless `disconnectOnBack = false`. After a dropped cast, `prepare()`
+  connects again. Setting `session` by hand works as before: the app keeps that session.
 - `AirkastPlayer.Builder.localPlayer`, as media3's `CastPlayer.Builder.setLocalPlayer`: the app's
   own player, such as an `ExoPlayer`, plays until a cast starts. Its current item then moves to
   the receiver at the position it reached, and comes back paused where the receiver left it when
   the cast ends, by `disconnect()`, BACK, a failure or `session = null`. One `MediaSession` over
   the `AirkastPlayer` serves both, and the video surface stays with the local player. The sample
   apps play on the phone and hand over.
-- Pairing with a PIN: `airkast.connect(receiver) { pin }` pairs a receiver that asks for a PIN on
-  its first connect, keeps the `Credentials` in the client's `CredentialStore`, and proves the
-  pairing on every connect after. `airkast.pair(receiver) { pin }` pairs one that asks without
-  saying so. A wrong PIN throws `AirkastException.PinRejected`, and credentials a receiver refuses
-  leave the store. `Credentials.encoded` and `Credentials.decode` store them, in pyatv's format.
-  Checked on the LG CX set to ask for a PIN, from the sample app.
+- Pairing with a PIN or password: `airkast.connect(receiver) { secret -> ask(secret) }` pairs a
+  receiver that asks for a PIN (`Compatibility.NeedsPin`) or a password (`NeedsPassword`) on its
+  first connect, keeps the `Credentials` in the client's `CredentialStore`, and proves the pairing
+  on every connect after. The prompt gets a `Secret`, `Pin` or `Password`, so the app asks for
+  the right one. `airkast.pair(receiver, Secret.Password) { … }` pairs one that asks without
+  saying so. A wrong one throws `AirkastException.SecretRejected`, and credentials a receiver
+  refuses leave the store. `Credentials.encoded` and `Credentials.decode` store them, in pyatv's
+  format, with a fifth field for the password, which a Mac asks for again with an HTTP Digest
+  challenge on every SETUP. The PIN is checked on the LG CX and the password on a Mac set to
+  "Require password", from the sample app.
 - `CredentialStore`, where a client keeps pairings: `CredentialStore.inMemory()`, the default,
   `CredentialStore.file(file)`, or the app's own over its secrets. `Airkast(context)` keeps them
   in a file in the app's no-backup files.
@@ -42,6 +58,11 @@ caller sees adds its line under "Unreleased".
 
 Breaking, under the rules for a minor release before 1.0 ([releasing](docs/releasing.md)):
 
+- `Airkast.Builder.logger` takes an `Airkast.Logger` in place of `(String) -> Unit`: each line
+  has a level (`Verbose` for every message on the wire, `Debug` for each protocol step, then
+  `Info`, `Warn`, `Error`) and a tag for the part that wrote it, and the logger's `minLevel`
+  (`Debug` by default) keeps lines below it from being built. A lambda still works:
+  `logger = Airkast.Logger { level, tag, message, error -> … }`.
 - `Airkast` is a client, configured once and shared, in place of an object with
   `connect(receiver, identity, options)`: `Airkast { … }` builds one, `airkast.connect(receiver)`
   opens a session, and `airkast.copy { … }` makes a variant. `SessionOptions` and its builder are
@@ -57,8 +78,8 @@ Breaking, under the rules for a minor release before 1.0 ([releasing](docs/relea
 - `VideoSession` is `AirkastSession` and `VideoItem` is `Media`, so a receiver that plays only
   audio, or a protocol other than AirPlay video v2, can join without another rename.
 - `AirkastPlayer(context, airkast)` takes the client it connects through.
-- `Receiver.isSupported` is true for `Compatibility.NeedsPin` too, since such a receiver now
-  plays once paired.
+- `Receiver.isSupported` is true for `Compatibility.NeedsPin` and `NeedsPassword` too, since
+  such a receiver now plays once paired.
 - `ntpTiming` is on by default. A Mac answers SETUP with 500 without it, and the LG CX plays
   either way. The receiver now needs to reach the sender over UDP.
 
@@ -69,6 +90,9 @@ Breaking, under the rules for a minor release before 1.0 ([releasing](docs/relea
 - `AirkastPlayer.disconnect()` clears the media item, which takes a `MediaSession`'s notification
   down. `clearMediaItems()` cannot: the player offers no `COMMAND_CHANGE_MEDIA_ITEMS`, so media3
   ignores it, and the sample's cast left its notification up after it ended.
+- A load on a Mac ends when the Mac takes the item. Its `currentItemChanged` names no item, so
+  `load` timed out after `loadTimeout` while the Mac played, and `AirkastPlayer` never polled the
+  position: its notification and controls stood still.
 - A Mac's "Allow … to AirPlay" prompt names the app, from `SenderIdentity.name`, where it showed
   "". The name now goes in an `X-Apple-Client-Name` header on every request.
 
