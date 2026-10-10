@@ -7,6 +7,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.ReceiverEvent
@@ -26,7 +27,7 @@ import java.time.Duration as JavaDuration
 @Config(sdk = [34])
 class AirkastPlayerTest {
     private val fake = FakeSession()
-    private val player = AirkastPlayer(ApplicationProvider.getApplicationContext())
+    private val player = AirkastPlayer(ApplicationProvider.getApplicationContext(), Airkast())
     private val item = MediaItem.fromUri("https://example.com/master.m3u8")
 
     @After
@@ -114,7 +115,7 @@ class AirkastPlayerTest {
 
     @Test
     fun streamingOffLoadsItemsAsFiles() {
-        val files = AirkastPlayer(ApplicationProvider.getApplicationContext()) { streaming = false }
+        val files = AirkastPlayer(ApplicationProvider.getApplicationContext(), Airkast()) { streaming = false }
         files.session = fake
         files.setMediaItem(item)
         idle()
@@ -261,7 +262,7 @@ class AirkastPlayerTest {
 
     @Test
     fun noLocksWhenKeepAwakeIsOff() {
-        val quiet = AirkastPlayer(ApplicationProvider.getApplicationContext()) { keepAwake = false }
+        val quiet = AirkastPlayer(ApplicationProvider.getApplicationContext(), Airkast()) { keepAwake = false }
         quiet.session = fake
         quiet.setMediaItem(item)
         quiet.play()

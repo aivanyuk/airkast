@@ -51,8 +51,12 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
   changed, and the API dump shows it. From 1.0, a new property goes last with a default, the old
   constructor stays as a `@Deprecated(level = HIDDEN)` secondary constructor, and a removal goes
   through a deprecation cycle ([releasing](docs/releasing.md#from-10)).
-- **Options that will grow are builders**, as `SessionOptions` is: a new option joins the
-  `Builder` with a default, and a `Type { … }` function builds one.
+- **Options that will grow are builders**, as `Airkast` is: a new option joins the `Builder`
+  with a default, and a `Type { … }` function builds one. A platform's defaults are a function
+  that fills the same builder (`Airkast(context) { … }`), never a second type.
+- **Each level hides the one below and leaves it in reach**
+  ([architecture](docs/architecture.md#three-levels)): a default is a builder property an app can
+  change, and the player takes a session set by hand as readily as one it opened.
 - **A time is a `kotlin.time.Duration`**, never a number with the unit in its name, and a volume
   runs from 0 to 1. The API is Kotlin's: every call suspends, so Java is not a target.
 - **`sample/` compiles against the modules**, so a change to the API changes the sample with it,
@@ -63,7 +67,7 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
 - **Every failure is an `AirkastException`**, or a `CancellationException`. A new way to fail is
   a new subclass with KDoc that says when it happens.
 - **Every suspend function is main-safe.** It moves blocking I/O off the caller's thread itself.
-- **No logging library.** `SessionOptions.logger` takes one line per protocol step. A line never
+- **No logging library.** `Airkast.Builder.logger` takes one line per protocol step. A line never
   holds a media URL, a key or anything a pairing derives.
 - **No new runtime dependency** in `airkast-core` beyond the Kotlin standard library and
   kotlinx-coroutines. `airkast-android` adds only the Android platform. `airkast-media3` adds

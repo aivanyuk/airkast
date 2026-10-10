@@ -22,11 +22,9 @@ public class Receiver(
 
     /**
      * Whether airkast can play on it, so a picker lists it: [Compatibility.Supported], or
-     * [Compatibility.NeedsPin]. A `NeedsPin` receiver plays only once the caller has paired with
-     * it: [Airkast.pair] first, then [Airkast.connect] with the [Credentials] in
-     * [SessionOptions.credentials]. A plain connect to it fails with
-     * [AirkastException.PairingFailed]. A receiver typed in by hand is [Compatibility.Unknown],
-     * not supported.
+     * [Compatibility.NeedsPin]. A `NeedsPin` receiver plays once paired: [Airkast.connect] pairs
+     * it when given a way to ask for the PIN, and fails with [AirkastException.PairingFailed]
+     * without one. A receiver typed in by hand is [Compatibility.Unknown], not supported.
      */
     public val isSupported: Boolean
         get() = compatibility == Compatibility.Supported || compatibility == Compatibility.NeedsPin
@@ -123,8 +121,8 @@ public enum class Compatibility {
     Unknown,
 
     /**
-     * Asks for a PIN shown on its screen: [Airkast.pair] once, then connect with the [Credentials]
-     * it returns in [SessionOptions.credentials].
+     * Asks for a PIN shown on its screen, once: [Airkast.connect] pairs it, given a way to ask
+     * the user, and keeps the [Credentials] for every connect after.
      */
     NeedsPin,
 

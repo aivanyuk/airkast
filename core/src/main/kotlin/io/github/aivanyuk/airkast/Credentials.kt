@@ -2,10 +2,10 @@ package io.github.aivanyuk.airkast
 
 /**
  * What [Airkast.pair] leaves a sender and a receiver that asks for a PIN agreeing on: the
- * receiver's long-term public key and id, and this sender's key and id. Passed as
- * [SessionOptions.credentials], they let every later [Airkast.connect] in without a PIN, until
- * the receiver forgets the sender. They hold the sender's private key, so the app keeps [encoded]
- * where it keeps secrets.
+ * receiver's long-term public key and id, and this sender's key and id. Kept in
+ * [Airkast.credentialStore], they let every later [Airkast.connect] in without a PIN, until the
+ * receiver forgets the sender. They hold the sender's private key, so a [CredentialStore] keeps
+ * [encoded] where the app keeps secrets.
  *
  * Not a `@Poko` class: its `toString` leaves the private key out.
  */

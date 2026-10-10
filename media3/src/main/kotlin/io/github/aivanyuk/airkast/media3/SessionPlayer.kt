@@ -13,11 +13,14 @@ import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.AirkastSession
+import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
+import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
-import io.github.aivanyuk.airkast.VideoItem
-import io.github.aivanyuk.airkast.VideoSession
+import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -25,6 +28,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -34,7 +40,8 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * [AirkastPlayer] over media3's `SimpleBasePlayer`. Every handler updates the state before it
  * returns and sends the command after, so the UI never waits on the network. The receiver's events
- * and a position poll correct the state as they come. Everything runs on the application looper.
+ * and a position poll correct the state as they come. Everything runs on the application looper,
+ * the connects [connector] makes and the PIN prompts they wait on included.
  */
 @OptIn(UnstableApi::class)
 internal class SessionPlayer(
@@ -42,10 +49,26 @@ internal class SessionPlayer(
     private val awake: KeepAwake?,
     private val pollInterval: Duration,
     private val streaming: Boolean,
+    private val disconnectOnBack: Boolean,
+    private val connector: Connector,
 ) : SimpleBasePlayer(looper),
     AirkastPlayer {
     private val scope = CoroutineScope(SupervisorJob() + Handler(looper).asCoroutineDispatcher())
-    private var attached: VideoSession? = null
+    private var attached: AirkastSession? = null
+
+    private val mutableConnection = MutableStateFlow<Connection>(Connection.Idle(null, null))
+    override val connection: StateFlow<Connection> = mutableConnection.asStateFlow()
+
+    /** The session [connect] opened, which the player closes. */
+    private var owned: AirkastSession? = null
+
+    /** Sessions the player opened that are stopping before they close. */
+    private val ending = mutableSetOf<AirkastSession>()
+
+    /** The receiver of the last [connect], which [prepare] connects to again once the cast has dropped. */
+    private var lastReceiver: Receiver? = null
+    private var connecting: Job? = null
+    private var pin: CompletableDeferred<String>? = null
     private var sessionJob: Job? = null
     private var loadJob: Job? = null
 
@@ -70,16 +93,44 @@ internal class SessionPlayer(
     private var error: PlaybackException? = null
     private var volume = 0
 
-    override var session: VideoSession?
+    override var session: AirkastSession?
         get() = attached
         set(value) {
-            check(Looper.myLooper() == applicationLooper) { "AirkastPlayer is used on its application looper" }
+            checkLooper()
             if (value === attached) return
-            detach()
+            giveUpConnecting()
+            lastReceiver = null
+            // The app's own session it keeps as it is; one the player opened ends.
+            letGo(stop = owned != null)
             error = null
             if (value != null) attach(value)
+            mutableConnection.value = if (value != null) Connection.Connected(value) else Connection.Idle(null, null)
             changed()
         }
+
+    override fun connect(
+        receiver: Receiver,
+        withPin: Boolean,
+    ) {
+        checkLooper()
+        open(receiver, withPin)
+        changed()
+    }
+
+    override fun enterPin(pin: String) {
+        checkLooper()
+        this.pin?.complete(pin)
+    }
+
+    override fun disconnect() {
+        checkLooper()
+        giveUpConnecting()
+        lastReceiver = null
+        letGo(stop = true)
+        setItem(null, 0)
+        mutableConnection.value = Connection.Idle(null, null)
+        changed()
+    }
 
     override fun getState(): State {
         val builder =
@@ -116,17 +167,7 @@ internal class SessionPlayer(
     ): ListenableFuture<*> {
         val s = attached
         if (s != null && loaded && mediaItems.isEmpty()) send(s) { stop() }
-        loadJob?.cancel()
-        item = mediaItems.getOrNull(if (startIndex == C.INDEX_UNSET) 0 else startIndex)
-        itemUid = Any()
-        loaded = false
-        receiverItemId = null
-        awaitingItem = false
-        durationMs = C.TIME_UNSET
-        error = null
-        rate = 1f
-        playback = Player.STATE_IDLE
-        moveTo(if (startPositionMs == C.TIME_UNSET) 0 else startPositionMs)
+        setItem(mediaItems.getOrNull(if (startIndex == C.INDEX_UNSET) 0 else startIndex), startPositionMs)
         val current = item
         if (s != null && current != null) load(s, current)
         hold()
@@ -136,10 +177,20 @@ internal class SessionPlayer(
     override fun handlePrepare(): ListenableFuture<*> {
         val s = attached
         val current = item
-        if (s != null && current != null && playback == Player.STATE_IDLE && loadJob?.isActive != true) {
-            error = null
-            load(s, current)
-            hold()
+        val receiver = lastReceiver
+        when {
+            s != null -> {
+                if (current != null && playback == Player.STATE_IDLE && loadJob?.isActive != true) {
+                    error = null
+                    load(s, current)
+                    hold()
+                }
+            }
+
+            // The cast this player connected dropped or failed, and the user asks to play again.
+            receiver != null && current != null && connecting == null -> {
+                open(receiver, withPin = false)
+            }
         }
         return Futures.immediateVoidFuture()
     }
@@ -205,13 +256,121 @@ internal class SessionPlayer(
     }
 
     override fun handleRelease(): ListenableFuture<*> {
-        detach()
+        giveUpConnecting()
+        letGo(stop = false)
+        ending.forEach { it.close() }
+        ending.clear()
         awake?.hold(false)
         scope.cancel()
+        mutableConnection.value = Connection.Idle(null, null)
         return Futures.immediateVoidFuture()
     }
 
-    private fun attach(s: VideoSession) {
+    /**
+     * Opens a session to [receiver] through [connector], ending the cast before. A connect that
+     * [giveUpConnecting] cancels closes what it opened (`Airkast.connect` does), and its PIN
+     * prompt with it.
+     */
+    private fun open(
+        receiver: Receiver,
+        withPin: Boolean,
+    ) {
+        giveUpConnecting()
+        letGo(stop = true)
+        error = null
+        lastReceiver = receiver
+        mutableConnection.value = Connection.Connecting(receiver)
+        connecting =
+            scope.launch {
+                val s =
+                    try {
+                        connector.connect(receiver, withPin) { askForPin(receiver) }
+                    } catch (e: AirkastException) {
+                        connecting = null
+                        error = playbackException(e)
+                        mutableConnection.value = Connection.Idle(receiver, e)
+                        changed()
+                        return@launch
+                    }
+                connecting = null
+                owned = s
+                attach(s)
+                mutableConnection.value = Connection.Connected(s)
+                changed()
+            }
+    }
+
+    private suspend fun askForPin(receiver: Receiver): String {
+        val code = CompletableDeferred<String>().also { pin = it }
+        mutableConnection.value = Connection.AwaitingPin(receiver)
+        return code.await().also {
+            pin = null
+            mutableConnection.value = Connection.Connecting(receiver)
+        }
+    }
+
+    private fun giveUpConnecting() {
+        connecting?.cancel()
+        connecting = null
+        pin = null
+    }
+
+    /**
+     * Detaches the session. With [stop], the receiver stops the item first, which takes it out of
+     * its player. A session the player opened then closes.
+     */
+    private fun letGo(stop: Boolean) {
+        val s = attached ?: return
+        val mine = s === owned
+        val playing = loaded || loadJob?.isActive == true
+        owned = null
+        detach()
+        when {
+            stop && playing -> {
+                if (mine) ending += s
+                scope.launch {
+                    try {
+                        s.stop()
+                    } catch (_: AirkastException) {
+                        // It ended already, and the receiver's player with it.
+                    } finally {
+                        if (mine) {
+                            ending -= s
+                            s.close()
+                        }
+                    }
+                }
+            }
+
+            mine -> {
+                s.close()
+            }
+        }
+    }
+
+    private fun setItem(
+        media: MediaItem?,
+        startPositionMs: Long,
+    ) {
+        loadJob?.cancel()
+        item = media
+        itemUid = Any()
+        loaded = false
+        receiverItemId = null
+        awaitingItem = false
+        durationMs = C.TIME_UNSET
+        error = null
+        rate = 1f
+        playback = Player.STATE_IDLE
+        moveTo(if (startPositionMs == C.TIME_UNSET) 0 else startPositionMs)
+    }
+
+    private fun checkLooper() =
+        check(Looper.myLooper() == applicationLooper) {
+            "AirkastPlayer is used on its application looper"
+        }
+
+    private fun attach(s: AirkastSession) {
         attached = s
         // Undispatched, so the collector is listening before the load below sends anything.
         sessionJob =
@@ -239,7 +398,7 @@ internal class SessionPlayer(
     }
 
     private fun load(
-        s: VideoSession,
+        s: AirkastSession,
         media: MediaItem,
     ) {
         val url = media.localConfiguration?.uri?.toString()
@@ -259,7 +418,7 @@ internal class SessionPlayer(
         loadJob =
             scope.launch {
                 try {
-                    s.load(VideoItem(url, startAt = startMs.milliseconds, streaming = streaming))
+                    s.load(Media(url, startAt = startMs.milliseconds, streaming = streaming))
                     loaded = true
                     if (!wantsPlay) s.pause()
                 } catch (e: AirkastException) {
@@ -275,7 +434,7 @@ internal class SessionPlayer(
     }
 
     private fun onEvent(
-        s: VideoSession,
+        s: AirkastSession,
         event: ReceiverEvent,
     ) {
         if (attached !== s) return
@@ -312,7 +471,14 @@ internal class SessionPlayer(
                 volume = (event.volume * MAX_VOLUME).roundToInt().coerceIn(0, MAX_VOLUME)
             }
 
+            // The TV leaves its player only once the sender stops.
+            is ReceiverEvent.Back -> {
+                if (s === owned && disconnectOnBack) disconnect()
+                return
+            }
+
             is ReceiverEvent.Disconnected -> {
+                if (s === owned) owned = null
                 detach()
                 error =
                     event.cause?.let {
@@ -322,6 +488,7 @@ internal class SessionPlayer(
                             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                         )
                     }
+                mutableConnection.value = Connection.Idle(s.receiver, AirkastException.Disconnected(event.cause))
             }
 
             else -> {
@@ -366,7 +533,7 @@ internal class SessionPlayer(
         moveTo(position.get())
     }
 
-    private suspend fun poll(s: VideoSession) {
+    private suspend fun poll(s: AirkastSession) {
         val info =
             try {
                 s.playbackInfo()
@@ -398,7 +565,7 @@ internal class SessionPlayer(
         changed()
     }
 
-    private suspend fun volume(s: VideoSession) {
+    private suspend fun volume(s: AirkastSession) {
         val level =
             try {
                 s.volume()
@@ -429,8 +596,8 @@ internal class SessionPlayer(
     }
 
     private fun send(
-        s: VideoSession,
-        command: suspend VideoSession.() -> Unit,
+        s: AirkastSession,
+        command: suspend AirkastSession.() -> Unit,
     ) {
         scope.launch {
             try {
@@ -484,10 +651,28 @@ internal class SessionPlayer(
                 e.message,
                 e,
                 when (e) {
-                    is AirkastException.Timeout -> PlaybackException.ERROR_CODE_TIMEOUT
-                    is AirkastException.Unreachable -> PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
-                    is AirkastException.Rejected -> PlaybackException.ERROR_CODE_REMOTE_ERROR
-                    else -> PlaybackException.ERROR_CODE_UNSPECIFIED
+                    is AirkastException.Timeout -> {
+                        PlaybackException.ERROR_CODE_TIMEOUT
+                    }
+
+                    is AirkastException.Unreachable, is AirkastException.Disconnected -> {
+                        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+                    }
+
+                    is AirkastException.NotPermitted -> {
+                        PlaybackException.ERROR_CODE_IO_NO_PERMISSION
+                    }
+
+                    is AirkastException.Rejected,
+                    is AirkastException.PairingFailed,
+                    is AirkastException.PinRejected,
+                    -> {
+                        PlaybackException.ERROR_CODE_REMOTE_ERROR
+                    }
+
+                    else -> {
+                        PlaybackException.ERROR_CODE_UNSPECIFIED
+                    }
                 },
             )
     }

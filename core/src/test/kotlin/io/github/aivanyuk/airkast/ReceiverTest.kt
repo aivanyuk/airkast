@@ -61,6 +61,6 @@ class ReceiverTest {
             tv.hashCode(),
         ).isEqualTo(Receiver("tv", "10.0.0.2", properties = mapOf("features" to lgFeatures)).hashCode())
         assertThat(tv.toString()).contains("host=10.0.0.2")
-        assertThat(VideoItem("a", 1.seconds)).isNotEqualTo(VideoItem("a", 2.seconds))
+        assertThat(Media("a", 1.seconds)).isNotEqualTo(Media("a", 2.seconds))
     }
 }

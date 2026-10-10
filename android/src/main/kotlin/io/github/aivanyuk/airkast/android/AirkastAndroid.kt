@@ -5,45 +5,42 @@ package io.github.aivanyuk.airkast.android
 import android.content.Context
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
-import io.github.aivanyuk.airkast.Credentials
-import io.github.aivanyuk.airkast.Receiver
+import io.github.aivanyuk.airkast.CredentialStore
 import io.github.aivanyuk.airkast.SenderIdentity
-import io.github.aivanyuk.airkast.SessionOptions
-import io.github.aivanyuk.airkast.VideoSession
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
- * [Airkast.connect] on Android. It fails with [AirkastException.NotPermitted] when the app may not
- * reach the local network, and binds the session's connections to the network that holds
- * [receiver] (see [LocalNetwork.socketFactory]), unless [options] names a socket factory.
+ * An [Airkast] with Android's defaults, which [block] may change:
+ *
+ * - [Airkast.identity] names the sender after the app's label, which is what a TV shows.
+ * - [Airkast.socketFactory] fails with [AirkastException.NotPermitted] when the app may not reach
+ *   the local network, and binds the session's connections to the network that holds the receiver
+ *   ([LocalNetwork.socketFactory]).
+ * - [Airkast.credentialStore] keeps pairings in the app's no-backup files, so a receiver asks for
+ *   its PIN once, and no backup carries the private keys to another device.
+ *
+ * Build one for the app and share it: `Airkast(context) { logger = { Log.d("airkast", it) } }`.
  */
-public suspend fun Airkast.connect(
+public fun Airkast(
     context: Context,
-    receiver: Receiver,
-    identity: SenderIdentity = SenderIdentity(),
-    options: SessionOptions = SessionOptions.DEFAULT,
-): VideoSession = connect(receiver, identity, bound(context, receiver, options))
-
-/** [Airkast.pair] on Android, which reaches [receiver] as [Airkast.connect]'s overload does. */
-public suspend fun Airkast.pair(
-    context: Context,
-    receiver: Receiver,
-    identity: SenderIdentity = SenderIdentity(),
-    options: SessionOptions = SessionOptions.DEFAULT,
-    pin: suspend () -> String,
-): Credentials = pair(receiver, identity, bound(context, receiver, options), pin)
-
-private suspend fun bound(
-    context: Context,
-    receiver: Receiver,
-    options: SessionOptions,
-): SessionOptions {
-    if (!LocalNetwork.isAccessible(context)) throw notPermitted()
-    if (options.socketFactory != null) return options
-    val factory = withContext(Dispatchers.IO) { LocalNetwork.socketFactory(context, receiver.host) }
-    return options.copy { socketFactory = factory }
+    block: Airkast.Builder.() -> Unit = {},
+): Airkast {
+    val app = context.applicationContext
+    return Airkast {
+        identity = SenderIdentity(name = app.label())
+        socketFactory = { receiver ->
+            if (!LocalNetwork.isAccessible(app)) throw notPermitted()
+            LocalNetwork.socketFactory(app, receiver.host)
+        }
+        credentialStore = CredentialStore.file(File(app.noBackupFilesDir, CREDENTIALS_FILE))
+        block()
+    }
 }
+
+private fun Context.label(): String =
+    applicationInfo.loadLabel(packageManager).toString().ifBlank { SenderIdentity().name }
+
+internal const val CREDENTIALS_FILE = "airkast-credentials"
 
 internal fun notPermitted() =
     AirkastException.NotPermitted("The app may not reach the local network: ${LocalNetwork.PERMISSION} is not granted")

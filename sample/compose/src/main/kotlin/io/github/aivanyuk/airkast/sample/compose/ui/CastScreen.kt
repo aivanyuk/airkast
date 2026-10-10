@@ -50,8 +50,8 @@ import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
 import io.github.aivanyuk.airkast.android.LocalNetwork
 import io.github.aivanyuk.airkast.android.ReceiverDiscovery
+import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.Cast
-import io.github.aivanyuk.airkast.sample.CastState
 import io.github.aivanyuk.airkast.sample.compose.R
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
@@ -68,7 +68,7 @@ fun CastScreen(
     player: Player?,
     modifier: Modifier = Modifier,
 ) {
-    val state by cast.state.collectAsStateWithLifecycle()
+    val connection by cast.player.connection.collectAsStateWithLifecycle()
     val log by cast.log.collectAsStateWithLifecycle()
     val defaultUrl = stringResource(R.string.default_url)
     var url by rememberSaveable { mutableStateOf(defaultUrl) }
@@ -93,7 +93,7 @@ fun CastScreen(
             maxLines = 3,
             modifier = Modifier.fillMaxWidth(),
         )
-        CastStatus(cast, state, player, onPair = { cast.start(it, url, withPin = true) })
+        CastStatus(cast, connection, player, onPair = { cast.start(it, url, withPin = true) })
         EventLog(log)
     }
 }
@@ -221,7 +221,7 @@ private fun AddressEntry(onConnect: (String) -> Unit) {
 @Composable
 private fun CastStatus(
     cast: Cast,
-    state: CastState,
+    state: Connection,
     player: Player?,
     onPair: (Receiver) -> Unit,
 ) {
@@ -230,7 +230,7 @@ private fun CastStatus(
     var info by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (state) {
-            is CastState.Idle -> {
+            is Connection.Idle -> {
                 state.failure?.let { Text(describe(it), color = MaterialTheme.colorScheme.error) }
                 // A receiver may ask for a PIN without saying so in its TXT record.
                 val receiver = state.receiver
@@ -241,16 +241,16 @@ private fun CastStatus(
                 }
             }
 
-            is CastState.Connecting -> {
+            is Connection.Connecting -> {
                 Text(stringResource(R.string.connecting, state.receiver.name))
             }
 
-            is CastState.AwaitingPin -> {
+            is Connection.AwaitingPin -> {
                 Text(stringResource(R.string.awaiting_pin, state.receiver.name))
-                PinDialog(state.receiver, onEnter = cast::enterPin, onDismiss = cast::cancelPin)
+                PinDialog(state.receiver, onEnter = cast.player::enterPin, onDismiss = cast.player::disconnect)
             }
 
-            is CastState.Casting -> {
+            is Connection.Connected -> {
                 Text(
                     stringResource(R.string.casting, state.session.receiver.name),
                     style = MaterialTheme.typography.titleMedium,
@@ -265,7 +265,7 @@ private fun CastStatus(
                     ) {
                         Text(stringResource(R.string.info))
                     }
-                    Button(onClick = cast::stop) { Text(stringResource(R.string.disconnect)) }
+                    Button(onClick = cast.player::disconnect) { Text(stringResource(R.string.disconnect)) }
                 }
             }
         }

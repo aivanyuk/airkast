@@ -1,23 +1,62 @@
 public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer : androidx/media3/common/Player {
-	public abstract fun getSession ()Lio/github/aivanyuk/airkast/VideoSession;
-	public abstract fun setSession (Lio/github/aivanyuk/airkast/VideoSession;)V
+	public abstract fun connect (Lio/github/aivanyuk/airkast/Receiver;Z)V
+	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;ZILjava/lang/Object;)V
+	public abstract fun disconnect ()V
+	public abstract fun enterPin (Ljava/lang/String;)V
+	public abstract fun getConnection ()Lkotlinx/coroutines/flow/StateFlow;
+	public abstract fun getSession ()Lio/github/aivanyuk/airkast/AirkastSession;
+	public abstract fun setSession (Lio/github/aivanyuk/airkast/AirkastSession;)V
 }
 
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
-	public fun <init> (Landroid/content/Context;)V
+	public fun <init> (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast;)V
 	public final fun build ()Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
+	public final fun getDisconnectOnBack ()Z
 	public final fun getKeepAwake ()Z
 	public final fun getLooper ()Landroid/os/Looper;
 	public final fun getPositionPollInterval-UwyO8pc ()J
 	public final fun getStreaming ()Z
+	public final fun setDisconnectOnBack (Z)V
 	public final fun setKeepAwake (Z)V
 	public final fun setLooper (Landroid/os/Looper;)V
 	public final fun setPositionPollInterval-LRDsOJo (J)V
 	public final fun setStreaming (Z)V
 }
 
+public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$AwaitingPin : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;)V
+	public final fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$Connected : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
+	public fun <init> (Lio/github/aivanyuk/airkast/AirkastSession;)V
+	public final fun getSession ()Lio/github/aivanyuk/airkast/AirkastSession;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$Connecting : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;)V
+	public final fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$Idle : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/AirkastException;)V
+	public final fun getFailure ()Lio/github/aivanyuk/airkast/AirkastException;
+	public final fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$DefaultImpls {
+	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;ZILjava/lang/Object;)V
+}
+
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayerKt {
-	public static final fun AirkastPlayer (Landroid/content/Context;Lkotlin/jvm/functions/Function1;)Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
-	public static synthetic fun AirkastPlayer$default (Landroid/content/Context;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
+	public static final fun AirkastPlayer (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast;Lkotlin/jvm/functions/Function1;)Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
+	public static synthetic fun AirkastPlayer$default (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
 }
 
