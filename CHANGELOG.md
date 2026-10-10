@@ -4,7 +4,19 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## 0.3.1 - 2026-10-10
+
+The code of 0.3.0, built.
+
+### Fixed
+
+- JitPack builds the release. 0.3.0's build failed before compiling anything: on JitPack's new
+  build host, the JDK 21.0.2 that `jitpack.yml` named cannot open `gradle-wrapper.jar`.
+  `jitpack.yml` now names Temurin 21.0.10.
+
 ## 0.3.0 - 2026-10-10
+
+Never built on JitPack, so it cannot be resolved: use 0.3.1, which holds the same code.
 
 ### Added
 
