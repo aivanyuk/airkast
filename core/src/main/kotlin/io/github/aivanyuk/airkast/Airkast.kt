@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.seconds
  *
  * ```
  * val airkast = Airkast { logger = ::println }
- * val session = airkast.connect(receiver) { askTheUserForThePin() }
+ * val session = airkast.connect(receiver) { secret -> askTheUserFor(secret) }
  * ```
  */
 public class Airkast private constructor(
@@ -53,8 +53,8 @@ public class Airkast private constructor(
     public val socketFactory: (Receiver) -> SocketFactory? = builder.socketFactory
 
     /**
-     * Where [pair] keeps the credentials a PIN leaves, and [connect] finds them. In memory by
-     * default; `Airkast(context)` keeps them in the app's files.
+     * Where [pair] keeps the credentials a PIN or password leaves, and [connect] finds them. In
+     * memory by default; `Airkast(context)` keeps them in the app's files.
      */
     public val credentialStore: CredentialStore = builder.credentialStore
 
@@ -64,9 +64,19 @@ public class Airkast private constructor(
     /**
      * Pairs with [receiver] and opens a session in the protocol it speaks. A receiver this client
      * paired with before proves that pairing with the credentials in [credentialStore]. One that
-     * asks for a PIN ([Compatibility.NeedsPin]) and has none pairs first, as [pair] does, when
-     * [pin] is given; without [pin], it fails with [AirkastException.PairingFailed]. Any other
-     * receiver pairs transiently.
+     * asks for a PIN ([Compatibility.NeedsPin]) or a password ([Compatibility.NeedsPassword]) and
+     * has none pairs first, as [pair] does, when [ask] is given; without [ask], it fails with
+     * [AirkastException.PairingFailed]. Any other receiver pairs transiently.
+     *
+     * [ask] returns what the user typed for the [Secret] it is given. It runs in the caller's
+     * context, so it may show a dialog and wait, and cancelling it gives up the connect. A wrong
+     * secret throws [AirkastException.SecretRejected].
+     *
+     * A receiver may ask for its password again when the session starts, with an HTTP Digest
+     * challenge: a Mac does, after pairing with it. It gets the password kept with the
+     * credentials, and [ask] is asked only when there is none or the receiver refuses it; the one
+     * it takes is kept for the next connect. A receiver that pairs transiently leaves no
+     * credentials to keep it with, so it is asked on every connect.
      *
      * A receiver that refuses its credentials has forgotten this sender, or is not the receiver
      * they are for: they leave [credentialStore], and the next connect pairs again. Any other
@@ -75,14 +85,30 @@ public class Airkast private constructor(
      */
     public suspend fun connect(
         receiver: Receiver,
-        pin: (suspend () -> String)? = null,
+        ask: (suspend (Secret) -> String)? = null,
     ): AirkastSession {
-        val stored = credentialStore.get(receiver)
+        val secret = receiver.secret
         val credentials =
-            stored ?: if (pin != null && receiver.compatibility == Compatibility.NeedsPin) pair(receiver, pin) else null
+            credentialStore.get(receiver)
+                ?: if (ask != null && secret != null) pair(receiver, secret) { ask(secret) } else null
         val options = options(receiver, credentials)
         return try {
-            opening { DefaultVideoSession.open(receiver, identity, options) }
+            try {
+                opening { DefaultVideoSession.open(receiver, identity, options) }
+            } catch (e: AirkastException) {
+                if (ask == null || !asksForPassword(e)) throw e
+                val password = ask(Secret.Password)
+                val session = opening { DefaultVideoSession.open(receiver, identity, options.withPassword(password)) }
+                if (credentials != null) {
+                    try {
+                        credentialStore.put(receiver, credentials.withPassword(password))
+                    } catch (failure: Throwable) {
+                        session.close()
+                        throw failure
+                    }
+                }
+                session
+            }
         } catch (e: AirkastException.PairingFailed) {
             if (credentials != null && e.credentialsRefused) credentialStore.remove(receiver)
             throw e
@@ -90,21 +116,31 @@ public class Airkast private constructor(
     }
 
     /**
-     * Pairs once with a receiver that asks for a PIN, and keeps the [Credentials] in
-     * [credentialStore] for every [connect] after. The receiver shows a PIN on its screen, and
-     * [pin] returns what the user typed; it runs in the caller's context, so it may show a dialog
-     * and wait, and cancelling it gives up the pairing. [connect] calls this itself for a receiver
-     * that says it asks for a PIN; call it directly for one that asks without saying so, such as a
-     * receiver typed in by hand. A wrong PIN throws [AirkastException.PinRejected].
+     * Whether the receiver asked for a password when the session started: with none to give, or
+     * refusing the one kept with the credentials.
+     */
+    private fun asksForPassword(e: AirkastException): Boolean =
+        (e is AirkastException.PairingFailed && e.passwordAsked) ||
+            (e is AirkastException.SecretRejected && e.secret == Secret.Password)
+
+    /**
+     * Pairs once with a receiver that asks for a [secret], and keeps the [Credentials] in
+     * [credentialStore] for every [connect] after. A receiver asked for a [Secret.Pin] shows one
+     * on its screen; a [Secret.Password] is the one set in its AirPlay settings. [ask] returns what
+     * the user typed; it runs in the caller's context, so it may show a dialog and wait, and
+     * cancelling it gives up the pairing. [connect] calls this itself for a receiver that says
+     * what it asks for; call it directly for one that asks without saying so, such as a receiver
+     * typed in by hand. A wrong secret throws [AirkastException.SecretRejected].
      */
     public suspend fun pair(
         receiver: Receiver,
-        pin: suspend () -> String,
+        secret: Secret = Secret.Pin,
+        ask: suspend () -> String,
     ): Credentials {
         val options = options(receiver, null)
         val credentials =
-            opening { DefaultVideoSession.startPairing(receiver, identity, options) }.use { pairing ->
-                val code = pin()
+            opening { DefaultVideoSession.startPairing(receiver, identity, options, secret) }.use { pairing ->
+                val code = ask()
                 withContext(Dispatchers.IO) { DefaultVideoSession.finishPairing(pairing, code) }
             }
         credentialStore.put(receiver, credentials)

@@ -1,26 +1,35 @@
 package io.github.aivanyuk.airkast
 
 /**
- * What [Airkast.pair] leaves a sender and a receiver that asks for a PIN agreeing on: the
- * receiver's long-term public key and id, and this sender's key and id. Kept in
- * [Airkast.credentialStore], they let every later [Airkast.connect] in without a PIN, until the
- * receiver forgets the sender. They hold the sender's private key, so a [CredentialStore] keeps
- * [encoded] where the app keeps secrets.
+ * What [Airkast.pair] leaves a sender and a receiver that asks for a PIN or password agreeing on:
+ * the receiver's long-term public key and id, and this sender's key and id. Kept in
+ * [Airkast.credentialStore], they let every later [Airkast.connect] in without asking again,
+ * until the receiver forgets the sender. They hold the sender's private key, and the receiver's
+ * password after pairing with one, since a Mac asks for it again on every connect. A
+ * [CredentialStore] keeps [encoded] where the app keeps secrets.
  *
- * Not a `@Poko` class: its `toString` leaves the private key out.
+ * Not a `@Poko` class: its `toString` leaves the private key and the password out.
  */
 public class Credentials internal constructor(
     internal val receiverKey: ByteArray,
     internal val senderSeed: ByteArray,
     internal val receiverId: ByteArray,
     internal val senderId: ByteArray,
+    /** The password the receiver took, which it may ask for again when a session starts. */
+    internal val password: String? = null,
 ) {
     /**
      * The credentials as one line to store: four hex fields, `ltpk:ltsk:atv_id:client_id`, the
-     * layout pyatv uses for its AirPlay credentials.
+     * layout pyatv uses for its AirPlay credentials, and a fifth with the password's UTF-8 bytes
+     * after pairing with one.
      */
     public val encoded: String
-        get() = listOf(receiverKey, senderSeed, receiverId, senderId).joinToString(":") { it.hex() }
+        get() =
+            (listOf(receiverKey, senderSeed, receiverId, senderId) + listOfNotNull(password?.toByteArray()))
+                .joinToString(":") { it.hex() }
+
+    internal fun withPassword(password: String): Credentials =
+        Credentials(receiverKey, senderSeed, receiverId, senderId, password)
 
     override fun equals(other: Any?): Boolean = other is Credentials && other.encoded == encoded
 
@@ -34,9 +43,9 @@ public class Credentials internal constructor(
         /** The credentials [encoded] holds, or null when it is not what [Credentials.encoded] writes. */
         public fun decode(encoded: String): Credentials? {
             val fields = encoded.trim().split(':').map { it.unhex() ?: return null }
-            if (fields.size != 4 || fields[0].size != KEY_LENGTH || fields[1].size != KEY_LENGTH) return null
+            if (fields.size !in 4..5 || fields[0].size != KEY_LENGTH || fields[1].size != KEY_LENGTH) return null
             if (fields[2].isEmpty() || fields[3].isEmpty()) return null
-            return Credentials(fields[0], fields[1], fields[2], fields[3])
+            return Credentials(fields[0], fields[1], fields[2], fields[3], fields.getOrNull(4)?.let { String(it) })
         }
 
         private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it) }

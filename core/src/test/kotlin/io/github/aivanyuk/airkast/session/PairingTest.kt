@@ -7,6 +7,7 @@ import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.Credentials
 import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.Receiver
+import io.github.aivanyuk.airkast.Secret
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
@@ -45,15 +46,75 @@ class PairingTest {
         runBlocking {
             FakeReceiver().use { fake ->
                 val receiver = asksForAPin(fake)
-                var asked = 0
-                val pin: suspend () -> String = {
-                    asked++
+                val asked = mutableListOf<Secret>()
+                val ask: suspend (Secret) -> String = { secret ->
+                    asked += secret
                     fake.pin
                 }
-                airkast.connect(receiver, pin).close()
-                airkast.connect(receiver, pin).close()
-                assertThat(asked).isEqualTo(1)
+                airkast.connect(receiver, ask).close()
+                airkast.connect(receiver, ask).close()
+                assertThat(asked).containsExactly(Secret.Pin)
                 assertThat(fake.verified).isTrue()
+            }
+        }
+
+    @Test
+    fun aReceiverThatAsksForAPasswordPairsWithItOnItsFirstConnectOnly() =
+        runBlocking {
+            FakeReceiver(password = "hunter2").use { fake ->
+                val receiver = asksForAPassword(fake)
+                val asked = mutableListOf<Secret>()
+                val ask: suspend (Secret) -> String = { secret ->
+                    asked += secret
+                    fake.password!!
+                }
+                airkast.connect(receiver, ask).use { session ->
+                    session.load(Media("https://example.com/a.m3u8"))
+                }
+                airkast.connect(receiver, ask).close()
+                assertThat(asked).containsExactly(Secret.Password)
+                assertThat(fake.pinShown).isFalse()
+                assertThat(fake.verified).isTrue()
+            }
+        }
+
+    @Test
+    fun aReceiverThatAsksAgainForThePasswordItPairedWithGetsItWithoutAsking() =
+        runBlocking {
+            // A Mac set to "Require password" pairs with it, then asks for it on every SETUP.
+            FakeReceiver(password = "hunter2", digestPassword = "hunter2").use { fake ->
+                val receiver = asksForAPassword(fake)
+                val asked = mutableListOf<Secret>()
+                val ask: suspend (Secret) -> String = { secret ->
+                    asked += secret
+                    "hunter2"
+                }
+                airkast.connect(receiver, ask).use { session ->
+                    session.load(Media("https://example.com/a.m3u8"))
+                }
+                airkast.connect(receiver, ask).close()
+                assertThat(asked).containsExactly(Secret.Password)
+                assertThat(fake.verified).isTrue()
+                assertThat(fake.unsigned).isEqualTo(0)
+            }
+        }
+
+    @Test
+    fun aPasswordTheReceiverNoLongerTakesIsAskedForAgainAndKept() =
+        runBlocking {
+            FakeReceiver(password = "hunter2", digestPassword = "hunter2").use { fake ->
+                val receiver = asksForAPassword(fake)
+                airkast.pair(receiver, Secret.Password) { "hunter2" }
+                fake.digestPassword = "hunter3"
+                val asked = mutableListOf<Secret>()
+                val ask: suspend (Secret) -> String = { secret ->
+                    asked += secret
+                    "hunter3"
+                }
+                airkast.connect(receiver, ask).close()
+                airkast.connect(receiver, ask).close()
+                assertThat(asked).containsExactly(Secret.Password)
+                assertThat(airkast.credentialStore.get(receiver)?.password).isEqualTo("hunter3")
             }
         }
 
@@ -61,9 +122,63 @@ class PairingTest {
     fun aWrongPinIsRejected() {
         FakeReceiver().use { fake ->
             val error = pairing(fake) { "0000" }
-            assertThat(error).isInstanceOf(AirkastException.PinRejected::class.java)
+            assertThat(error).isInstanceOf(AirkastException.SecretRejected::class.java)
+            assertThat((error as AirkastException.SecretRejected).secret).isEqualTo(Secret.Pin)
         }
     }
+
+    @Test
+    fun aWrongPasswordIsRejected() {
+        FakeReceiver(password = "hunter2").use { fake ->
+            val error = pairing(fake, Secret.Password) { "hunter3" }
+            assertThat((error as AirkastException.SecretRejected).secret).isEqualTo(Secret.Password)
+            assertThat(error).hasMessageThat().contains("password")
+            assertThat(pairing(fake, Secret.Password) { "hunter2" }).isNull()
+        }
+    }
+
+    @Test
+    fun aReceiverThatAsksForItsPasswordWhenTheSessionStartsIsAskedOnEveryConnect() =
+        runBlocking {
+            FakeReceiver(digestPassword = "hunter2").use { fake ->
+                // Nothing in its record says so: it asks with a Digest challenge on SETUP.
+                val receiver = Receiver("fake", "127.0.0.1", fake.port)
+                val asked = mutableListOf<Secret>()
+                val ask: suspend (Secret) -> String = { secret ->
+                    asked += secret
+                    "hunter2"
+                }
+                airkast.connect(receiver, ask).use { session ->
+                    session.load(Media("https://example.com/a.m3u8"))
+                    session.pause()
+                }
+                airkast.connect(receiver, ask).close()
+                assertThat(asked).containsExactly(Secret.Password, Secret.Password)
+                assertThat(fake.commands.map { it["type"] }).contains("setRate")
+                assertThat(fake.unsigned).isEqualTo(0)
+                assertThat(airkast.credentialStore.get(receiver)).isNull()
+            }
+        }
+
+    @Test
+    fun aWrongPasswordWhenTheSessionStartsIsRejected() =
+        runBlocking {
+            FakeReceiver(digestPassword = "hunter2").use { fake ->
+                val receiver = Receiver("fake", "127.0.0.1", fake.port)
+                val error = runCatching { airkast.connect(receiver) { "hunter3" } }.exceptionOrNull()
+                assertThat((error as AirkastException.SecretRejected).secret).isEqualTo(Secret.Password)
+            }
+        }
+
+    @Test
+    fun withoutAPromptAPasswordAskedForWhenTheSessionStartsFailsThePairing() =
+        runBlocking {
+            FakeReceiver(digestPassword = "hunter2").use { fake ->
+                val error = runCatching { airkast.connect(Receiver("fake", "127.0.0.1", fake.port)) }.exceptionOrNull()
+                assertThat(error).isInstanceOf(AirkastException.PairingFailed::class.java)
+                assertThat(error).hasMessageThat().contains("password")
+            }
+        }
 
     @Test
     fun aDismissedPinPromptCancelsThePairing() {
@@ -134,6 +249,12 @@ class PairingTest {
         assertThat(credentials.toString()).isEqualTo("Credentials(receiverId=AB)")
         assertThat(Credentials.decode("")).isNull()
         assertThat(Credentials.decode("$key:$key:4142")).isNull()
+        // After pairing with a password, a fifth field holds it.
+        val withPassword = Credentials.decode("$key:$key:4142:4344:68756e74657232")!!
+        assertThat(withPassword.password).isEqualTo("hunter2")
+        assertThat(withPassword.encoded).isEqualTo("$key:$key:4142:4344:68756e74657232")
+        assertThat(withPassword.toString()).doesNotContain("hunter2")
+        assertThat(Credentials.decode("$key:$key:4142:4344:68:69")).isNull()
         assertThat(Credentials.decode("$key:${"11".repeat(31)}:4142:4344")).isNull()
         assertThat(Credentials.decode("$key:$key:zz:4344")).isNull()
         assertThat(Credentials.decode("$key:$key::4344")).isNull()
@@ -148,12 +269,22 @@ class PairingTest {
             mapOf("features" to "0x7F8AD0,0x38BCB46", "flags" to "0x8", "deviceid" to fake.receiverId),
         ).also { check(it.compatibility == Compatibility.NeedsPin) }
 
-    /** What pairing with [fake] threw, or null when it paired. */
+    /** [fake] as discovery would describe a receiver with a password set. */
+    private fun asksForAPassword(fake: FakeReceiver) =
+        Receiver(
+            "fake",
+            "127.0.0.1",
+            fake.port,
+            mapOf("features" to "0x7F8AD0,0x38BCB46", "pw" to "true", "deviceid" to fake.receiverId),
+        ).also { check(it.compatibility == Compatibility.NeedsPassword) }
+
+    /** What pairing with [fake] for [secret] threw, or null when it paired. */
     private fun pairing(
         fake: FakeReceiver,
-        pin: suspend () -> String,
+        secret: Secret = Secret.Pin,
+        ask: suspend () -> String,
     ): Throwable? =
         runCatching {
-            runBlocking { airkast.pair(Receiver("fake", "127.0.0.1", fake.port), pin) }
+            runBlocking { airkast.pair(Receiver("fake", "127.0.0.1", fake.port), secret, ask) }
         }.exceptionOrNull()
 }

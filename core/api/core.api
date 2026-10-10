@@ -1,6 +1,6 @@
 public final class io/github/aivanyuk/airkast/Airkast {
-	public final fun connect (Lio/github/aivanyuk/airkast/Receiver;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/Airkast;Lio/github/aivanyuk/airkast/Receiver;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun connect (Lio/github/aivanyuk/airkast/Receiver;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/Airkast;Lio/github/aivanyuk/airkast/Receiver;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun copy (Lkotlin/jvm/functions/Function1;)Lio/github/aivanyuk/airkast/Airkast;
 	public final fun getConnectTimeout-UwyO8pc ()J
 	public final fun getCredentialStore ()Lio/github/aivanyuk/airkast/CredentialStore;
@@ -11,7 +11,8 @@ public final class io/github/aivanyuk/airkast/Airkast {
 	public final fun getNtpTiming ()Z
 	public final fun getRequestTimeout-UwyO8pc ()J
 	public final fun getSocketFactory ()Lkotlin/jvm/functions/Function1;
-	public final fun pair (Lio/github/aivanyuk/airkast/Receiver;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun pair (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun pair$default (Lio/github/aivanyuk/airkast/Airkast;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class io/github/aivanyuk/airkast/Airkast$Builder {
@@ -58,14 +59,15 @@ public final class io/github/aivanyuk/airkast/AirkastException$PairingFailed : i
 	public fun <init> (Ljava/lang/String;)V
 }
 
-public final class io/github/aivanyuk/airkast/AirkastException$PinRejected : io/github/aivanyuk/airkast/AirkastException {
-	public fun <init> ()V
-}
-
 public final class io/github/aivanyuk/airkast/AirkastException$Rejected : io/github/aivanyuk/airkast/AirkastException {
 	public fun <init> (Ljava/lang/String;I)V
 	public final fun getRequest ()Ljava/lang/String;
 	public final fun getStatus ()I
+}
+
+public final class io/github/aivanyuk/airkast/AirkastException$SecretRejected : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (Lio/github/aivanyuk/airkast/Secret;)V
+	public final fun getSecret ()Lio/github/aivanyuk/airkast/Secret;
 }
 
 public final class io/github/aivanyuk/airkast/AirkastException$Timeout : io/github/aivanyuk/airkast/AirkastException {
@@ -294,6 +296,14 @@ public final class io/github/aivanyuk/airkast/ReceiverEvent$VolumeChanged : io/g
 	public final fun getVolume ()D
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/Secret : java/lang/Enum {
+	public static final field Password Lio/github/aivanyuk/airkast/Secret;
+	public static final field Pin Lio/github/aivanyuk/airkast/Secret;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/Secret;
+	public static fun values ()[Lio/github/aivanyuk/airkast/Secret;
 }
 
 public final class io/github/aivanyuk/airkast/SenderIdentity {

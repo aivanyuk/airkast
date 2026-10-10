@@ -13,6 +13,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Receiver
+import io.github.aivanyuk.airkast.Secret
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -41,10 +42,10 @@ internal class HandoffPlayer(
 
     override fun connect(
         receiver: Receiver,
-        withPin: Boolean,
-    ) = remote.connect(receiver, withPin)
+        pairWith: Secret?,
+    ) = remote.connect(receiver, pairWith)
 
-    override fun enterPin(pin: String) = remote.enterPin(pin)
+    override fun enterSecret(value: String) = remote.enterSecret(value)
 
     override fun disconnect() = remote.disconnect()
 

@@ -28,6 +28,10 @@ internal class ControlConnection(
     val localAddress get() = link.localAddress
     val remoteAddress get() = link.remoteAddress
 
+    /** Signs every request from here on, once the receiver asked for its password. */
+    @Volatile
+    var digest: Digest? = null
+
     fun encrypt(
         writeKey: ByteArray,
         readKey: ByteArray,
@@ -52,6 +56,7 @@ internal class ControlConnection(
                     add("User-Agent" to identity.userAgent)
                 }
                 if (contentType != null) add("Content-Type" to contentType)
+                digest?.let { add("Authorization" to it.authorization(method, target)) }
                 addAll(headers)
             }
         while (owed > 0) {

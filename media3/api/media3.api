@@ -1,8 +1,8 @@
 public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer : androidx/media3/common/Player {
-	public abstract fun connect (Lio/github/aivanyuk/airkast/Receiver;Z)V
-	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;ZILjava/lang/Object;)V
+	public abstract fun connect (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;)V
+	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;ILjava/lang/Object;)V
 	public abstract fun disconnect ()V
-	public abstract fun enterPin (Ljava/lang/String;)V
+	public abstract fun enterSecret (Ljava/lang/String;)V
 	public abstract fun getConnection ()Lkotlinx/coroutines/flow/StateFlow;
 	public abstract fun getSession ()Lio/github/aivanyuk/airkast/AirkastSession;
 	public abstract fun setSession (Lio/github/aivanyuk/airkast/AirkastSession;)V
@@ -28,9 +28,10 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
 }
 
-public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$AwaitingPin : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
-	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;)V
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$AwaitingSecret : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;)V
 	public final fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public final fun getSecret ()Lio/github/aivanyuk/airkast/Secret;
 	public fun toString ()Ljava/lang/String;
 }
 
@@ -54,7 +55,7 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$Id
 }
 
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$DefaultImpls {
-	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;ZILjava/lang/Object;)V
+	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/media3/AirkastPlayer;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;ILjava/lang/Object;)V
 }
 
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayerKt {

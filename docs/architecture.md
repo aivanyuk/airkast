@@ -27,7 +27,7 @@ level for one thing and keep the rest.
    pairings in its `CredentialStore`. Its builder holds every option, and `copy { }` makes a
    variant. `Airkast(context)` in `:android` builds the same class with Android's defaults.
 3. **`AirkastPlayer`**: a media3 `Player` that runs a cast through a client: the connect, the
-   PIN, BACK on the TV's remote and the end, with a `connection` flow for the UI. With a local
+   PIN or password, BACK on the TV's remote and the end, with a `connection` flow for the UI. With a local
    player, it plays on the phone between casts. Setting its `session` by hand steps down to
    level 1 and keeps the player.
 
@@ -44,7 +44,7 @@ goes there, never into a module's own build file.
 | Package | Holds | May use |
 | --- | --- | --- |
 | `io.github.aivanyuk.airkast` | The public API: `Airkast`, `AirkastSession`, `Media`, `Receiver`, `Compatibility`, `Credentials`, `CredentialStore`, the values and events, `AirkastException` | everything below |
-| `.session` | The protocol's state: `DefaultVideoSession` (AirPlay video v2), `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `PinPairing`, `PairVerify`), `TimingResponder` | `wire`, `crypto` |
+| `.session` | The protocol's state: `DefaultVideoSession` (AirPlay video v2), `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder` | `wire`, `crypto` |
 | `.wire` | Encodings and framing: HTTP and RTSP messages, TLV8, binary plists, the encrypted `Link`. No protocol decisions | `crypto` |
 | `.crypto` | SRP-6a, HKDF-SHA512, ChaCha20-Poly1305, X25519, Ed25519, as pure functions with vector tests | nothing |
 | `.internal` | Build support, such as the `@Poko` annotation | nothing |
@@ -55,8 +55,12 @@ Everything outside the root package is `internal`. A lower layer never imports a
 
 `Airkast.connect` opens the control connection, pairs, and encrypts it. It pairs transiently,
 or, with credentials in the client's `CredentialStore`, proves the pairing `Airkast.pair` made with
-a PIN (pair-verify), and the channel keys derive from that pairing's secret. A receiver that
-advertises a PIN and has no credentials pairs first, when the caller gave a way to ask for it. `DefaultVideoSession`
+a PIN or password (pair-verify), and the channel keys derive from that pairing's secret. A
+receiver that advertises a PIN or password and has no credentials pairs first, when the caller
+gave a way to ask for it. A receiver that answers the base SETUP with a Digest challenge, as a
+Mac with a password does, gets the password kept with the credentials, which then signs every
+request on the control connection. With none kept, or a wrong one, the open fails, and a connect
+with a prompt opens again with the one the user types, and keeps it. `DefaultVideoSession`
 then sends the base SETUP, opens the event channel, sends RECORD and a SETUP for the type-130
 stream, and from there drives playback with `POST /command`. The receiver answers every command
 with 200 and sends results and events over the event channel. A request carries a `messageID`,
@@ -82,9 +86,10 @@ The protocol facts, with the receivers they were seen on, are in
 - **`CredentialStore` is the storage seam.** `:core` keeps pairings in memory or in a file,
   `:android` puts that file in the no-backup files, and an app with a keystore implements its
   own.
-- **Pairing is a step before the session.** How a connection pairs (transient, pair-verify, and
-  later a password) changes only the secret the session's keys derive from, so it is chosen in
-  `DefaultVideoSession.open` and the session after it is the same.
+- **Pairing is a step before the session.** How a connection pairs (transient, pair-verify after
+  a PIN or password) changes only the secret the session's keys derive from, so it is chosen in
+  `DefaultVideoSession.open` and the session after it is the same. A Digest password only adds a
+  header to the control connection's requests.
 - **`Airkast.Builder.logger` is the logging seam**, so the app routes lines to its own logger.
 
 ## Threading

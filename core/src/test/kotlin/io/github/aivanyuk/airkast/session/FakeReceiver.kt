@@ -16,6 +16,7 @@ import io.github.aivanyuk.airkast.wire.Tlv8
 import java.math.BigInteger
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -25,10 +26,12 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 private val RANDOM = SecureRandom()
+private val DIGEST_FIELD = Regex("""(\w+)="([^"]*)"""")
 
 /**
- * A receiver on loopback that pairs transiently or with a PIN, accepts the session and its stream,
- * and answers `/command` the way the LG CX does, with its replies and events on the event channel.
+ * A receiver on loopback that pairs transiently, with a PIN or with a password, accepts the session
+ * and its stream, and answers `/command` the way the LG CX does, with its replies and events on the
+ * event channel.
  */
 internal class FakeReceiver(
     private val takesItems: Boolean = true,
@@ -39,6 +42,10 @@ internal class FakeReceiver(
     private val hangsAt: String? = null,
     /** The PIN it shows for a pairing that is not transient. */
     val pin: String = "2468",
+    /** The password set on it, which a pairing that is not transient takes in place of [pin]. */
+    val password: String? = null,
+    /** The password it asks for with a Digest challenge when the session starts, as a Mac does. */
+    digestPassword: String? = null,
 ) : AutoCloseable {
     private val longTermSeed = ByteArray(32).also(RANDOM::nextBytes)
     val receiverId: String = UUID.randomUUID().toString().uppercase()
@@ -58,6 +65,15 @@ internal class FakeReceiver(
     /** Whether a sender proved a pairing with pair-verify. */
     @Volatile
     var verified = false
+        private set
+
+    /** The password it asks for with a Digest challenge when the session starts, as a Mac does. */
+    @Volatile
+    var digestPassword: String? = digestPassword
+
+    /** Requests after the Digest challenge was answered that came without its `Authorization`. */
+    @Volatile
+    var unsigned = 0
         private set
 
     private val lateAnswers = lateAnswers.toMutableMap()
@@ -104,9 +120,14 @@ internal class FakeReceiver(
         var sessionKey = ByteArray(0)
         var verifyPrivate = ByteArray(0)
         var senderPublic = ByteArray(0)
+        var nonce: String? = null
+        var signedIn = false
         while (true) {
             val request = HttpMessage.read(link.input) ?: return
             val path = request.startLine.split(' ')[1]
+            val asked = digestPassword
+            val signed = asked != null && nonce != null && signs(request, asked, nonce)
+            if (signedIn && !signed) unsigned++
             when {
                 path == "/pair-pin-start" -> {
                     if (request.header("X-Apple-HKP") == "3") pinShown = true
@@ -118,7 +139,8 @@ internal class FakeReceiver(
                     when (tlv.getValue(Tlv8.SEQUENCE)[0].toInt()) {
                         1 -> {
                             val transient = (tlv[Tlv8.FLAGS]?.get(0)?.toInt() ?: 0) and Tlv8.FLAG_TRANSIENT != 0
-                            val server = SrpServer(if (transient) "3939" else pin, transient).also { srp = it }
+                            val secret = if (transient) "3939" else password ?: pin
+                            val server = SrpServer(secret, transient).also { srp = it }
                             link.reply(
                                 request,
                                 Tlv8.encode(
@@ -214,7 +236,21 @@ internal class FakeReceiver(
                     }
                 }
 
+                request.startLine.startsWith("SETUP") && asked != null && !signedIn && !signed -> {
+                    nonce = UUID.randomUUID().toString().replace("-", "")
+                    link.write(
+                        HttpMessage(
+                            "${request.requestProtocol} 401 Unauthorized",
+                            listOf(
+                                "CSeq" to request.header("CSeq").orEmpty(),
+                                "WWW-Authenticate" to "Digest realm=\"raop\", nonce=\"$nonce\"",
+                            ),
+                        ).encode(),
+                    )
+                }
+
                 request.startLine.startsWith("SETUP") -> {
+                    signedIn = signedIn || signed
                     val body = BinaryPlist.decode(request.body) as Map<*, *>
                     if (body.containsKey("streams")) {
                         link.reply(
@@ -413,6 +449,23 @@ internal class FakeReceiver(
         control.close()
         events.close()
     }
+
+    /** Whether [request] carries the Digest answer, RFC 2617 without `qop`, to [nonce] with [password]. */
+    private fun signs(
+        request: HttpMessage,
+        password: String,
+        nonce: String,
+    ): Boolean {
+        val authorization = request.header("Authorization") ?: return false
+        val fields = DIGEST_FIELD.findAll(authorization).associate { it.groupValues[1] to it.groupValues[2] }
+        val (method, uri) = request.startLine.split(' ')
+        val ha1 = md5("${fields["username"]}:${fields["realm"]}:$password")
+        val ha2 = md5("$method:$uri")
+        return fields["nonce"] == nonce && fields["uri"] == uri && fields["response"] == md5("$ha1:$nonce:$ha2")
+    }
+
+    private fun md5(text: String): String =
+        MessageDigest.getInstance("MD5").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
 
     private fun Link.reply(
         request: HttpMessage,

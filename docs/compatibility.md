@@ -17,6 +17,7 @@ what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRI
 | LG OLED CX (webOS) | 04.64.00 as on 2026-10-08, not read again; 377.25.06 from `/info` | 2026-10-10, at 67da794 | desktop JVM 21 (WSL) | `Supported`. Live test passes through a client built with `Airkast { }`: start position, seek, pause, play, tracks switched, volume read, stop |
 | LG OLED CX (webOS) | 04.64.00 as on 2026-10-08, not read again; 377.25.06 from `/info` | 2026-10-10, at 54cce4b | Xiaomi 2201117TY, Android 13, the sample app | `Supported`. By hand, through `AirkastPlayer` with an `ExoPlayer` as `localPlayer`: played on the phone, moved to the TV at the same point when it was tapped, and came back to the phone paused where the TV was on BACK and on Disconnect, then resumed with play |
 | MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app with `ntpTiming = true` | Plays with NTP timing, set to "Anyone on the same network". Transient pairing, load, play, pause from the Mac, the next item, tracks read and switched (closed captions, subtitles, subtitles off), playback info, stop, by hand. At "Current User" transient pairing is refused |
+| MacBook Pro (MacBookPro18,1, macOS build 25G241 as above, not read again) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app | `NeedsPassword` with "Require password" on. By hand, through `AirkastPlayer.connect`: transient pairing refused; a wrong password refused at pair-setup M4 (`SecretRejected`); the right one paired (M1 to M6) with no `/pair-pin-start`, and later connects verified the pairing (pair-verify). Every base SETUP, even after pair-verify, answered 401 with a Digest challenge, a second 401 to a wrong password, and 200 to the right one, which the credentials then kept: later connects went in without asking. Played; `AirkastPlayer`'s notification did not follow, since the Mac's `currentItemChanged` carries no item uuid |
 
 ### How `Receiver.compatibility` decides
 
@@ -28,15 +29,15 @@ From the `_airplay._tcp` TXT record, in this order. Bit numbers follow pyatv's `
 | `NoVideo` | No video v2 (feature bit 49) and no video v1 (bit 0) | speakers; mirroring-only receivers |
 | `VideoV1Only` | Video v1 without v2 | older Apple TVs; some third-party receivers |
 | `AccessRestricted` | `act=2`, which pyatv reads as "Current User" | a Mac's AirPlay Receiver at its default, "Current User" |
-| `NeedsPassword` | `pw=true`, or status flag `0x80` | a receiver with a password set |
-| `NeedsPin` | Status flag `0x8`. The first `Airkast.connect` with a `pin` prompt pairs, and later ones use the stored `Credentials` | the LG CX set to ask for a PIN; a receiver set to require a code |
+| `NeedsPassword` | `pw=true`, or status flag `0x80`. The first `Airkast.connect` with a prompt pairs with the password, and later ones use the stored `Credentials`, which keep the password too | a Mac set to "Require password"; a receiver with a password set |
+| `NeedsPin` | Status flag `0x8`. The first `Airkast.connect` with a prompt pairs, and later ones use the stored `Credentials` | the LG CX set to ask for a PIN; a receiver set to require a code |
 | `NoTransientPairing` | Neither system pairing (bit 43) nor CoreUtils pairing (bit 48) | none seen yet |
 | `Supported` | Anything else | the LG CX |
 
 pyatv also reads status flag `0x200` as "pairing mandatory". The LG CX sets it (flags `0x244`) and
-pairs without a PIN, so airkast ignores it. A receiver may also ask for a PIN without flag `0x8`;
-transient pairing then fails with `PairingFailed`, and pairing with a PIN is the caller's choice
-(the sample offers it).
+pairs without a PIN, so airkast ignores it. A receiver may also ask for a PIN or password without
+flag `0x8` or `0x80`; transient pairing then fails with `PairingFailed`, and pairing with one is
+the caller's choice (the sample offers both).
 
 ### Pairing
 
@@ -44,11 +45,23 @@ transient pairing then fails with `PairingFailed`, and pairing with a PIN is the
 | --- | --- | --- |
 | Transient | Every connect without credentials | `X-Apple-HKP: 4`, pair-setup M1 to M4 with the transient flag and PIN 3939 |
 | With a PIN | `Airkast.pair`, or a connect that pairs first | `X-Apple-HKP: 3`, `/pair-pin-start` shows the PIN, pair-setup M1 to M6: SRP, then Ed25519 long-term keys exchanged under ChaCha20-Poly1305 |
+| With a password | `Airkast.pair(receiver, Secret.Password)`, or a connect that pairs first | As with a PIN, with the password as the SRP secret and no `/pair-pin-start` |
 | Pair-verify | Every connect with credentials in the client's `CredentialStore` | `X-Apple-HKP: 3`, `/pair-verify` M1 to M4: X25519, signed with both long-term keys |
+| Digest | A base SETUP answered with 401 and `WWW-Authenticate: Digest`, as a Mac with a password answers every one | SETUP again, and every request after, with `Authorization: Digest`: RFC 2617 without `qop`, user name `AirPlay`, and the password kept with the credentials or typed |
 
 The PIN pairing and pair-verify follow pyatv's AirPlay HAP procedures, and `Credentials.encoded`
 is pyatv's credential string, `ltpk:ltsk:atv_id:client_id`. They are tested against
 `FakeReceiver`, and checked by hand on the LG CX set to ask for a PIN.
+
+The password pairing follows owntone's AirPlay 2 sender, which pairs a receiver with status flag
+`0x80` the way it pairs one with a PIN, with the password in its place and nothing shown. owntone
+also answers a 401 to SETUP with Digest and the password, as pyatv does for an AirPlay 1
+ANNOUNCE; the user name is the one Rapid7's Apple TV login scanner tries. A Mac needs both, so
+the password stays in the `Credentials` (a fifth field of `encoded`, after pyatv's four) and
+answers the Digest challenge on every connect. A second 401 is a wrong password: the prompt is
+asked once more, and the password it takes replaces the kept one. A receiver that pairs
+transiently leaves no credentials to keep it in, so the prompt asks on every connect. Both are
+tested against `FakeReceiver`, and checked by hand on a Mac set to "Require password".
 
 ### LG CX (webOS 04.64.00)
 
@@ -88,7 +101,12 @@ is pyatv's credential string, `ltpk:ltsk:atv_id:client_id`. They are tested agai
   an iPhone on the owner's Apple Account casts, airkast cannot. pyatv reads that setting as TXT
   `act=2` (`AccessRestricted`); the Mac's record at "Current User" is not checked yet. At "Anyone
   on the same network" it pairs transiently without a PIN, and `GET /info` reports
-  `statusFlags = 4`. "Everyone" and "Require password" are not checked yet.
+  `statusFlags = 4`. "Everyone" is not checked yet.
+- With "Require password" on, it reads as `NeedsPassword`, refuses transient pairing, and pairs
+  with the password as owntone does. It then answers every base SETUP with 401 and a Digest
+  challenge, even after pair-verify, and takes the same password there. Discovery may still hold
+  the record from before the password was set, and the receiver then reads as `Supported` until
+  it is resolved again.
 - `GET /info` answers 403 without an AirPlay `User-Agent`.
 - It answers the base SETUP with 500 when `timingProtocol` is `None`. With `NTP` it asks for the
   time three times, within a second, and answers 200 once it has it, then asks again every two to
@@ -109,7 +127,7 @@ is pyatv's credential string, `ltpk:ltsk:atv_id:client_id`. They are tested agai
 
 - **Apple TV (tvOS).** send-airplay2 reports the same `/command` flow on tvOS 26, and that SETUP
   stalls without NTP timing (`Airkast.ntpTiming`, on by default). Depending on its AirPlay access setting
-  it may ask for a PIN once (`Airkast.connect` with a `pin` prompt, or `Airkast.pair`), or, set to "Only people sharing this home", let in
+  it may ask for a PIN or password once (`Airkast.connect` with a prompt, or `Airkast.pair`), or, set to "Only people sharing this home", let in
   only members of its Home.
 - **Other TVs with AirPlay 2** (Samsung, Sony, Vizio, Roku, other LG years): whatever their TXT
   record says. A report with the record, the firmware and the live test's result is welcome.

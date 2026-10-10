@@ -9,6 +9,7 @@ import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Secret
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -18,9 +19,9 @@ import kotlin.time.Duration.Companion.seconds
  * notification and lock screen, drive the TV as they drive a local player.
  *
  * [connect] runs a whole cast: it opens a session through the player's [Airkast], asks for a PIN
- * when the receiver needs one, plays the media item, and ends the cast when BACK is pressed on the
- * TV's remote. [connection] says where it stands. An app that opens its own sessions sets
- * [session] instead, and the player only plays on it.
+ * or password when the receiver needs one, plays the media item, and ends the cast when BACK is
+ * pressed on the TV's remote. [connection] says where it stands. An app that opens its own
+ * sessions sets [session] instead, and the player only plays on it.
  *
  * It plays one media item, whose URL the receiver fetches itself. A media item set while a session
  * is attached loads at once, as a Cast player's does, and one set before waits for a session. The
@@ -34,16 +35,18 @@ import kotlin.time.Duration.Companion.seconds
  */
 public interface AirkastPlayer : Player {
     /**
-     * Where the cast stands, for the UI: idle, connecting, waiting for a PIN, or connected. It
-     * follows [connect], [disconnect], a [session] set by hand, and a session that ends.
+     * Where the cast stands, for the UI: idle, connecting, waiting for a PIN or password, or
+     * connected. It follows [connect], [disconnect], a [session] set by hand, and a session that
+     * ends.
      */
     public val connection: StateFlow<Connection>
 
     /**
      * Connects to [receiver] and plays the media item on it. A cast to another receiver ends first,
      * and the item moves to [receiver] at the position it reached. A receiver that asks for a PIN
-     * ([Compatibility.NeedsPin]), or any receiver when [withPin] is set, pairs first unless it
-     * paired before: [connection] turns [Connection.AwaitingPin] until [enterPin].
+     * ([Compatibility.NeedsPin]) or a password ([Compatibility.NeedsPassword]), or any receiver
+     * when [pairWith] is set, pairs first unless it paired before: [connection] turns
+     * [Connection.AwaitingSecret] until [enterSecret].
      *
      * The player owns the session it opens: it closes it on [disconnect], on the next connect, and
      * on [release]. After a failure, or a session that ended by itself, [prepare] (the play button
@@ -51,17 +54,17 @@ public interface AirkastPlayer : Player {
      */
     public fun connect(
         receiver: Receiver,
-        withPin: Boolean = false,
+        pairWith: Secret? = null,
     )
 
-    /** The PIN the receiver shows, while [connection] is [Connection.AwaitingPin]. */
-    public fun enterPin(pin: String)
+    /** What the user typed for the secret [connection] asks for while it is [Connection.AwaitingSecret]. */
+    public fun enterSecret(value: String)
 
     /**
      * Ends the cast: stops the item on the receiver, which leaves its player, lets go of the
      * session, closing it if the player opened it, and clears the media item, which takes a
      * `MediaSession`'s notification down. With a [Builder.localPlayer], the item goes back to it
-     * instead. A connect in progress, or its PIN prompt, is given up.
+     * instead. A connect in progress, or its PIN or password prompt, is given up.
      */
     public fun disconnect()
 
@@ -97,11 +100,15 @@ public interface AirkastPlayer : Player {
             override fun toString(): String = "Connecting(receiver=${receiver.name})"
         }
 
-        /** [receiver] shows a PIN on its screen: pass what the user types to [enterPin], or [disconnect]. */
-        public class AwaitingPin(
+        /**
+         * [receiver] asks for a [secret]: the PIN on its screen, or the password set on it. Pass
+         * what the user types to [enterSecret], or [disconnect].
+         */
+        public class AwaitingSecret(
             public val receiver: Receiver,
+            public val secret: Secret,
         ) : Connection {
-            override fun toString(): String = "AwaitingPin(receiver=${receiver.name})"
+            override fun toString(): String = "AwaitingSecret(receiver=${receiver.name}, secret=$secret)"
         }
 
         public class Connected(
@@ -194,13 +201,13 @@ public fun AirkastPlayer(
 internal fun interface Connector {
     suspend fun connect(
         receiver: Receiver,
-        withPin: Boolean,
-        pin: suspend () -> String,
+        pairWith: Secret?,
+        ask: suspend (Secret) -> String,
     ): AirkastSession
 }
 
 internal fun Airkast.connector() =
-    Connector { receiver, withPin, pin ->
-        if (withPin && credentialStore.get(receiver) == null) pair(receiver, pin)
-        connect(receiver, pin)
+    Connector { receiver, pairWith, ask ->
+        if (pairWith != null && credentialStore.get(receiver) == null) pair(receiver, pairWith) { ask(pairWith) }
+        connect(receiver, ask)
     }

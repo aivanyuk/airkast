@@ -2,6 +2,7 @@ package io.github.aivanyuk.airkast.session
 
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Credentials
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.crypto.ChaCha20Poly1305
 import io.github.aivanyuk.airkast.crypto.Ed25519
 import io.github.aivanyuk.airkast.crypto.Hkdf
@@ -51,18 +52,19 @@ internal object TransientPairing {
 }
 
 /**
- * HomeKit pair-setup with the PIN the receiver shows: SRP as [TransientPairing] does it, then an
- * exchange of long-term Ed25519 keys, each signed and sent under a key from the SRP secret. [start]
- * puts the PIN on the screen, and [finish] takes it and returns the [Credentials] that
- * [PairVerify] proves on every later connection.
+ * HomeKit pair-setup with a [Secret]: SRP as [TransientPairing] does it, with the PIN the receiver
+ * shows or the password set on it, then an exchange of long-term Ed25519 keys, each signed and sent
+ * under a key from the SRP secret. [start] puts a PIN on the screen, and [finish] takes the secret
+ * and returns the [Credentials] that [PairVerify] proves on every later connection.
  */
-internal class PinPairing private constructor(
+internal class SecretPairing private constructor(
     private val connection: ControlConnection,
+    private val kind: Secret,
     private val salt: ByteArray,
     private val serverPublic: ByteArray,
 ) : AutoCloseable {
-    fun finish(pin: String): Credentials {
-        val srp = SrpClient("Pair-Setup", pin)
+    fun finish(code: String): Credentials {
+        val srp = SrpClient("Pair-Setup", code)
         val proof = srp.respond(salt, serverPublic)
         val m4 =
             post(
@@ -73,7 +75,7 @@ internal class PinPairing private constructor(
                 Tlv8.PUBLIC_KEY to srp.publicKey,
                 Tlv8.PROOF to proof,
             ) { error ->
-                if (error == Tlv8.ERROR_AUTHENTICATION) AirkastException.PinRejected() else null
+                if (error == Tlv8.ERROR_AUTHENTICATION) AirkastException.SecretRejected(kind) else null
             }
         if (!srp.verifyServer(m4.require(Tlv8.PROOF, "proof"))) {
             throw AirkastException.PairingFailed("The receiver's proof does not match")
@@ -111,7 +113,7 @@ internal class PinPairing private constructor(
         ) {
             throw AirkastException.PairingFailed("The receiver's signature does not match")
         }
-        return Credentials(receiverKey, seed, receiverId, senderId)
+        return Credentials(receiverKey, seed, receiverId, senderId, code.takeIf { kind == Secret.Password })
     }
 
     override fun close() = connection.close()
@@ -119,9 +121,18 @@ internal class PinPairing private constructor(
     companion object {
         private val HEADERS = listOf("X-Apple-HKP" to "3")
 
-        /** Asks the receiver on [connection] to show a PIN, and takes it over: [close] closes it. */
-        fun start(connection: ControlConnection): PinPairing {
-            connection.exchange("POST", "/pair-pin-start", ControlConnection.HTTP, HEADERS, contentType = TLV)
+        /**
+         * Starts pairing with the receiver on [connection], and takes it over: [close] closes it.
+         * For a [Secret.Pin], the receiver shows one. A password needs nothing shown, and owntone
+         * sends no `/pair-pin-start` for one.
+         */
+        fun start(
+            connection: ControlConnection,
+            secret: Secret,
+        ): SecretPairing {
+            if (secret == Secret.Pin) {
+                connection.exchange("POST", "/pair-pin-start", ControlConnection.HTTP, HEADERS, contentType = TLV)
+            }
             val m2 =
                 post(
                     connection,
@@ -130,13 +141,18 @@ internal class PinPairing private constructor(
                     Tlv8.METHOD to byteArrayOf(0),
                     Tlv8.SEQUENCE to byteArrayOf(1),
                 )
-            return PinPairing(connection, m2.require(Tlv8.SALT, "salt"), m2.require(Tlv8.PUBLIC_KEY, "public key"))
+            return SecretPairing(
+                connection,
+                secret,
+                m2.require(Tlv8.SALT, "salt"),
+                m2.require(Tlv8.PUBLIC_KEY, "public key"),
+            )
         }
     }
 }
 
 /**
- * HomeKit pair-verify with [Credentials] from a [PinPairing]: an X25519 exchange that each side
+ * HomeKit pair-verify with [Credentials] from a [SecretPairing]: an X25519 exchange that each side
  * signs with its long-term key. Returns the shared secret the channel keys derive from.
  */
 internal object PairVerify {

@@ -9,6 +9,7 @@ import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
@@ -95,32 +96,32 @@ internal class DefaultVideoSession private constructor(
         identity: SenderIdentity,
         sessionKey: ByteArray,
     ) {
-        val base =
-            control
-                .exchange(
-                    "SETUP",
-                    rtspUri,
-                    body =
-                        BinaryPlist.encode(
-                            mapOf(
-                                "deviceID" to identity.deviceId,
-                                "sessionUUID" to sessionId,
-                                "timingProtocol" to if (timing != null) "NTP" else "None",
-                                "isMultiSelectAirPlay" to true,
-                                "groupContainsGroupLeader" to false,
-                                "macAddress" to identity.deviceId,
-                                "model" to identity.model,
-                                "name" to identity.name,
-                                "osBuildVersion" to identity.osBuildVersion,
-                                "osName" to identity.osName,
-                                "osVersion" to identity.osVersion,
-                                "senderSupportsRelay" to false,
-                                "sourceVersion" to identity.sourceVersion,
-                                "statsCollectionEnabled" to false,
-                            ) + (timing?.let { mapOf("timingPort" to it.port.toLong()) } ?: emptyMap()),
-                        ),
-                    contentType = ControlConnection.BPLIST,
-                ).requireSuccess("SETUP")
+        val body =
+            BinaryPlist.encode(
+                mapOf(
+                    "deviceID" to identity.deviceId,
+                    "sessionUUID" to sessionId,
+                    "timingProtocol" to if (timing != null) "NTP" else "None",
+                    "isMultiSelectAirPlay" to true,
+                    "groupContainsGroupLeader" to false,
+                    "macAddress" to identity.deviceId,
+                    "model" to identity.model,
+                    "name" to identity.name,
+                    "osBuildVersion" to identity.osBuildVersion,
+                    "osName" to identity.osName,
+                    "osVersion" to identity.osVersion,
+                    "senderSupportsRelay" to false,
+                    "sourceVersion" to identity.sourceVersion,
+                    "statsCollectionEnabled" to false,
+                ) + (timing?.let { mapOf("timingPort" to it.port.toLong()) } ?: emptyMap()),
+            )
+        var base = control.exchange("SETUP", rtspUri, body = body, contentType = ControlConnection.BPLIST)
+        if (base.status == UNAUTHORIZED) {
+            control.digest = answer(base)
+            base = control.exchange("SETUP", rtspUri, body = body, contentType = ControlConnection.BPLIST)
+            if (base.status == UNAUTHORIZED) throw AirkastException.SecretRejected(Secret.Password)
+        }
+        base.requireSuccess("SETUP")
         options.logger?.invoke("SETUP ${base.status} ${plist(base).keys}")
         val eventPort =
             (plist(base)["eventPort"] as? Long)?.toInt()
@@ -172,6 +173,25 @@ internal class DefaultVideoSession private constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Answers the Digest challenge in a SETUP's 401 with the connect's password. Without one, it
+     * fails with what makes `Airkast.connect` ask for it.
+     */
+    private fun answer(reply: HttpMessage): Digest {
+        val challenge =
+            Digest.challenge(reply.header("WWW-Authenticate"))
+                ?: throw AirkastException.Rejected("SETUP", reply.status)
+        options.logger?.invoke("SETUP asks for a password")
+        val password =
+            options.password
+                ?: throw AirkastException.PairingFailed(
+                    "The receiver asks for a password",
+                    credentialsRefused = false,
+                    passwordAsked = true,
+                )
+        return challenge.answer(password)
     }
 
     private fun connectWithRetry(port: Int): Socket {
@@ -459,6 +479,7 @@ internal class DefaultVideoSession private constructor(
 
     companion object {
         private const val STREAM_TYPE = 130L
+        private const val UNAUTHORIZED = 401
         private const val URL_STREAM_CLIENT_TYPE = "A6B27562-B43A-4F2D-B75F-82391E250194"
         private val FEEDBACK_INTERVAL = 2.seconds
 
@@ -497,28 +518,32 @@ internal class DefaultVideoSession private constructor(
             }
         }
 
-        /** Shows a PIN on [receiver] and takes it over the connection the pairing then finishes on. */
+        /**
+         * Starts pairing with [receiver] for [secret], showing a PIN if it is one, over the
+         * connection the pairing then finishes on.
+         */
         fun startPairing(
             receiver: Receiver,
             identity: SenderIdentity,
             options: SessionOptions,
-        ): PinPairing {
+            secret: Secret,
+        ): SecretPairing {
             val control = control(receiver, identity, options)
             try {
-                return PinPairing.start(control)
+                return SecretPairing.start(control, secret)
             } catch (e: Exception) {
                 runCatching { control.close() }
                 throw failure(e)
             }
         }
 
-        /** [PinPairing.finish], failing as the rest of the API does. */
+        /** [SecretPairing.finish], failing as the rest of the API does. */
         fun finishPairing(
-            pairing: PinPairing,
-            pin: String,
+            pairing: SecretPairing,
+            code: String,
         ): Credentials =
             try {
-                pairing.finish(pin)
+                pairing.finish(code)
             } catch (e: Exception) {
                 throw failure(e)
             }
