@@ -105,6 +105,24 @@ class PairingTest {
                 val error = runCatching { airkast.connect(receiver) }.exceptionOrNull()
                 assertThat(error).isInstanceOf(AirkastException.PairingFailed::class.java)
                 assertThat(error).hasMessageThat().contains("not the one")
+                assertThat(airkast.credentialStore.get(receiver)).isNull()
+            }
+        }
+
+    @Test
+    fun aReceiverThatFailsToVerifyForAnotherReasonKeepsTheCredentials() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                val receiver = asksForAPin(fake)
+                val credentials = airkast.pair(receiver) { fake.pin }
+                fake.verifyStatus = 503
+                val error = runCatching { airkast.connect(receiver) { error("No PIN is asked for") } }.exceptionOrNull()
+                assertThat(error).isInstanceOf(AirkastException.PairingFailed::class.java)
+                assertThat(airkast.credentialStore.get(receiver)).isEqualTo(credentials)
+
+                fake.verifyStatus = null
+                airkast.connect(receiver).close()
+                assertThat(fake.verified).isTrue()
             }
         }
 

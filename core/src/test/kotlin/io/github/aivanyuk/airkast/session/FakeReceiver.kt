@@ -51,6 +51,10 @@ internal class FakeReceiver(
     var pinShown = false
         private set
 
+    /** An error status that `/pair-verify` answers with, as a busy receiver might, or null to verify. */
+    @Volatile
+    var verifyStatus: Int? = null
+
     /** Whether a sender proved a pairing with pair-verify. */
     @Volatile
     var verified = false
@@ -148,6 +152,10 @@ internal class FakeReceiver(
                             link.reply(request, exchangeLongTermKeys(sessionKey, tlv.getValue(Tlv8.ENCRYPTED_DATA)))
                         }
                     }
+                }
+
+                path == "/pair-verify" && verifyStatus != null -> {
+                    link.write(HttpMessage("${request.requestProtocol} $verifyStatus Busy", emptyList()).encode())
                 }
 
                 path == "/pair-verify" -> {

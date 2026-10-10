@@ -178,8 +178,8 @@ internal fun interface Connector {
     ): AirkastSession
 }
 
-private fun Airkast.connector() =
+internal fun Airkast.connector() =
     Connector { receiver, withPin, pin ->
-        if (withPin) pair(receiver, pin)
+        if (withPin && credentialStore.get(receiver) == null) pair(receiver, pin)
         connect(receiver, pin)
     }

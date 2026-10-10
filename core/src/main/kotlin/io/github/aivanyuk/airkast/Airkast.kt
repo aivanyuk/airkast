@@ -68,9 +68,10 @@ public class Airkast private constructor(
      * [pin] is given; without [pin], it fails with [AirkastException.PairingFailed]. Any other
      * receiver pairs transiently.
      *
-     * A receiver that refuses its credentials has forgotten this sender: they leave
-     * [credentialStore], and the next connect pairs again. A connect cancelled midway closes what
-     * it opened.
+     * A receiver that refuses its credentials has forgotten this sender, or is not the receiver
+     * they are for: they leave [credentialStore], and the next connect pairs again. Any other
+     * [AirkastException.PairingFailed], such as a busy receiver's error status, keeps them. A
+     * connect cancelled midway closes what it opened.
      */
     public suspend fun connect(
         receiver: Receiver,
@@ -83,7 +84,7 @@ public class Airkast private constructor(
         return try {
             opening { DefaultVideoSession.open(receiver, identity, options) }
         } catch (e: AirkastException.PairingFailed) {
-            if (credentials != null) credentialStore.remove(receiver)
+            if (credentials != null && e.credentialsRefused) credentialStore.remove(receiver)
             throw e
         }
     }
