@@ -6,7 +6,7 @@
          An app that targets less leaves it out. airkast-android declares INTERNET and
          ACCESS_NETWORK_STATE, and airkast-media3 WAKE_LOCK. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
-    <!-- CastService keeps the cast going with the app in the background. -->
+    <!-- CastService, an AirkastSessionService, keeps the cast going with the app in the background. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
