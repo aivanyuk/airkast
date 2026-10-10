@@ -118,6 +118,10 @@ tested against `FakeReceiver`, and checked by hand on a Mac set to "Require pass
 - Its features are `0x4A7FCFD5,0x38174FDE`. Video v2 plays through the same `/command` flow as on
   the LG, with the same events, and a `selectedMediaArrayChanged` notification after a track
   switch.
+- Its `currentItemChanged` names no item, where the LG's does, and gives the reason
+  `ReasonAddToPlayQueue`. Every other notification names the item, the first of them
+  (`playbackLikelyToKeepUp`) before `currentItemChanged`, so a load ends at the first message
+  that names it.
 - Track ids follow the master's `EXT-X-MEDIA` order, but renditions that differ only in their
   group appear to count once. On Apple's `bipbop_adv_example_hevc`, whose three English audio renditions
   differ only in channels, the ids are audio 0, closed captions 1 (reported as `sbtl`, with

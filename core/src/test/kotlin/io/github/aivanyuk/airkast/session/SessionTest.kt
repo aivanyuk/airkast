@@ -64,6 +64,17 @@ class SessionTest {
         }
 
     @Test
+    fun aReceiverThatNamesTheNewItemOnlyInOtherNotificationsTakesItAllTheSame() =
+        runBlocking<Unit> {
+            FakeReceiver(namesTheNewItem = false).use { fake ->
+                airkast.connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    session.load(Media("https://example.com/a.m3u8"))
+                    withTimeout(2_000) { session.state.first { it == PlaybackState.Playing } }
+                }
+            }
+        }
+
+    @Test
     fun aSilentReceiverTimesTheLoadOut() =
         runBlocking {
             FakeReceiver(takesItems = false).use { fake ->
