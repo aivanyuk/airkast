@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | `:core` | `airkast-core` | The protocol: pairing, the session, its commands and events. Plain JVM | kotlin-stdlib, kotlinx-coroutines-core |
 | `:android` | `airkast-android` | Discovery through `NsdManager`, the local network permission, binding to the receiver's network, and `Airkast(context)`, a client with those as its defaults | `:core` |
-| `:media3` | `airkast-media3` | `AirkastPlayer`, a media3 `Player` that runs a cast through an `Airkast`, so a media3 UI and `MediaSession` drive a receiver, hands the item to and from the app's local player, and holds the wake and Wi-Fi locks a cast needs | `:core`, media3-common, kotlinx-coroutines-android |
+| `:media3` | `airkast-media3` | `AirkastPlayer`, a media3 `Player` that runs a cast through an `Airkast`, so a media3 UI and `MediaSession` drive a receiver, hands the item to and from the app's local player, and holds the wake and Wi-Fi locks a cast needs; `AirkastSessionService`, a `MediaSessionService` over it | `:core`, media3-common, media3-session, kotlinx-coroutines-android |
 | `:sample:cast` | none | The reference integration: `Cast` builds the app's `Airkast` and an `AirkastPlayer` over an `ExoPlayer`, and `CastService` puts a `MediaSession` over the player | `:android`, `:media3`, media3-exoplayer |
 | `:sample:compose`, `:sample:views` | none | The sample apps: one screen over `Cast`, in Compose and in views | `:sample:cast` |
 
@@ -154,6 +154,13 @@ internal and no unstable type reaches airkast's API dump.
   playlist, unless the cast moved on to another item. The item comes back paused, since a cast
   may end with nobody at the phone, by BACK on the TV or a dropped network. The video surface
   always goes to the local player, so one set during a cast is there when it ends.
+- **The session service drives the app's player.** `AirkastSessionService` builds the
+  `MediaSession` over the player its subclass returns, and releases only the session: the player
+  lives as long as the process, so a cast outlives the service and the UI drives it directly.
+  Stop casting is a custom session command, offered to the controllers the session trusts, the
+  notification's among them, and shown through the media button preferences while `connection`
+  is not `Idle`. The app declares the service, not the library: one the library declared would
+  be bound by controllers in every app that depends on it, beside the app's own.
 - **It connects through `Airkast`, never `airkast-android`.** The app passes the client in, so
   `:media3` depends on `:core` alone.
 - **Locks follow the state.** A partial wake lock and a Wi-Fi lock are held while a session is
