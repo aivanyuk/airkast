@@ -13,6 +13,7 @@ what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRI
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-09, at c2ceb0f | desktop JVM 21 | `Supported`. Live test passes on a `streaming` item, now the default: start position, seek, pause (reported `Paused`), play, tracks read and subtitles off, volume read, stop. Probed the same day: for a `streaming` item tracks are read and switched (subtitles, audio with a rebuffer, subtitles off) on Apple's bipbop stream and on a kino.pub hls4 master; for a `file` item none are reported and a selection is ignored; a paused `streaming` item reads as `loading` with rate 0 |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-09, at be15526 | Xiaomi 2201117TY, Android 13, the sample app | `Supported`. Found by `ReceiverDiscovery`, cast and played the default stream through `AirkastPlayer`, by hand |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-10, before 0.3.0 | desktop JVM 21 (WSL) | `Supported` with `ntpTiming = true`. Live test passes: start position, seek, pause, play, tracks switched, stop |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 as on 2026-10-09, not read again | 2026-10-10, at 4104649 | Xiaomi 2201117TY, Android 13, the sample app | `Supported`, then `NeedsPin` with its AirPlay settings set to ask for a PIN. By hand, through `AirkastPlayer.connect`: cast transiently first; with the PIN on, the sample listed it as asking for a PIN, asked for the one on the screen, paired (pair-setup M1 to M6), verified the pairing (pair-verify), and played. The credentials stayed in the app's no-backup files, readable by the app only |
 | MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app with `ntpTiming = true` | Plays with NTP timing, set to "Anyone on the same network". Transient pairing, load, play, pause from the Mac, the next item, tracks read and switched (closed captions, subtitles, subtitles off), playback info, stop, by hand. At "Current User" transient pairing is refused |
 
 ### How `Receiver.compatibility` decides
@@ -26,7 +27,7 @@ From the `_airplay._tcp` TXT record, in this order. Bit numbers follow pyatv's `
 | `VideoV1Only` | Video v1 without v2 | older Apple TVs; some third-party receivers |
 | `AccessRestricted` | `act=2`, which pyatv reads as "Current User" | a Mac's AirPlay Receiver at its default, "Current User" |
 | `NeedsPassword` | `pw=true`, or status flag `0x80` | a receiver with a password set |
-| `NeedsPin` | Status flag `0x8`. The first `Airkast.connect` with a `pin` prompt pairs, and later ones use the stored `Credentials` | a receiver set to require a code |
+| `NeedsPin` | Status flag `0x8`. The first `Airkast.connect` with a `pin` prompt pairs, and later ones use the stored `Credentials` | the LG CX set to ask for a PIN; a receiver set to require a code |
 | `NoTransientPairing` | Neither system pairing (bit 43) nor CoreUtils pairing (bit 48) | none seen yet |
 | `Supported` | Anything else | the LG CX |
 
@@ -45,13 +46,15 @@ transient pairing then fails with `PairingFailed`, and pairing with a PIN is the
 
 The PIN pairing and pair-verify follow pyatv's AirPlay HAP procedures, and `Credentials.encoded`
 is pyatv's credential string, `ltpk:ltsk:atv_id:client_id`. They are tested against
-`FakeReceiver` only: no receiver that asks for a PIN has been checked yet.
+`FakeReceiver`, and checked by hand on the LG CX set to ask for a PIN.
 
 ### LG CX (webOS 04.64.00)
 
 - It speaks AirPlay video v2 only. Its features are `0x7F8AD0,0x38BCB46`, and every AirPlay 1
   video endpoint (`/play`, `/playback-info`, `/scrub`, `/reverse`) answers 404.
 - Before pairing, everything but `GET /info` answers 470. Transient pairing needs no PIN.
+- Set to ask for a PIN in its AirPlay settings, it reads as `NeedsPin` (status flag `0x8`), shows
+  a PIN for `/pair-pin-start`, pairs with it, and lets the sender in with pair-verify after.
 - Without RECORD after the event channel opens, it plays but sends no events.
 - It plays with or without NTP timing. With `timingProtocol: NTP` its SETUP answer adds a
   `timingPort`. No timing request was seen, but the one run with NTP (2026-10-10, the live test)

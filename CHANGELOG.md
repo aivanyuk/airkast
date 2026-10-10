@@ -20,7 +20,7 @@ caller sees adds its line under "Unreleased".
   pairing on every connect after. `airkast.pair(receiver) { pin }` pairs one that asks without
   saying so. A wrong PIN throws `AirkastException.PinRejected`, and credentials a receiver refuses
   leave the store. `Credentials.encoded` and `Credentials.decode` store them, in pyatv's format.
-  Not yet checked on a receiver that asks for a PIN.
+  Checked on the LG CX set to ask for a PIN, from the sample app.
 - `CredentialStore`, where a client keeps pairings: `CredentialStore.inMemory()`, the default,
   `CredentialStore.file(file)`, or the app's own over its secrets. `Airkast(context)` keeps them
   in a file in the app's no-backup files.

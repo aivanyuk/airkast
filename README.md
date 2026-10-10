@@ -19,14 +19,11 @@ It is checked against an LG CX (webOS, receiver 377.25.06) and a Mac's AirPlay R
 no specification behind it. What works there:
 
 - transient pairing, with no PIN on the screen;
+- pairing once with the PIN the LG shows when set to ask for one, then pair-verify;
 - loading an HLS URL at a start position, then play, pause, seek, stop and the next item;
 - position, duration and buffered ranges;
 - reading and switching audio and subtitle tracks;
 - receiver events: state, end of item, the TV remote's pause, seek and BACK, and its volume.
-
-Pairing with a PIN shown on the screen (`airkast.connect(receiver) { pin }`) is written to
-pyatv's procedure and tested against a fake receiver, but no receiver that asks for a
-PIN has been checked yet.
 
 It does not yet support receivers that demand a password, receivers that let in only their
 owner's devices (a Mac at its default), receivers that take URLs only over AirPlay video v1,
