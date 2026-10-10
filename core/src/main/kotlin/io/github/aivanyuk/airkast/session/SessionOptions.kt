@@ -1,5 +1,6 @@
 package io.github.aivanyuk.airkast.session
 
+import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.Credentials
 import javax.net.SocketFactory
 import kotlin.time.Duration
@@ -16,7 +17,8 @@ internal class SessionOptions(
     val keepAlive: Boolean,
     val ntpTiming: Boolean,
     val socketFactory: SocketFactory?,
-    val logger: ((String) -> Unit)?,
+    val logger: Airkast.Logger?,
+    val eventListener: ((Airkast.Event) -> Unit)?,
     val credentials: Credentials?,
     val password: String? = credentials?.password,
 ) {
@@ -29,6 +31,7 @@ internal class SessionOptions(
             ntpTiming,
             socketFactory,
             logger,
+            eventListener,
             credentials,
             password,
         )

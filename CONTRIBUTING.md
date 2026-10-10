@@ -67,8 +67,14 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
 - **Every failure is an `AirkastException`**, or a `CancellationException`. A new way to fail is
   a new subclass with KDoc that says when it happens.
 - **Every suspend function is main-safe.** It moves blocking I/O off the caller's thread itself.
-- **No logging library.** `Airkast.Builder.logger` takes one line per protocol step. A line never
-  holds a media URL, a key or anything a pairing derives.
+- **No logging library.** `Airkast.Builder.logger` takes an `Airkast.Logger`, and code writes to
+  it through the internal `Log`, which builds a line only when the logger takes its level and
+  catches what the logger throws. A line never holds a media URL, a key, a PIN or anything a
+  pairing derives. A step goes at `Debug`, each message on the wire at `Verbose`, an end at
+  `Info`, a recovery at `Warn` and a failure at `Error`.
+- **Statistics are events, not lines.** What an app may count is a typed `Airkast.Event` (or
+  `AirkastPlayer.Event`), timed by the library and handed to the listener through `report`, which
+  catches what it throws. An app never parses a log line.
 - **No new runtime dependency** in `airkast-core` beyond the Kotlin standard library and
   kotlinx-coroutines. `airkast-android` adds only the Android platform. `airkast-media3` adds
   media3-common, media3-session and kotlinx-coroutines-android, and uses media3's unstable API

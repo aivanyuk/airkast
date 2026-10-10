@@ -1,13 +1,17 @@
 package io.github.aivanyuk.airkast
 
+import io.github.aivanyuk.airkast.internal.Poko
 import io.github.aivanyuk.airkast.session.DefaultVideoSession
+import io.github.aivanyuk.airkast.session.Log
 import io.github.aivanyuk.airkast.session.SessionOptions
+import io.github.aivanyuk.airkast.session.report
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.net.SocketFactory
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * Opens sessions to receivers, configured once: what the sender tells a receiver about itself, how
@@ -16,7 +20,7 @@ import kotlin.time.Duration.Companion.seconds
  * `airkast-android` sets the platform's defaults.
  *
  * ```
- * val airkast = Airkast { logger = ::println }
+ * val airkast = Airkast { logger = Airkast.Logger.println() }
  * val session = airkast.connect(receiver) { secret -> askTheUserFor(secret) }
  * ```
  */
@@ -58,8 +62,19 @@ public class Airkast private constructor(
      */
     public val credentialStore: CredentialStore = builder.credentialStore
 
-    /** Receives one line per protocol step, for debugging. Lines never hold the media URL or a key. */
-    public val logger: ((String) -> Unit)? = builder.logger
+    /**
+     * Takes the client's debugging lines, from every connect, pairing and session: one per protocol
+     * step at [Logger.Level.Debug], and every message on the wire at [Logger.Level.Verbose]. A line
+     * never holds the media URL, a key, a PIN, a password or anything a pairing derives. Null, the
+     * default, logs nothing.
+     */
+    public val logger: Logger? = builder.logger
+
+    /**
+     * Hears what the client does, for an app's statistics: connects, pairings, loads and how
+     * sessions end, each with how long it took ([Event]). Null, the default, hears nothing.
+     */
+    public val eventListener: ((Event) -> Unit)? = builder.eventListener
 
     /**
      * Pairs with [receiver] and opens a session in the protocol it speaks. A receiver this client
@@ -87,30 +102,56 @@ public class Airkast private constructor(
         receiver: Receiver,
         ask: (suspend (Secret) -> String)? = null,
     ): AirkastSession {
-        val secret = receiver.secret
-        val credentials =
-            credentialStore.get(receiver)
-                ?: if (ask != null && secret != null) pair(receiver, secret) { ask(secret) } else null
-        val options = options(receiver, credentials)
-        return try {
-            try {
-                opening { DefaultVideoSession.open(receiver, identity, options) }
-            } catch (e: AirkastException) {
-                if (ask == null || !asksForPassword(e)) throw e
-                val password = ask(Secret.Password)
-                val session = opening { DefaultVideoSession.open(receiver, identity, options.withPassword(password)) }
-                if (credentials != null) {
+        val log = Log(logger, "connect")
+        val start = TimeSource.Monotonic.markNow()
+        // The user's typing, left out of how long the connect took.
+        var asking = Duration.ZERO
+        var credentials: Credentials? = null
+        try {
+            val secret = receiver.secret
+            credentials = credentialStore.get(receiver)
+                ?: if (ask != null && secret != null) {
+                    val mark = TimeSource.Monotonic.markNow()
                     try {
-                        credentialStore.put(receiver, credentials.withPassword(password))
-                    } catch (failure: Throwable) {
-                        session.close()
-                        throw failure
+                        pair(receiver, secret) { ask(secret) }
+                    } finally {
+                        asking = mark.elapsedNow()
+                    }
+                } else {
+                    null
+                }
+            val options = options(receiver, credentials)
+            val session =
+                try {
+                    opening { DefaultVideoSession.open(receiver, identity, options) }
+                } catch (e: AirkastException) {
+                    if (ask == null || !asksForPassword(e)) throw e
+                    log.debug { "the receiver asks for its password when the session starts" }
+                    val mark = TimeSource.Monotonic.markNow()
+                    val password =
+                        try {
+                            ask(Secret.Password)
+                        } finally {
+                            asking += mark.elapsedNow()
+                        }
+                    opening { DefaultVideoSession.open(receiver, identity, options.withPassword(password)) }.also {
+                        keep(receiver, credentials, password, it)
                     }
                 }
-                session
+            val took = start.elapsedNow() - asking
+            val how = if (credentials != null) Event.Pairing.Verified else Event.Pairing.Transient
+            log.info { "connected in ${took.inWholeMilliseconds} ms, ${how.name.lowercase()}" }
+            eventListener.report(Event.Connected(receiver, how, took), log)
+            return session
+        } catch (e: AirkastException) {
+            if (credentials != null && e is AirkastException.PairingFailed && e.credentialsRefused) {
+                credentialStore.remove(receiver)
+                log.warn { "the receiver refused its credentials, which leave the store" }
+                eventListener.report(Event.CredentialsDropped(receiver), log)
             }
-        } catch (e: AirkastException.PairingFailed) {
-            if (credentials != null && e.credentialsRefused) credentialStore.remove(receiver)
+            val took = start.elapsedNow() - asking
+            log.error(e) { "connect failed after ${took.inWholeMilliseconds} ms" }
+            eventListener.report(Event.ConnectFailed(receiver, e, took), log)
             throw e
         }
     }
@@ -122,6 +163,22 @@ public class Airkast private constructor(
     private fun asksForPassword(e: AirkastException): Boolean =
         (e is AirkastException.PairingFailed && e.passwordAsked) ||
             (e is AirkastException.SecretRejected && e.secret == Secret.Password)
+
+    /** Keeps the [password] [session] opened with in [credentials], for the next connect. */
+    private suspend fun keep(
+        receiver: Receiver,
+        credentials: Credentials?,
+        password: String,
+        session: AirkastSession,
+    ) {
+        if (credentials == null) return
+        try {
+            credentialStore.put(receiver, credentials.withPassword(password))
+        } catch (failure: Throwable) {
+            session.close()
+            throw failure
+        }
+    }
 
     /**
      * Pairs once with a receiver that asks for a [secret], and keeps the [Credentials] in
@@ -137,13 +194,25 @@ public class Airkast private constructor(
         secret: Secret = Secret.Pin,
         ask: suspend () -> String,
     ): Credentials {
-        val options = options(receiver, null)
+        val log = Log(logger, "pairing")
+        val start = TimeSource.Monotonic.markNow()
         val credentials =
-            opening { DefaultVideoSession.startPairing(receiver, identity, options, secret) }.use { pairing ->
-                val code = ask()
-                withContext(Dispatchers.IO) { DefaultVideoSession.finishPairing(pairing, code) }
+            try {
+                val options = options(receiver, null)
+                opening { DefaultVideoSession.startPairing(receiver, identity, options, secret) }.use { pairing ->
+                    log.debug { if (secret == Secret.Pin) "the receiver shows a PIN" else "pairing with a password" }
+                    val code = ask()
+                    withContext(Dispatchers.IO) { DefaultVideoSession.finishPairing(pairing, code) }
+                }
+            } catch (e: AirkastException) {
+                log.error(e) { "pairing failed" }
+                eventListener.report(Event.PairingFailed(receiver, e), log)
+                throw e
             }
         credentialStore.put(receiver, credentials)
+        val took = start.elapsedNow()
+        log.info { "paired in ${took.inWholeMilliseconds} ms" }
+        eventListener.report(Event.Paired(receiver, took), log)
         return credentials
     }
 
@@ -163,13 +232,174 @@ public class Airkast private constructor(
             ntpTiming = ntpTiming,
             socketFactory = factory,
             logger = logger,
+            eventListener = eventListener,
             credentials = credentials,
         )
     }
 
     /**
-     * How to build an [Airkast]: `Airkast { logger = ::println }`. New options join with defaults,
-     * so code that builds one keeps compiling across releases.
+     * Where the client's debugging lines go: `Airkast { logger = Airkast.Logger.println() }`, or
+     * `Airkast.Logger.logcat()` from `airkast-android`. The `tag` says which part wrote a line:
+     * `connect`, `pairing`, `session`, `control` (the requests to the receiver), `events` (what the
+     * receiver sends), `timing`, `player` (`AirkastPlayer`) or `discovery` (`ReceiverDiscovery`).
+     * More may join.
+     *
+     * A line comes on the thread that did the work: the caller's, an I/O thread, or the thread that
+     * reads a session's events. [log] must not block it, so a logger that writes to a file or the
+     * network hands the line to a thread of its own. One that throws loses the line, never the
+     * session.
+     */
+    public fun interface Logger {
+        /** The lowest level [log] takes. A line below it is never built. */
+        public val minLevel: Level get() = Level.Debug
+
+        public fun log(
+            level: Level,
+            tag: String,
+            message: String,
+            error: Throwable?,
+        )
+
+        /**
+         * [Verbose] is every message on the wire, several a second while an item plays. [Debug] is
+         * each protocol step, [Info] a connect, pairing or load that worked and a session the app
+         * closed, [Warn] something the client recovered from, such as a late answer, and [Error] a
+         * connect, pairing, load or session that failed.
+         */
+        public enum class Level { Verbose, Debug, Info, Warn, Error }
+
+        public companion object {
+            /** Prints lines at [minLevel] and above to standard output, for a desktop JVM or a test. */
+            public fun println(minLevel: Level = Level.Debug): Logger {
+                val lowest = minLevel
+                return object : Logger {
+                    override val minLevel: Level = lowest
+
+                    override fun log(
+                        level: Level,
+                        tag: String,
+                        message: String,
+                        error: Throwable?,
+                    ) {
+                        kotlin.io.println("${level.name.first()} airkast/$tag: $message")
+                        error?.printStackTrace(System.out)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * What the client did, for an app's statistics, as [Airkast.eventListener] hears it. Each event
+     * names its [receiver]: its `model`, `sourceVersion` and `compatibility` describe the device,
+     * while its `name` and `host` are the user's own. The client times what it reports, so an app
+     * needs no start event to match an end with. New events may join in a minor release, so a
+     * `when` over them keeps an `else` branch.
+     *
+     * An event comes on the thread it happened on: the caller's for a connect, a pairing, a load,
+     * and a session the app closes; an I/O thread, or the thread that reads the session's events,
+     * for a session that ends by itself. The listener must not block it, so one that sends events
+     * to a server hands them to a thread or scope of its own. One that throws loses the event,
+     * never the session.
+     */
+    public sealed interface Event {
+        public val receiver: Receiver
+
+        /**
+         * [Airkast.connect] opened a session, [pairing] says how, in [took]. A pairing it ran first
+         * is left out of [took], as [Event.Paired] reports it, and so is the user typing a password
+         * the receiver asked for when the session started.
+         */
+        @Poko
+        public class Connected(
+            override val receiver: Receiver,
+            public val pairing: Pairing,
+            public val took: Duration,
+        ) : Event
+
+        /**
+         * [Airkast.connect] failed with [failure] after [took], a pairing it ran first and the user's
+         * typing left out. A pairing that failed there reports [Event.PairingFailed] first. A connect that was
+         * cancelled reports nothing.
+         */
+        @Poko
+        public class ConnectFailed(
+            override val receiver: Receiver,
+            public val failure: AirkastException,
+            public val took: Duration,
+        ) : Event
+
+        /**
+         * A pairing with a PIN or password kept new [Credentials], [took] after it began, the user's
+         * typing included.
+         */
+        @Poko
+        public class Paired(
+            override val receiver: Receiver,
+            public val took: Duration,
+        ) : Event
+
+        /**
+         * A pairing with a PIN or password failed with [failure]: [AirkastException.SecretRejected]
+         * for a wrong one.
+         */
+        @Poko
+        public class PairingFailed(
+            override val receiver: Receiver,
+            public val failure: AirkastException,
+        ) : Event
+
+        /**
+         * The receiver refused the credentials in [Airkast.credentialStore], so they left it: it
+         * forgot this sender, and the next connect pairs again.
+         */
+        @Poko
+        public class CredentialsDropped(
+            override val receiver: Receiver,
+        ) : Event
+
+        /** The receiver took an item that [AirkastSession.load] sent, [took] after the load began. */
+        @Poko
+        public class Loaded(
+            override val receiver: Receiver,
+            public val took: Duration,
+        ) : Event
+
+        /**
+         * A load failed with [failure] after [took]: [AirkastException.Timeout] when the receiver
+         * never took the item. A load that was cancelled reports nothing.
+         */
+        @Poko
+        public class LoadFailed(
+            override val receiver: Receiver,
+            public val failure: AirkastException,
+            public val took: Duration,
+        ) : Event
+
+        /**
+         * A session ended, [lasted] after it opened. [failure] is null when the app closed it, and
+         * [AirkastException.Disconnected] when the receiver or the network ended it.
+         */
+        @Poko
+        public class SessionEnded(
+            override val receiver: Receiver,
+            public val lasted: Duration,
+            public val failure: AirkastException?,
+        ) : Event
+
+        /** How a session's keys were made. New ways may join in a minor release. */
+        public enum class Pairing {
+            /** A pairing for this connection alone, as for a receiver that asks for no PIN or password. */
+            Transient,
+
+            /** Proof of a pairing made before with a PIN or password, from the [Airkast.credentialStore]. */
+            Verified,
+        }
+    }
+
+    /**
+     * How to build an [Airkast]: `Airkast { logger = Airkast.Logger.println() }`. New options join
+     * with defaults, so code that builds one keeps compiling across releases.
      */
     public class Builder() {
         public var identity: SenderIdentity = SenderIdentity()
@@ -180,7 +410,8 @@ public class Airkast private constructor(
         public var ntpTiming: Boolean = true
         public var socketFactory: (Receiver) -> SocketFactory? = { null }
         public var credentialStore: CredentialStore = CredentialStore.inMemory()
-        public var logger: ((String) -> Unit)? = null
+        public var logger: Logger? = null
+        public var eventListener: ((Event) -> Unit)? = null
 
         internal constructor(airkast: Airkast) : this() {
             identity = airkast.identity
@@ -192,13 +423,14 @@ public class Airkast private constructor(
             socketFactory = airkast.socketFactory
             credentialStore = airkast.credentialStore
             logger = airkast.logger
+            eventListener = airkast.eventListener
         }
 
         public fun build(): Airkast = Airkast(this)
     }
 }
 
-/** Builds an [Airkast]: `Airkast()` with the defaults, or `Airkast { logger = ::println }`. */
+/** Builds an [Airkast]: `Airkast()` with the defaults, or `Airkast { logger = Airkast.Logger.println() }`. */
 public fun Airkast(block: Airkast.Builder.() -> Unit = {}): Airkast = Airkast.Builder().apply(block).build()
 
 /**

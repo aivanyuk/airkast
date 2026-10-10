@@ -44,7 +44,7 @@ goes there, never into a module's own build file.
 | Package | Holds | May use |
 | --- | --- | --- |
 | `io.github.aivanyuk.airkast` | The public API: `Airkast`, `AirkastSession`, `Media`, `Receiver`, `Compatibility`, `Credentials`, `CredentialStore`, the values and events, `AirkastException` | everything below |
-| `.session` | The protocol's state: `DefaultVideoSession` (AirPlay video v2), `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder` | `wire`, `crypto` |
+| `.session` | The protocol's state: `DefaultVideoSession` (AirPlay video v2), `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder`, and `Log`, which writes to the client's logger | `wire`, `crypto` |
 | `.wire` | Encodings and framing: HTTP and RTSP messages, TLV8, binary plists, the encrypted `Link`. No protocol decisions | `crypto` |
 | `.crypto` | SRP-6a, HKDF-SHA512, ChaCha20-Poly1305, X25519, Ed25519, as pure functions with vector tests | nothing |
 | `.internal` | Build support, such as the `@Poko` annotation | nothing |
@@ -90,7 +90,13 @@ The protocol facts, with the receivers they were seen on, are in
   a PIN or password) changes only the secret the session's keys derive from, so it is chosen in
   `DefaultVideoSession.open` and the session after it is the same. A Digest password only adds a
   header to the control connection's requests.
-- **`Airkast.Builder.logger` is the logging seam**, so the app routes lines to its own logger.
+- **`Airkast.Builder.logger` and `eventListener` are the reporting seams**, as OkHttp's logger
+  and `EventListener` are, or Coil's. The logger takes lines for debugging, each with a level and
+  a tag, and builds none below its `minLevel`. The listener takes typed `Airkast.Event`s for an
+  app's statistics, timed by the client, so an app parses no text and matches no start with an
+  end. `AirkastPlayer.Builder` has its own `eventListener` for how casts start and end, since
+  those are the player's, and logs through the client's logger unless given another.
+  `ReceiverDiscovery` takes a logger, since it sees no client.
 
 ## Threading
 
@@ -102,6 +108,10 @@ The protocol facts, with the receivers they were seen on, are in
   collectors that start late.
 - A session owns a `CoroutineScope` for its keepalive (`POST /feedback` every two seconds).
   `close()` cancels it.
+- The logger and the event listeners run on the thread where the thing happened: the caller's,
+  an I/O thread, the event channel's reader, or the player's looper. The library calls them
+  synchronously and catches what they throw, so a slow or failing one never holds up or ends a
+  session; their docs say not to block.
 
 ## Failure
 

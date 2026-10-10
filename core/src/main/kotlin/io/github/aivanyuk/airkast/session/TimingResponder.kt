@@ -13,7 +13,7 @@ import java.nio.ByteBuffer
 internal class TimingResponder(
     bind: InetAddress,
     private val receiver: InetAddress,
-    private val log: (String) -> Unit = {},
+    private val log: Log = Log.NONE,
 ) : AutoCloseable {
     private val socket = DatagramSocket(InetSocketAddress(bind, 0))
     val port: Int get() = socket.localPort
@@ -33,7 +33,7 @@ internal class TimingResponder(
             } catch (e: Exception) {
                 return
             }
-            log("timing request from ${packet.address.hostAddress}:${packet.port}, ${packet.length} bytes")
+            log.verbose { "request from ${packet.address.hostAddress}:${packet.port}, ${packet.length} bytes" }
             if (packet.address != receiver || packet.length < PACKET) continue
             val reply = reply(buffer, ntpNow())
             runCatching { socket.send(DatagramPacket(reply, reply.size, packet.socketAddress)) }

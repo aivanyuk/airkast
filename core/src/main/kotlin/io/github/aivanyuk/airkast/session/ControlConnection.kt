@@ -17,7 +17,7 @@ import java.security.SecureRandom
 internal class ControlConnection(
     socket: Socket,
     private val identity: SenderIdentity,
-    private val log: (String) -> Unit = {},
+    private val log: Log = Log.NONE,
 ) : AutoCloseable {
     private val link = Link(socket)
     private var sequence = 0
@@ -66,7 +66,7 @@ internal class ControlConnection(
                 throw IOException("Still no answer to an earlier request", e)
             }
             owed--
-            log("control: dropped a late answer")
+            log.warn { "dropped a late answer" }
         }
         link.write(HttpMessage("$method $target $protocol", all, body).encode())
         val response =
@@ -74,13 +74,13 @@ internal class ControlConnection(
                 read()
             } catch (e: SocketTimeoutException) {
                 owed++
-                log("control: $method $target has no answer yet")
+                log.warn { "$method $target has no answer yet" }
                 throw LateReply("$method $target", e)
             } catch (e: IOException) {
-                log("control: $method $target got no answer: $e")
+                log.warn(e) { "$method $target got no answer" }
                 throw IOException("$method $target: ${e.message}", e)
             }
-        log("control: $method $target -> ${response.startLine}, ${response.body.size} bytes")
+        log.verbose { "$method $target -> ${response.startLine}, ${response.body.size} bytes" }
         return response
     }
 

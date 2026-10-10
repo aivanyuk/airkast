@@ -15,7 +15,7 @@ internal class EventChannel(
     sessionKey: ByteArray,
     private val onMessage: (Map<String, Any?>) -> Unit,
     private val onClosed: (Throwable?) -> Unit,
-    private val log: (String) -> Unit = {},
+    private val log: Log = Log.NONE,
 ) : AutoCloseable {
     private val link = Link(socket)
 
@@ -37,7 +37,7 @@ internal class EventChannel(
         try {
             while (true) {
                 val request = HttpMessage.read(link.input) ?: break
-                log("event channel: ${request.startLine}, ${request.body.size} bytes")
+                log.verbose { "${request.startLine}, ${request.body.size} bytes" }
                 val headers =
                     buildList {
                         add("Audio-Latency" to "0")
@@ -48,10 +48,11 @@ internal class EventChannel(
                 unwrap(request.body)?.let(onMessage)
             }
         } catch (e: Exception) {
-            log("event channel failed: $e")
+            // The session logs why it ended.
+            if (!closing) log.debug { "failed: $e" }
             failure = e
         }
-        log("event channel closed")
+        log.debug { "closed" }
         if (!closing) onClosed(failure)
     }
 

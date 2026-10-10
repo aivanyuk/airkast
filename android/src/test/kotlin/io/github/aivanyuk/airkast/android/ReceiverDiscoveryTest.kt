@@ -1,17 +1,27 @@
 package io.github.aivanyuk.airkast.android
 
 import android.app.Application
+import android.content.Context
+import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
+import io.github.aivanyuk.airkast.Receiver
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.net.InetAddress
 
@@ -55,4 +65,30 @@ class ReceiverDiscoveryTest {
             runBlocking { ReceiverDiscovery(app).receivers.first() }
         }
     }
+
+    @Test
+    @Config(sdk = [34])
+    fun aLoggerThatThrowsLeavesTheScanRunning() =
+        runBlocking {
+            val app = ApplicationProvider.getApplicationContext<Application>()
+            val nsd = shadowOf(app.getSystemService(Context.NSD_SERVICE) as NsdManager)
+            val lines = mutableListOf<String>()
+            val logger =
+                Airkast.Logger { _, tag, message, _ ->
+                    lines += "$tag: $message"
+                    error("logger")
+                }
+            val lists = mutableListOf<List<Receiver>>()
+            val scan =
+                launch(Dispatchers.Unconfined) { ReceiverDiscovery(app, logger).receivers.collect { lists += it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            nsd.getDiscoveryListeners(Receiver.SERVICE_TYPE)!!.single().onServiceFound(service())
+            val resolved = service().apply { hostAddresses = listOf(InetAddress.getByName("192.168.50.241")) }
+            nsd.getResolveListeners(service())!!.single().onServiceResolved(resolved)
+            withTimeout(5_000) { while (lists.lastOrNull().isNullOrEmpty()) yield() }
+            assertThat(lists.last().single().host).isEqualTo("192.168.50.241")
+            assertThat(lines).contains("discovery: found Big Mama")
+            assertThat(lines).contains("discovery: resolved Big Mama: null Supported")
+            scan.cancel()
+        }
 }
