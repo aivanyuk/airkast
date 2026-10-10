@@ -27,7 +27,7 @@ class LiveReceiverTest {
     fun playsSeeksPausesAndStops() =
         runBlocking {
             assumeTrue("Set AIRKAST_RECEIVER to run against a real receiver", host.isNotBlank())
-            val airkast = Airkast { logger = { log("wire", it) } }
+            val airkast = Airkast { logger = everything { _, tag, message -> log(tag, message) } }
             airkast.connect(Receiver("live", host)).use { session ->
                 session.load(Media(url, startAt = 30.seconds))
                 withTimeout(30_000) { session.state.first { it == PlaybackState.Playing } }
@@ -90,10 +90,13 @@ class LiveReceiverTest {
                 host.isNotBlank() && System.getenv("AIRKAST_LONG") == "1",
             )
             val logFile = System.getenv("AIRKAST_LOG")?.let(::File)
-            val wire: (String) -> Unit = { line ->
-                if (!line.startsWith("event channel:")) logFile?.appendText("${System.currentTimeMillis()} $line\n")
-            }
-            Airkast { logger = wire }.connect(Receiver("live", host)).use { session ->
+            val wire: (String) -> Unit = { line -> logFile?.appendText("${System.currentTimeMillis()} $line\n") }
+            val logger =
+                everything { level, tag, message ->
+                    // Leaves out the event channel's raw messages and the answers to position polls.
+                    if (tag != "events" || level != Airkast.Logger.Level.Verbose) wire("$tag: $message")
+                }
+            Airkast { this.logger = logger }.connect(Receiver("live", host)).use { session ->
                 val ended =
                     async { session.events.first { it is ReceiverEvent.ItemEnded || it is ReceiverEvent.Disconnected } }
                 session.load(Media(url))
@@ -130,4 +133,17 @@ class LiveReceiverTest {
         label: String,
         value: Any?,
     ) = println("airkast live ${System.currentTimeMillis() % 100_000}: $label: $value")
+
+    /** A logger that takes every line, the wire's included, and hands it to [write]. */
+    private fun everything(write: (Airkast.Logger.Level, String, String) -> Unit) =
+        object : Airkast.Logger {
+            override val minLevel = Airkast.Logger.Level.Verbose
+
+            override fun log(
+                level: Airkast.Logger.Level,
+                tag: String,
+                message: String,
+                error: Throwable?,
+            ) = write(level, tag, if (error != null) "$message: $error" else message)
+        }
 }

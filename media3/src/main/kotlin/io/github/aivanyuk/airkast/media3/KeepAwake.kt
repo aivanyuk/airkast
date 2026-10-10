@@ -8,6 +8,7 @@ import android.os.PowerManager
 /** A partial wake lock and a Wi-Fi lock, held together while a cast needs the phone awake. */
 internal class KeepAwake(
     context: Context,
+    private val log: PlayerLog = PlayerLog(null),
 ) {
     private val wake =
         (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
@@ -30,6 +31,7 @@ internal class KeepAwake(
     fun hold(hold: Boolean) {
         if (hold == held) return
         held = hold
+        log.debug { if (hold) "holding the wake and Wi-Fi locks" else "released the wake and Wi-Fi locks" }
         if (hold) {
             wake.acquire()
             wifi?.acquire()

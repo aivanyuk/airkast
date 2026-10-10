@@ -111,12 +111,96 @@ public interface AirkastPlayer : Player {
         }
     }
 
+    /**
+     * How casts start and end, for an app's statistics, as [Builder.eventListener] hears it. The
+     * client's [Airkast.eventListener] hears the protocol's side of the same casts: connects,
+     * pairings, loads and sessions, with how long each took. Each event names its [receiver]: its
+     * `model`, `sourceVersion` and `compatibility` describe the device, while its `name` and `host`
+     * are the user's own.
+     *
+     * An event comes on the player's looper, which the listener must not block: one that sends
+     * events to a server hands them to a thread or scope of its own. One that throws loses the
+     * event, never the cast. New events may join in a minor release, so a `when` over them keeps an
+     * `else` branch.
+     */
+    public sealed interface Event {
+        public val receiver: Receiver
+
+        /** A session attached, from [connect] or set by hand as [session], and the player plays on [receiver]. */
+        public class CastStarted(
+            override val receiver: Receiver,
+        ) : Event {
+            override fun toString(): String = "CastStarted(receiver=${receiver.name})"
+        }
+
+        /** A [connect] to [receiver] failed with [failure]. */
+        public class CastFailed(
+            override val receiver: Receiver,
+            public val failure: AirkastException,
+        ) : Event {
+            override fun toString(): String = "CastFailed(receiver=${receiver.name}, failure=$failure)"
+        }
+
+        /**
+         * A [connect] to [receiver] was given up before it finished: by [disconnect], another
+         * connect, a session set by hand, or `release()`. [atPin] says the receiver was showing a
+         * PIN that was never entered.
+         */
+        public class CastAbandoned(
+            override val receiver: Receiver,
+            public val atPin: Boolean,
+        ) : Event {
+            override fun toString(): String = "CastAbandoned(receiver=${receiver.name}, atPin=$atPin)"
+        }
+
+        /**
+         * A cast on [receiver] ended, [lasted] after its session attached, for [reason]. [failure]
+         * says why a session ended by itself ([EndReason.Lost]), and is null otherwise.
+         */
+        public class CastEnded(
+            override val receiver: Receiver,
+            public val reason: EndReason,
+            public val lasted: Duration,
+            public val failure: AirkastException?,
+        ) : Event {
+            override fun toString(): String =
+                "CastEnded(receiver=${receiver.name}, reason=$reason, lasted=$lasted, failure=$failure)"
+        }
+
+        /** What ended a cast. New reasons may join in a minor release. */
+        public enum class EndReason {
+            /** [disconnect], or [session] set to null. */
+            Disconnect,
+
+            /** BACK on the TV's remote, with [Builder.disconnectOnBack]. */
+            Back,
+
+            /** Another [connect], or another session set by hand. */
+            Replaced,
+
+            /** The session ended by itself: the network failed, the TV closed it, or another sender took it. */
+            Lost,
+
+            /** `release()`. */
+            Released,
+        }
+    }
+
     /** How to build an [AirkastPlayer]: `AirkastPlayer(context, airkast) { keepAwake = false }`. */
     public class Builder(
         context: Context,
         airkast: Airkast,
     ) {
         private val context = context.applicationContext
+
+        /**
+         * Takes the player's lines, under the tag `player`: connects, PIN prompts, handoffs and how
+         * casts end. The client's [Airkast.logger] by default.
+         */
+        public var logger: Airkast.Logger? = airkast.logger
+
+        /** Hears how casts start and end ([Event]), for an app's statistics. Null, the default, hears nothing. */
+        public var eventListener: ((Event) -> Unit)? = null
 
         /** The application looper. The current thread's, or the main one's, by default. */
         public var looper: Looper = Looper.myLooper() ?: Looper.getMainLooper()
@@ -164,18 +248,21 @@ public interface AirkastPlayer : Player {
 
         public fun build(): AirkastPlayer {
             require(positionPollInterval.isPositive()) { "The poll interval must be positive" }
+            val log = PlayerLog(logger)
             val remote =
                 SessionPlayer(
                     looper = looper,
-                    awake = if (keepAwake) KeepAwake(context) else null,
+                    awake = if (keepAwake) KeepAwake(context, log) else null,
                     pollInterval = positionPollInterval,
                     streaming = streaming,
                     disconnectOnBack = disconnectOnBack,
                     connector = connector,
+                    log = log,
+                    eventListener = eventListener,
                 )
             val local = localPlayer ?: return remote
             require(local.applicationLooper == looper) { "The local player runs on another looper" }
-            return HandoffPlayer(local, remote)
+            return HandoffPlayer(local, remote, log)
         }
     }
 }

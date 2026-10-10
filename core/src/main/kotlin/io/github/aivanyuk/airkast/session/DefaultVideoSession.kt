@@ -1,5 +1,7 @@
 package io.github.aivanyuk.airkast.session
 
+import io.github.aivanyuk.airkast.Airkast
+import io.github.aivanyuk.airkast.Airkast.Logger.Level
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Credentials
@@ -44,6 +46,8 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * AirPlay video v2: pair transiently, SETUP the session and its event channel, SETUP a type-130
@@ -56,6 +60,8 @@ internal class DefaultVideoSession private constructor(
     private val timing: TimingResponder?,
 ) : AirkastSession {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val log = Log(options.logger, "session")
+    private val eventLog = log.tagged("events")
     private val mutableEvents = MutableSharedFlow<ReceiverEvent>(extraBufferCapacity = 64)
 
     @Volatile
@@ -91,6 +97,10 @@ internal class DefaultVideoSession private constructor(
     @Volatile
     private var paused = false
 
+    /** When [start] finished, which the session's length counts from. A session that never started reports no end. */
+    @Volatile
+    private var opened: TimeMark? = null
+
     private fun start(
         identity: SenderIdentity,
         sessionKey: ByteArray,
@@ -121,14 +131,13 @@ internal class DefaultVideoSession private constructor(
                         ),
                     contentType = ControlConnection.BPLIST,
                 ).requireSuccess("SETUP")
-        options.logger?.invoke("SETUP ${base.status} ${plist(base).keys}")
+        log.debug { "SETUP ${base.status} ${plist(base).keys}" }
         val eventPort =
             (plist(base)["eventPort"] as? Long)?.toInt()
                 ?: throw AirkastException.Rejected("SETUP without an event port", base.status)
         val eventSocket = connectWithRetry(eventPort)
-        options.logger?.invoke("event channel connected to $eventPort from ${eventSocket.localPort}")
-        eventChannel =
-            EventChannel(eventSocket, sessionKey, ::onMessage, ::onEventChannelClosed) { options.logger?.invoke(it) }
+        log.debug { "event channel connected to $eventPort from ${eventSocket.localPort}" }
+        eventChannel = EventChannel(eventSocket, sessionKey, ::onMessage, ::onEventChannelClosed, eventLog)
 
         // Without RECORD the LG plays the item but never sends an event about it.
         control.exchange("RECORD", rtspUri).requireSuccess("RECORD")
@@ -172,6 +181,7 @@ internal class DefaultVideoSession private constructor(
                 }
             }
         }
+        opened = TimeSource.Monotonic.markNow()
     }
 
     private fun connectWithRetry(port: Int): Socket {
@@ -182,12 +192,28 @@ internal class DefaultVideoSession private constructor(
             } catch (e: AirkastException.Unreachable) {
                 // The event port can refuse for a moment right after SETUP names it.
                 if (e.cause !is ConnectException || ++attempt >= 5) throw e
+                log.debug { "the event port refused, attempt $attempt" }
                 Thread.sleep(200)
             }
         }
     }
 
     override suspend fun load(item: Media) {
+        val start = TimeSource.Monotonic.markNow()
+        try {
+            insert(item)
+        } catch (e: AirkastException) {
+            val took = start.elapsedNow()
+            log.error(e) { "load failed after ${took.inWholeMilliseconds} ms" }
+            options.eventListener.report(Airkast.Event.LoadFailed(receiver, e, took), log)
+            throw e
+        }
+        val took = start.elapsedNow()
+        log.info { "the receiver took the item in ${took.inWholeMilliseconds} ms" }
+        options.eventListener.report(Airkast.Event.Loaded(receiver, took), log)
+    }
+
+    private suspend fun insert(item: Media) {
         val id = UUID.randomUUID().toString().uppercase()
         val taken = CompletableDeferred<Unit>()
         itemId = id
@@ -323,7 +349,7 @@ internal class DefaultVideoSession private constructor(
         io { command(mapOf("type" to "stop")) }
     }
 
-    override fun close() = end(null)
+    override fun close() = end(null, byApp = true)
 
     private suspend fun request(payload: Map<String, Any?>): Map<String, Any?> {
         val id = nextMessageId.getAndIncrement()
@@ -362,13 +388,25 @@ internal class DefaultVideoSession private constructor(
                 end(e)
                 throw AirkastException.Disconnected(e)
             }
-        options.logger?.invoke("command ${payload["type"]} ${response.status}")
+        val level =
+            when {
+                response.status !in 200..299 -> Level.Warn
+
+                // A player asks for its position every second, which would drown the steps.
+                payload["type"] == "playbackInfo" -> Level.Verbose
+
+                else -> Level.Debug
+            }
+        log.at(level, null) { "command ${payload["type"]} ${response.status}" }
         response.requireSuccess(payload["type"].toString())
     }
 
     private fun onMessage(message: Map<String, Any?>) {
-        options.logger?.invoke("event ${message["kind"] ?: ""} ${message["type"]} ${message["name"] ?: ""}")
-        if (message["kind"] == "response") {
+        val response = message["kind"] == "response"
+        eventLog.at(if (response) Level.Verbose else Level.Debug, null) {
+            "${message["kind"] ?: ""} ${message["type"]} ${message["name"] ?: ""}".trim()
+        }
+        if (response) {
             (message["messageID"] as? Long)?.let { pending[it]?.complete(message) }
             return
         }
@@ -435,7 +473,11 @@ internal class DefaultVideoSession private constructor(
 
     private fun onEventChannelClosed(cause: Throwable?) = end(cause)
 
-    private fun end(cause: Throwable?) {
+    /** Ends the session, once: by [close] when [byApp], or by a failure or the receiver hanging up. */
+    private fun end(
+        cause: Throwable?,
+        byApp: Boolean = false,
+    ) {
         if (!closed.compareAndSet(false, true)) return
         val error = AirkastException.Disconnected(cause)
         pending.values.forEach { it.completeExceptionally(error) }
@@ -448,6 +490,14 @@ internal class DefaultVideoSession private constructor(
         runCatching { control.close() }
         runCatching { timing?.close() }
         scope.cancel()
+        val lasted = opened?.elapsedNow() ?: return
+        val failure = if (byApp) null else error
+        if (failure == null) {
+            log.info { "closed after ${lasted.inWholeMilliseconds} ms" }
+        } else {
+            log.error(cause) { "ended after ${lasted.inWholeMilliseconds} ms" }
+        }
+        options.eventListener.report(Airkast.Event.SessionEnded(receiver, lasted, failure), log)
     }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
@@ -481,9 +531,9 @@ internal class DefaultVideoSession private constructor(
                     Hkdf.sha512(sessionKey, "Control-Salt", "Control-Write-Encryption-Key"),
                     Hkdf.sha512(sessionKey, "Control-Salt", "Control-Read-Encryption-Key"),
                 )
-                options.logger?.invoke(if (credentials != null) "verified" else "paired")
+                Log(options.logger, "pairing").debug { if (credentials != null) "verified" else "paired transiently" }
                 if (options.ntpTiming) {
-                    timing = TimingResponder(control.localAddress, control.remoteAddress) { options.logger?.invoke(it) }
+                    timing = TimingResponder(control.localAddress, control.remoteAddress, Log(options.logger, "timing"))
                 }
                 session = DefaultVideoSession(receiver, options, control, timing)
                 session.start(identity, sessionKey)
@@ -528,16 +578,16 @@ internal class DefaultVideoSession private constructor(
             identity: SenderIdentity,
             options: SessionOptions,
         ): ControlConnection {
-            options.logger?.invoke(
+            Log(options.logger, "connect").debug {
                 "receiver ${receiver.model} srcvers ${receiver.sourceVersion} " +
-                    "features 0x${receiver.features.toString(16)} ${receiver.compatibility}",
-            )
+                    "features 0x${receiver.features.toString(16)} ${receiver.compatibility}"
+            }
             val socket =
                 connect(InetSocketAddress(receiver.host, receiver.port), options).apply {
                     soTimeout = options.requestTimeout.inWholeMilliseconds.toInt()
                     tcpNoDelay = true
                 }
-            return ControlConnection(socket, identity) { options.logger?.invoke(it) }
+            return ControlConnection(socket, identity, Log(options.logger, "control"))
         }
 
         private fun failure(e: Exception): AirkastException =

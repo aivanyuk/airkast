@@ -20,6 +20,8 @@ import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
+import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event
+import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event.EndReason
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -36,6 +38,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * [AirkastPlayer] over media3's `SimpleBasePlayer`. Every handler updates the state before it
@@ -51,6 +55,8 @@ internal class SessionPlayer(
     private val streaming: Boolean,
     private val disconnectOnBack: Boolean,
     private val connector: Connector,
+    private val log: PlayerLog = PlayerLog(null),
+    private val eventListener: ((Event) -> Unit)? = null,
 ) : SimpleBasePlayer(looper),
     AirkastPlayer {
     private val scope = CoroutineScope(SupervisorJob() + Handler(looper).asCoroutineDispatcher())
@@ -71,6 +77,9 @@ internal class SessionPlayer(
     private var pin: CompletableDeferred<String>? = null
     private var sessionJob: Job? = null
     private var loadJob: Job? = null
+
+    /** When the session attached, which a cast's length counts from. */
+    private var attachedAt: TimeMark? = null
 
     /** The local player's side, when the player has one: see [HandoffPlayer]. */
     internal var handoff: Handoff? = null
@@ -104,10 +113,11 @@ internal class SessionPlayer(
             giveUpConnecting()
             lastReceiver = null
             // The app's own session it keeps as it is; one the player opened ends.
-            letGo(stop = owned != null)
+            letGo(stop = owned != null, if (value != null) EndReason.Replaced else EndReason.Disconnect)
             error = null
             if (value != null) attach(value) else handBack()
             mutableConnection.value = if (value != null) Connection.Connected(value) else Connection.Idle(null, null)
+            if (value != null) started(value)
             changed()
             if (value != null) handoff?.attached()
         }
@@ -128,9 +138,14 @@ internal class SessionPlayer(
 
     override fun disconnect() {
         checkLooper()
+        endCast(EndReason.Disconnect)
+    }
+
+    /** What [disconnect] does, for [reason]. */
+    private fun endCast(reason: EndReason) {
         giveUpConnecting()
         lastReceiver = null
-        letGo(stop = true)
+        letGo(stop = true, reason)
         handBack()
         setItem(null, 0)
         mutableConnection.value = Connection.Idle(null, null)
@@ -194,6 +209,7 @@ internal class SessionPlayer(
 
             // The cast this player connected dropped or failed, and the user asks to play again.
             receiver != null && current != null && connecting == null -> {
+                log.debug { "connecting again after the cast dropped" }
                 open(receiver, withPin = false)
             }
         }
@@ -262,7 +278,7 @@ internal class SessionPlayer(
 
     override fun handleRelease(): ListenableFuture<*> {
         giveUpConnecting()
-        letGo(stop = false)
+        letGo(stop = false, EndReason.Released)
         ending.forEach { it.close() }
         ending.clear()
         awake?.hold(false)
@@ -281,9 +297,10 @@ internal class SessionPlayer(
         withPin: Boolean,
     ) {
         giveUpConnecting()
-        letGo(stop = true)
+        letGo(stop = true, EndReason.Replaced)
         error = null
         lastReceiver = receiver
+        log.debug { if (withPin) "connecting, with a PIN" else "connecting" }
         mutableConnection.value = Connection.Connecting(receiver)
         connecting =
             scope.launch {
@@ -293,6 +310,8 @@ internal class SessionPlayer(
                     } catch (e: AirkastException) {
                         connecting = null
                         error = playbackException(e)
+                        log.debug { "the connect failed: $e" }
+                        report(Event.CastFailed(receiver, e))
                         mutableConnection.value = Connection.Idle(receiver, e)
                         handBack()
                         changed()
@@ -302,6 +321,7 @@ internal class SessionPlayer(
                 owned = s
                 attach(s)
                 mutableConnection.value = Connection.Connected(s)
+                started(s)
                 changed()
                 handoff?.attached()
             }
@@ -309,6 +329,7 @@ internal class SessionPlayer(
 
     private suspend fun askForPin(receiver: Receiver): String {
         val code = CompletableDeferred<String>().also { pin = it }
+        log.debug { "waiting for the PIN" }
         mutableConnection.value = Connection.AwaitingPin(receiver)
         return code.await().also {
             pin = null
@@ -317,17 +338,67 @@ internal class SessionPlayer(
     }
 
     private fun giveUpConnecting() {
-        connecting?.cancel()
+        connecting?.let { job ->
+            job.cancel()
+            when (val state = mutableConnection.value) {
+                is Connection.Connecting -> {
+                    abandoned(state.receiver, atPin = false)
+                }
+
+                is Connection.AwaitingPin -> {
+                    abandoned(state.receiver, atPin = true)
+                }
+
+                else -> {}
+            }
+        }
         connecting = null
         pin = null
     }
 
+    private fun abandoned(
+        receiver: Receiver,
+        atPin: Boolean,
+    ) {
+        log.debug { if (atPin) "the PIN prompt was given up" else "the connect was given up" }
+        report(Event.CastAbandoned(receiver, atPin))
+    }
+
+    private fun started(s: AirkastSession) {
+        log.info { "cast started" }
+        report(Event.CastStarted(s.receiver))
+    }
+
+    private fun ended(
+        s: AirkastSession,
+        reason: EndReason,
+        failure: AirkastException?,
+    ) {
+        val lasted = attachedAt?.elapsedNow() ?: Duration.ZERO
+        log.info { "cast ended ($reason) after ${lasted.inWholeMilliseconds} ms" }
+        report(Event.CastEnded(s.receiver, reason, lasted, failure))
+    }
+
+    /** Hands [event] to [eventListener]. A listener that throws loses the event, never the cast. */
+    private fun report(event: Event) {
+        val listener = eventListener ?: return
+        try {
+            listener(event)
+        } catch (e: Exception) {
+            log.warn(e) { "the event listener threw on $event" }
+        }
+    }
+
     /**
-     * Detaches the session. With [stop], the receiver stops the item first, which takes it out of
-     * its player. A session the player opened then closes.
+     * Detaches the session, ending the cast for [reason]. With [stop], the receiver stops the item
+     * first, which takes it out of its player. A session the player opened then closes.
      */
-    private fun letGo(stop: Boolean) {
+    private fun letGo(
+        stop: Boolean,
+        reason: EndReason,
+    ) {
         val s = attached ?: return
+        ended(s, reason, null)
         val mine = s === owned
         val playing = loaded || loadJob?.isActive == true
         owned = null
@@ -386,6 +457,7 @@ internal class SessionPlayer(
 
     private fun attach(s: AirkastSession) {
         attached = s
+        attachedAt = TimeSource.Monotonic.markNow()
         // Undispatched, so the collector is listening before the load below sends anything.
         sessionJob =
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -404,6 +476,7 @@ internal class SessionPlayer(
         sessionJob = null
         loadJob?.cancel()
         attached = null
+        attachedAt = null
         loaded = false
         receiverItemId = null
         awaitingItem = false
@@ -487,12 +560,14 @@ internal class SessionPlayer(
 
             // The TV leaves its player only once the sender stops.
             is ReceiverEvent.Back -> {
-                if (s === owned && disconnectOnBack) disconnect()
+                if (s === owned && disconnectOnBack) endCast(EndReason.Back)
                 return
             }
 
             is ReceiverEvent.Disconnected -> {
                 if (s === owned) owned = null
+                val failure = AirkastException.Disconnected(event.cause)
+                ended(s, EndReason.Lost, failure)
                 detach()
                 error =
                     event.cause?.let {
@@ -502,7 +577,7 @@ internal class SessionPlayer(
                             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                         )
                     }
-                mutableConnection.value = Connection.Idle(s.receiver, AirkastException.Disconnected(event.cause))
+                mutableConnection.value = Connection.Idle(s.receiver, failure)
                 handBack()
             }
 
@@ -617,8 +692,9 @@ internal class SessionPlayer(
         scope.launch {
             try {
                 s.command()
-            } catch (_: AirkastException) {
+            } catch (e: AirkastException) {
                 // A late answer leaves the state to the next event or poll; an ended session reports itself.
+                log.debug { "a command failed: $e" }
             }
         }
     }

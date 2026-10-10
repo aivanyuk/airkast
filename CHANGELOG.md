@@ -13,6 +13,18 @@ caller sees adds its line under "Unreleased".
   manifest. Its notification has a Stop casting button while a cast is on, and it releases only
   the session, never the player. `sessionActivity()` and `buildSession(builder)` change the
   session. `airkast-media3` now depends on media3-session, and the sample's `CastService` is one.
+- Statistics: `Airkast.Builder.eventListener` hears what the client did as typed `Airkast.Event`s,
+  each timed by the client: `Connected` (with how it paired), `ConnectFailed`, `Paired`,
+  `PairingFailed`, `CredentialsDropped`, `Loaded`, `LoadFailed` and `SessionEnded` (with the
+  failure when the receiver or the network ended it). `AirkastPlayer.Builder.eventListener` hears
+  how casts start and end: `CastStarted`, `CastFailed`, `CastAbandoned` (at the PIN prompt or
+  not) and `CastEnded`, with its reason (`Disconnect`, `Back`, `Replaced`, `Lost`, `Released`)
+  and length. Both are called on the thread where the thing happened, and one that throws never
+  reaches the session.
+- `Airkast.Logger.println()` for a desktop JVM, and `Airkast.Logger.logcat()` in
+  `airkast-android`, which writes under the tag `airkast`. `AirkastPlayer` logs its connects,
+  PIN prompts, handoffs, wake locks and how casts end through the client's logger, or
+  `AirkastPlayer.Builder.logger`, and `ReceiverDiscovery(context, logger)` logs the scan.
 - `AirkastPlayer` runs a whole cast: `connect(receiver)` opens a session through the app's
   `Airkast`, asks for a PIN when the receiver needs one (`connection` turns `AwaitingPin` until
   `enterPin`), plays the media item, and `disconnect()` stops the TV's player, closes the session
@@ -42,6 +54,11 @@ caller sees adds its line under "Unreleased".
 
 Breaking, under the rules for a minor release before 1.0 ([releasing](docs/releasing.md)):
 
+- `Airkast.Builder.logger` takes an `Airkast.Logger` in place of `(String) -> Unit`: each line
+  has a level (`Verbose` for every message on the wire, `Debug` for each protocol step, then
+  `Info`, `Warn`, `Error`) and a tag for the part that wrote it, and the logger's `minLevel`
+  (`Debug` by default) keeps lines below it from being built. A lambda still works:
+  `logger = Airkast.Logger { level, tag, message, error -> … }`.
 - `Airkast` is a client, configured once and shared, in place of an object with
   `connect(receiver, identity, options)`: `Airkast { … }` builds one, `airkast.connect(receiver)`
   opens a session, and `airkast.copy { … }` makes a variant. `SessionOptions` and its builder are
