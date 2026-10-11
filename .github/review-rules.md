@@ -58,6 +58,7 @@ Authority: CONTRIBUTING.md § The public API, docs/releasing.md § What counts a
 | T5 | The session does not reconnect by itself; a retry policy, if one comes, is an `Airkast.Builder` option that defaults to off. `AirkastPlayer` connects again only on `prepare()`, which the user starts. | Retry or reconnect logic |
 | T6 | A log line (`Airkast.Builder.logger`) never holds a media URL, a key, a PIN, a pairing secret or the bytes a pairing derives. Lines go through `Log` (`PlayerLog` in `:media3`, `ReceiverDiscovery.log` in `:android`, since `Log` is internal to core), never `logger.log` directly, so a logger that throws never reaches a session or a scan, and a message is a lambda wherever it runs per message on the wire. | New `log.…`, `logger`, `Log(` |
 | T7 | An event (`Airkast.Event`, `AirkastPlayer.Event`) goes to its listener through `report`, which catches what the listener throws. An event never carries a media URL or a key. | New `report(`, new event class |
+| T8 | Building does no I/O: a public constructor, builder, `build()`, `copy { }` or platform default (`Airkast(context)`) touches no disk and no network, and asks Android for nothing that creates a file (`noBackupFilesDir`, `filesDir`, `cacheDir`, `getSharedPreferences`). What takes I/O to find is found on first use, under `Dispatchers.IO`, as `CredentialStore.file { … }` finds its file. | New or changed public constructor, builder property default, `Airkast(context)` |
 
 Authority: docs/architecture.md § Threading and § Failure, CONTRIBUTING.md § The public API.
 

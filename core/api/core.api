@@ -242,6 +242,7 @@ public abstract interface class io/github/aivanyuk/airkast/CredentialStore {
 
 public final class io/github/aivanyuk/airkast/CredentialStore$Companion {
 	public final fun file (Ljava/io/File;)Lio/github/aivanyuk/airkast/CredentialStore;
+	public final fun file (Lkotlin/jvm/functions/Function0;)Lio/github/aivanyuk/airkast/CredentialStore;
 	public final fun inMemory ()Lio/github/aivanyuk/airkast/CredentialStore;
 }
 

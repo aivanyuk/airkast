@@ -4,6 +4,20 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## Unreleased
+
+### Added
+
+- `CredentialStore.file { … }` takes a function that finds the file, which the store calls once,
+  on `Dispatchers.IO`, the first time it is used.
+
+### Fixed
+
+- `Airkast(context)` does no I/O, so an app may build it on the main thread. It asked for the
+  no-backup files directory as it was built, which Android creates on the calling thread, even
+  when the block replaced the credential store. The store now finds the directory on its first
+  use.
+
 ## 0.3.1 - 2026-10-10
 
 The code of 0.3.0, built.
