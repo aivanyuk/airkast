@@ -1,6 +1,9 @@
 package io.github.aivanyuk.airkast.android
 
 import android.app.Application
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
@@ -33,6 +36,28 @@ class AirkastAndroidTest {
             Airkast(app).credentialStore.put(tv, credentials)
             assertThat(Airkast(app).credentialStore.get(tv)).isEqualTo(credentials)
             assertThat(File(app.noBackupFilesDir, CREDENTIALS_FILE).exists()).isTrue()
+        }
+
+    @Test
+    fun buildingLeavesTheNoBackupFilesAloneUntilAPairingIsAskedFor() =
+        runBlocking {
+            // Android creates the directory whenever it is asked for, so asking is disk I/O.
+            val askedOn = mutableListOf<Thread>()
+            val context =
+                object : ContextWrapper(app) {
+                    override fun getApplicationContext(): Context = this
+
+                    override fun getNoBackupFilesDir(): File {
+                        synchronized(askedOn) { askedOn += Thread.currentThread() }
+                        return super.getNoBackupFilesDir()
+                    }
+                }
+            val airkast = Airkast(context)
+            assertThat(askedOn).isEmpty()
+            airkast.credentialStore.put(tv, credentials)
+            assertThat(airkast.credentialStore.get(tv)).isEqualTo(credentials)
+            assertThat(askedOn).hasSize(1)
+            assertThat(askedOn.single()).isNotSameInstanceAs(Looper.getMainLooper().thread)
         }
 
     @Test

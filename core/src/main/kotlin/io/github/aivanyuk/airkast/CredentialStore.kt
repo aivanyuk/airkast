@@ -38,7 +38,15 @@ public interface CredentialStore {
          * read or write leaves them in memory for this process. `Airkast(context)` keeps one in
          * the app's no-backup files, so a backup never carries a private key to another device.
          */
-        public fun file(file: File): CredentialStore = FileCredentialStore(file)
+        public fun file(file: File): CredentialStore = FileCredentialStore { file }
+
+        /**
+         * As `file(File)`, for a file that takes I/O to find, such as a directory a platform
+         * creates when asked for it. The store calls [file] once, on [Dispatchers.IO], the first
+         * time it is used, so building it touches no disk. A [file] that throws leaves
+         * credentials in memory for this process.
+         */
+        public fun file(file: () -> File): CredentialStore = FileCredentialStore(file)
     }
 }
 
@@ -62,12 +70,22 @@ private class MemoryCredentialStore : CredentialStore {
     }
 }
 
-/** One `key=credentials` line per receiver, in a properties file that each change replaces whole. */
+/**
+ * One `key=credentials` line per receiver, in a properties file that each change replaces whole.
+ * The file is found on the first call, under [lock], so the constructor does no I/O.
+ */
 private class FileCredentialStore(
-    private val file: File,
+    locate: () -> File,
 ) : CredentialStore {
     private val lock = Any()
     private var cache: Map<String, String>? = null
+    private val file: File? by lazy(LazyThreadSafetyMode.NONE) {
+        try {
+            locate()
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     override suspend fun get(receiver: Receiver): Credentials? =
         withContext(Dispatchers.IO) { entries()[receiver.storeKey]?.let(Credentials::decode) }
@@ -94,7 +112,8 @@ private class FileCredentialStore(
 
     private fun read(): Map<String, String> =
         try {
-            if (!file.exists()) {
+            val file = file
+            if (file == null || !file.exists()) {
                 emptyMap()
             } else {
                 val properties = Properties().apply { file.inputStream().use(::load) }
@@ -108,6 +127,7 @@ private class FileCredentialStore(
         }
 
     private fun write(entries: Map<String, String>) {
+        val file = file ?: return
         file.absoluteFile.parentFile?.mkdirs()
         val temp = File(file.absoluteFile.parentFile, "${file.name}.tmp")
         temp.delete()

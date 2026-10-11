@@ -145,4 +145,33 @@ class AirkastTest {
             file.writeText("AA\\:BB\\:CC\\:DD\\:EE\\:FF=not credentials\n")
             assertThat(CredentialStore.file(file).get(tv)).isNull()
         }
+
+    @Test
+    fun aFileStoreFindsItsFileOnceOffTheCallersThreadWhenFirstUsed() =
+        runBlocking {
+            val file = File(folder.root, "pairings/credentials")
+            val caller = Thread.currentThread()
+            val lookups = mutableListOf<Thread>()
+            val store =
+                CredentialStore.file {
+                    synchronized(lookups) { lookups += Thread.currentThread() }
+                    file
+                }
+            assertThat(lookups).isEmpty()
+            store.put(tv, credentials)
+            assertThat(store.get(tv)).isEqualTo(credentials)
+            store.remove(typedIn)
+            assertThat(lookups).hasSize(1)
+            assertThat(lookups.single()).isNotSameInstanceAs(caller)
+            assertThat(CredentialStore.file(file).get(tv)).isEqualTo(credentials)
+        }
+
+    @Test
+    fun aFileStoreThatCannotFindItsFileKeepsCredentialsInMemory() =
+        runBlocking {
+            val store = CredentialStore.file { throw SecurityException("no storage") }
+            assertThat(store.get(tv)).isNull()
+            store.put(tv, credentials)
+            assertThat(store.get(tv)).isEqualTo(credentials)
+        }
 }

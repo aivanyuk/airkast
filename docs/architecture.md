@@ -101,6 +101,9 @@ The protocol facts, with the receivers they were seen on, are in
 ## Threading
 
 - Every public suspend function is main-safe: it moves blocking I/O to `Dispatchers.IO` itself.
+- Building does no I/O. `Airkast(context)` hands `CredentialStore.file` a function that finds the
+  no-backup files, which the store calls on its first use, on `Dispatchers.IO`, since Android
+  creates that directory on the thread that asks for it.
 - The control connection serves one exchange at a time, so a position poll and a command never
   interleave on the wire.
 - One daemon thread per session reads the event channel. It never suspends: events go out through

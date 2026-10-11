@@ -17,9 +17,13 @@ import java.io.File
  *   the local network, and binds the session's connections to the network that holds the receiver
  *   ([LocalNetwork.socketFactory]).
  * - [Airkast.credentialStore] keeps pairings in the app's no-backup files, so a receiver asks for
- *   its PIN or password once, and no backup carries the private keys to another device.
+ *   its PIN or password once, and no backup carries the private keys to another device. The
+ *   store finds that directory, which Android creates when asked for it, on its first use and off
+ *   the caller's thread.
  *
- * Build one for the app and share it: `Airkast(context) { logger = Airkast.Logger.logcat() }`.
+ * Building one does no I/O, so it may run on the main thread, in `Application.onCreate` or a
+ * dependency graph. Build one for the app and share it:
+ * `Airkast(context) { logger = Airkast.Logger.logcat() }`.
  */
 public fun Airkast(
     context: Context,
@@ -32,7 +36,7 @@ public fun Airkast(
             if (!LocalNetwork.isAccessible(app)) throw notPermitted()
             LocalNetwork.socketFactory(app, receiver.host)
         }
-        credentialStore = CredentialStore.file(File(app.noBackupFilesDir, CREDENTIALS_FILE))
+        credentialStore = CredentialStore.file { File(app.noBackupFilesDir, CREDENTIALS_FILE) }
         block()
     }
 }

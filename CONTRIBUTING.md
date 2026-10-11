@@ -67,6 +67,10 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
 - **Every failure is an `AirkastException`**, or a `CancellationException`. A new way to fail is
   a new subclass with KDoc that says when it happens.
 - **Every suspend function is main-safe.** It moves blocking I/O off the caller's thread itself.
+- **Building does no I/O.** A constructor, a builder, a `copy { }` or a platform's defaults
+  (`Airkast(context)`) touches no disk and no network, so an app may build its client on the main
+  thread, in `Application.onCreate`. What takes I/O to find, like a directory Android creates when
+  asked for it, is found on first use, on `Dispatchers.IO`.
 - **No logging library.** `Airkast.Builder.logger` takes an `Airkast.Logger`, and code writes to
   it through the internal `Log`, which builds a line only when the logger takes its level and
   catches what the logger throws. A line never holds a media URL, a key, a PIN or anything a
