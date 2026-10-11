@@ -4,6 +4,14 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## Unreleased
+
+### Changed
+
+- airkast is on Maven Central, as `io.github.aivanyuk:airkast-core`, `airkast-android` and
+  `airkast-media3`, in place of JitPack's `com.github.aivanyuk.airkast`. Drop the JitPack
+  repository and change the group. Versions up to 0.3.2 stay on JitPack only.
+
 ## 0.3.2 - 2026-10-11
 
 ### Added

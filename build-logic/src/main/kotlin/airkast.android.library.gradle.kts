@@ -1,3 +1,6 @@
+import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.SourcesJar
 import org.gradle.accessors.dm.LibrariesForLibs
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
@@ -44,10 +47,6 @@ android {
             // Robolectric reaches into FileDescriptor's internals, which JDK 17 and later close.
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
         }
-    }
-
-    publishing {
-        singleVariant("release") { withSourcesJar() }
     }
 }
 
@@ -97,10 +96,7 @@ dependencies {
     "testImplementation"(libs.androidx.test.core)
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("release") {
-            afterEvaluate { from(components["release"]) }
-        }
-    }
+// Central asks for a javadoc jar. Dokka would fill it; the sources jar already carries the KDoc.
+mavenPublishing {
+    configure(AndroidSingleVariantLibrary(javadocJar = JavadocJar.Empty(), sourcesJar = SourcesJar.Sources()))
 }

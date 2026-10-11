@@ -15,6 +15,7 @@ animalSniffer = "2.0.1"
 poko = "0.23.2"
 ktlintGradle = "14.2.0"
 ktlintEngine = "1.8.0"
+mavenPublish = "0.37.0"
 junit = "4.13.2"
 truth = "1.4.5"
 robolectric = "4.17"
@@ -54,6 +55,7 @@ kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", ve
 ktlint-gradlePlugin = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlintGradle" }
 animalSniffer-gradlePlugin = { module = "ru.vyarus:gradle-animalsniffer-plugin", version.ref = "animalSniffer" }
 poko-gradlePlugin = { module = "dev.drewhamilton.poko:poko-gradle-plugin", version.ref = "poko" }
+mavenPublish-gradlePlugin = { module = "com.vanniktech:gradle-maven-publish-plugin", version.ref = "mavenPublish" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -63,3 +65,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintGradle" }
 animalSniffer = { id = "ru.vyarus.animalsniffer", version.ref = "animalSniffer" }
 poko = { id = "dev.drewhamilton.poko", version.ref = "poko" }
+mavenPublish = { id = "com.vanniktech.maven.publish.base", version.ref = "mavenPublish" }
