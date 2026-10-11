@@ -7,4 +7,5 @@ plugins {
     alias(libs.plugins.ktlint) apply false
     alias(libs.plugins.animalSniffer) apply false
     alias(libs.plugins.poko) apply false
+    alias(libs.plugins.mavenPublish) apply false
 }

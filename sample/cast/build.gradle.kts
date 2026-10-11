@@ -34,7 +34,7 @@ ktlint {
 }
 
 dependencies {
-    // In an app: implementation("com.github.aivanyuk.airkast:airkast-android:<version>"), and
+    // In an app: implementation("io.github.aivanyuk:airkast-android:<version>"), and
     // airkast-media3 likewise.
     api(project(":android"))
     api(project(":media3"))

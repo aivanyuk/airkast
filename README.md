@@ -36,19 +36,15 @@ lists what has been checked, on which receivers and Android versions.
 
 ## Use
 
-```kotlin
-// settings.gradle.kts
-dependencyResolutionManagement {
-    repositories {
-        maven("https://jitpack.io") { content { includeGroup("com.github.aivanyuk.airkast") } }
-    }
-}
+From Maven Central:
 
-// build.gradle.kts
-implementation("com.github.aivanyuk.airkast:airkast-core:<version>")
-implementation("com.github.aivanyuk.airkast:airkast-android:<version>")
-implementation("com.github.aivanyuk.airkast:airkast-media3:<version>") // for a media3 Player
+```kotlin
+implementation("io.github.aivanyuk:airkast-core:<version>")
+implementation("io.github.aivanyuk:airkast-android:<version>")
+implementation("io.github.aivanyuk:airkast-media3:<version>") // for a media3 Player
 ```
+
+Versions up to 0.3.2 are on JitPack only, as `com.github.aivanyuk.airkast:airkast-core` and so on.
 
 airkast comes in three levels. Each one hides the level below it and leaves it in reach.
 

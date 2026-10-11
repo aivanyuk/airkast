@@ -37,11 +37,10 @@ jobs:
       - name: Check
         run: ./gradlew --continue check
 
-      # What JitPack runs for a tag, so a release never finds a broken publication.
-      - name: Publish locally, as JitPack does
+      # Builds every publication, as the release workflow does for a tag, so a release never finds
+      # a broken one. A snapshot, so it needs no signing key.
+      - name: Publish locally
         run: ./gradlew publishToMavenLocal
-        env:
-          VERSION: 0.0.0-ci
 
       - name: Upload reports
         if: failure()

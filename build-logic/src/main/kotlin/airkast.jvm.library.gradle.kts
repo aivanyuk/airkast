@@ -1,3 +1,6 @@
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.KotlinJvm
+import com.vanniktech.maven.publish.SourcesJar
 import org.gradle.accessors.dm.LibrariesForLibs
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
@@ -23,7 +26,6 @@ val libs = the<LibrariesForLibs>()
 java {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
-    withSourcesJar()
 }
 
 kotlin {
@@ -67,10 +69,7 @@ dependencies {
     testImplementation(libs.truth)
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("release") {
-            from(components["java"])
-        }
-    }
+// Central asks for a javadoc jar. Dokka would fill it; the sources jar already carries the KDoc.
+mavenPublishing {
+    configure(KotlinJvm(javadocJar = JavadocJar.Empty(), sourcesJar = SourcesJar.Sources()))
 }
