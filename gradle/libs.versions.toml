@@ -36,6 +36,10 @@ junit = { module = "junit:junit", version.ref = "junit" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
+# airkast itself, as an app declares it, less the version: airkast.sample builds it from this
+# repository.
+airkast-android = { module = "io.github.aivanyuk:airkast-android" }
+airkast-media3 = { module = "io.github.aivanyuk:airkast-media3" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }

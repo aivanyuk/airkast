@@ -3,6 +3,7 @@
 plugins {
     id("com.android.application")
     id("org.jlleitschuh.gradle.ktlint")
+    id("airkast.sample")
 }
 
 android {
