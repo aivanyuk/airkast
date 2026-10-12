@@ -1,7 +1,35 @@
 # Compatibility
 
-What airkast has been checked on, and what each platform version changes. A change that alters
-what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRIBUTING.md#tests)).
+This page records which receivers, Android versions and networks airkast has been checked on, and
+how each receiver behaves. Read the summary to decide whether airkast fits your setup. The
+receiver notes further down are protocol details, mostly for contributors.
+
+A change that alters what goes over the wire adds a row to [Checked](#checked) (see
+[CONTRIBUTING.md](../CONTRIBUTING.md#tests)).
+
+Terms used on this page:
+
+- **TXT record**: the key-value data a receiver announces on the local network over mDNS, read by
+  `ReceiverDiscovery` into `Receiver.properties`.
+- **Feature bits** and **status flags**: fields of the TXT record (`features` or `ft`, and
+  `flags` or `sf`) that say what a receiver supports and requires.
+- **`srcvers`**: the receiver's AirPlay software version, from the TXT record.
+  `Receiver.sourceVersion` holds it.
+
+## Summary
+
+| Receiver | Status |
+| --- | --- |
+| LG OLED CX (webOS 04.64.00) | Plays. Checked with transient pairing and with a PIN, from a desktop JVM and from an Android 13 phone. |
+| Mac's AirPlay Receiver (macOS, `srcvers` 960.13.25) | Plays when "Allow AirPlay for" is set to "Anyone on the same network", with or without "Require password". At the default, "Current User", it refuses airkast. |
+| Apple TV | Not checked. |
+| Other TVs with AirPlay 2 | Not checked. |
+
+| Sender | Requirement |
+| --- | --- |
+| Android | Android 6.0 (API 23) or later. Android 17 needs the local network permission for apps that target SDK 37. |
+| Desktop JVM | Java 11 or later. |
+| Network | The receiver must reach the media URL, and, with `ntpTiming` on, reach the sender over UDP. |
 
 ## Receivers
 
@@ -22,7 +50,9 @@ what goes over the wire adds a row to "Checked" (see [CONTRIBUTING.md](../CONTRI
 
 ### How `Receiver.compatibility` decides
 
-From the `_airplay._tcp` TXT record, in this order. Bit numbers follow pyatv's `AirPlayFlags`.
+`Receiver.compatibility` is read from the receiver's `_airplay._tcp` TXT record. The cases are
+checked in this order, and the first that matches wins. Bit numbers follow pyatv's
+`AirPlayFlags`.
 
 | Case | When | Receivers |
 | --- | --- | --- |
@@ -35,12 +65,17 @@ From the `_airplay._tcp` TXT record, in this order. Bit numbers follow pyatv's `
 | `NoTransientPairing` | Neither system pairing (bit 43) nor CoreUtils pairing (bit 48) | none seen yet |
 | `Supported` | Anything else | the LG CX |
 
-pyatv also reads status flag `0x200` as "pairing mandatory". The LG CX sets it (flags `0x244`) and
-pairs without a PIN, so airkast ignores it. A receiver may also ask for a PIN or password without
-flag `0x8` or `0x80`; transient pairing then fails with `PairingFailed`, and pairing with one is
-the caller's choice (the sample offers both).
+pyatv also reads status flag `0x200` as "pairing mandatory". The LG CX sets it (flags `0x244`) but
+pairs without a PIN, so airkast ignores that flag.
+
+A receiver may ask for a PIN or password without setting flag `0x8` or `0x80`. Transient pairing
+then fails with `PairingFailed`, and the app can call `Airkast.pair` with the secret the user
+picks. The sample app offers both.
 
 ### Pairing
+
+How each kind of pairing goes over the wire. [The guide](guide.md#pairing) explains pairing from
+the app's side.
 
 | How | When | Wire |
 | --- | --- | --- |
@@ -65,6 +100,8 @@ transiently leaves no credentials to keep it in, so the prompt asks on every con
 tested against `FakeReceiver`, and checked by hand on a Mac set to "Require password".
 
 ### LG CX (webOS 04.64.00)
+
+What the LG CX does, as seen on the wire.
 
 - It speaks AirPlay video v2 only. Its features are `0x7F8AD0,0x38BCB46`, and every AirPlay 1
   video endpoint (`/play`, `/playback-info`, `/scrub`, `/reverse`) answers 404.
@@ -97,6 +134,8 @@ tested against `FakeReceiver`, and checked by hand on a Mac set to "Require pass
 
 ### Mac (macOS AirPlay Receiver, 960.13.25)
 
+What a Mac's AirPlay Receiver does, as seen on the wire.
+
 - Its "Allow AirPlay for" setting decides who gets in. At "Current User", the default, it lets in
   only the owner's devices, which a third-party sender cannot be, and refuses transient pairing:
   an iPhone on the owner's Apple Account casts, airkast cannot. pyatv reads that setting as TXT
@@ -117,8 +156,8 @@ tested against `FakeReceiver`, and checked by hand on a Mac set to "Require pass
   Without the header it shows "".
 - It answers the base SETUP with 500 when `timingProtocol` is `None`. With `NTP` it asks for the
   time three times, within a second, and answers 200 once it has it, then asks again every two to
-  three seconds for as long as the session lasts. A sender it cannot reach over UDP (WSL behind Windows' firewall, for
-  one) waits on an unanswered SETUP.
+  three seconds for as long as the session lasts. A sender it cannot reach over UDP (WSL behind
+  Windows' firewall, for one) waits on an unanswered SETUP.
 - Its features are `0x4A7FCFD5,0x38174FDE`. Video v2 plays through the same `/command` flow as on
   the LG, with the same events, and a `selectedMediaArrayChanged` notification after a track
   switch.
@@ -127,9 +166,9 @@ tested against `FakeReceiver`, and checked by hand on a Mac set to "Require pass
   (`playbackLikelyToKeepUp`) before `currentItemChanged`, so a load ends at the first message
   that names it.
 - Track ids follow the master's `EXT-X-MEDIA` order, but renditions that differ only in their
-  group appear to count once. On Apple's `bipbop_adv_example_hevc`, whose three English audio renditions
-  differ only in channels, the ids are audio 0, closed captions 1 (reported as `sbtl`, with
-  `TaggedMediaCharacteristics` for the hard of hearing) and subtitles 2. An id that names no
+  group appear to count once. On Apple's `bipbop_adv_example_hevc`, whose three English audio
+  renditions differ only in channels, the ids are audio 0, closed captions 1 (reported as `sbtl`,
+  with `TaggedMediaCharacteristics` for the hard of hearing) and subtitles 2. An id that names no
   rendition, or one of another kind, is answered 200 and ignored.
 - With subtitles off, `selectedMediaArray` lists the audio rendition alone. The LG lists a forced
   subtitle as well.
@@ -137,13 +176,15 @@ tested against `FakeReceiver`, and checked by hand on a Mac set to "Require pass
 ### Not checked yet
 
 - **Apple TV (tvOS).** send-airplay2 reports the same `/command` flow on tvOS 26, and that SETUP
-  stalls without NTP timing (`Airkast.ntpTiming`, on by default). Depending on its AirPlay access setting
-  it may ask for a PIN or password once (`Airkast.connect` with a prompt, or `Airkast.pair`), or, set to "Only people sharing this home", let in
-  only members of its Home.
+  stalls without NTP timing (`Airkast.ntpTiming`, on by default). Depending on its AirPlay
+  access setting, it may ask for a PIN or password once (`Airkast.connect` with a prompt, or
+  `Airkast.pair`), or, set to "Only people sharing this home", let in only members of its Home.
 - **Other TVs with AirPlay 2** (Samsung, Sony, Vizio, Roku, other LG years): whatever their TXT
   record says. A report with the record, the firmware and the live test's result is welcome.
 
 ## Senders
+
+What airkast needs from the device that sends, and what it does about platform differences.
 
 ### JVM
 
@@ -166,6 +207,7 @@ tests run under Robolectric at API 23, 34, 36 and 37.
 The app declares `ACCESS_LOCAL_NETWORK` itself, and only when it targets SDK 37 or more, since
 Android's guidance is to leave it out below that. It is in the `NEARBY_DEVICES` group, so a user
 who granted Bluetooth's nearby devices permission is not asked again.
+[The guide](guide.md#android-17s-local-network-permission) shows how to request it.
 
 ### Networks
 
@@ -174,7 +216,8 @@ who granted Bluetooth's nearby devices permission is not asked again.
   firewall, gets a SETUP that a Mac never answers. A phone on the receiver's Wi-Fi is reachable.
 - **Wi-Fi without internet.** Android may keep mobile data as the default network, and a socket
   that is not bound to Wi-Fi then goes over mobile data and times out. A connect through
-  `Airkast(context)` binds the session to the Wi-Fi or Ethernet network whose subnet holds the receiver.
+  `Airkast(context)` binds the session to the Wi-Fi or Ethernet network whose subnet holds the
+  receiver.
 - **VPN.** A VPN that takes all traffic takes LAN connections too. Binding to the Wi-Fi network
   gets around it when the VPN allows apps to bypass it. When it doesn't, casting may fail while
   the VPN is on.
@@ -187,14 +230,21 @@ who granted Bluetooth's nearby devices permission is not asked again.
 
 A session sends `/feedback` every two seconds and keeps two TCP connections open. With the screen
 off, the CPU sleeps unless something holds a wake lock. How long the LG keeps a sender that has
-gone quiet has not been measured. An app that casts in the background runs a foreground service
-of type `mediaPlayback`, which keeps network access under Doze, and holds a partial wake lock and
-a Wi-Fi lock while a session plays. `AirkastPlayer` (`airkast-media3`) takes both locks while
-an item loads, plays or is paused, and declares `WAKE_LOCK` for it. An app that drives an
-`AirkastSession` without the player takes them itself. No phone has yet been checked through a
-whole episode with its screen locked.
+gone quiet has not been measured.
+
+To keep casting in the background, an app needs two things:
+
+- A foreground service of type `mediaPlayback`, which keeps network access under Doze.
+  `AirkastSessionService` is one.
+- A partial wake lock and a Wi-Fi lock while a session plays. `AirkastPlayer` takes both while an
+  item loads, plays or is paused, and `airkast-media3` declares `WAKE_LOCK` for it. An app that
+  drives an `AirkastSession` without the player takes the locks itself.
+
+No phone has yet been checked through a whole episode with its screen locked.
 
 ## Callers
+
+What an app that depends on airkast needs.
 
 - Kotlin 2.2 or later: airkast compiles at language and API version 2.2.
 - kotlin-stdlib 2.2.21 and kotlinx-coroutines 1.10.2 at least. Gradle hands an app its own newer

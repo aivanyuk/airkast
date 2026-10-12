@@ -1,5 +1,15 @@
 # Architecture
 
+How the code is organised, and why. This page is for contributors. To use the library, read the
+[README](../README.md) and the [guide](guide.md).
+
+Two terms appear throughout:
+
+- **Control connection**: the TCP connection that carries the sender's requests (HTTP and RTSP)
+  and the receiver's answers. It is encrypted once pairing completes.
+- **Event channel**: a second connection, on which the receiver sends results and events, such
+  as a state change or BACK pressed on its remote.
+
 ## Modules
 
 | Module | Artifact | Holds | Depends on |
@@ -7,13 +17,16 @@
 | `:core` | `airkast-core` | The protocol: pairing, the session, its commands and events. Plain JVM | kotlin-stdlib, kotlinx-coroutines-core |
 | `:android` | `airkast-android` | Discovery through `NsdManager`, the local network permission, binding to the receiver's network, and `Airkast(context)`, a client with those as its defaults | `:core` |
 | `:media3` | `airkast-media3` | `AirkastPlayer`, a media3 `Player` that runs a cast through an `Airkast`, so a media3 UI and `MediaSession` drive a receiver, hands the item to and from the app's local player, and holds the wake and Wi-Fi locks a cast needs; `AirkastSessionService`, a `MediaSessionService` over it | `:core`, media3-common, media3-session, kotlinx-coroutines-android |
-| `:sample:cast` | none | The reference integration: `Cast` builds the app's `Airkast` and an `AirkastPlayer` over an `ExoPlayer`, and `CastService` puts a `MediaSession` over the player | `:android`, `:media3`, media3-exoplayer |
+| `:sample:cast` | none | The reference integration: `Cast` builds the app's `Airkast` and an `AirkastPlayer` over an `ExoPlayer`, and `CastService` puts a `MediaSession` over the player | `airkast-android` and `airkast-media3`, built from `:android` and `:media3`; media3-exoplayer |
 | `:sample:compose`, `:sample:views` | none | The sample apps: one screen over `Cast`, in Compose and in views | `:sample:cast` |
 
-Modules depend on `:core` and never on each other. An app that draws its own controls doesn't
-pull media3, and a desktop JVM doesn't pull Android. All artifacts share one version
-([releasing](releasing.md)). The `:sample:*` modules are never published, and `:sample:cast` is
-the one place that depends on both `:android` and `:media3`.
+Modules depend on `:core` and never on each other, so an app that draws its own controls doesn't
+pull in media3, and a desktop JVM doesn't pull in Android. All artifacts share one version
+([releasing](releasing.md)).
+
+The `:sample:*` modules are never published. `:sample:cast` is the one place that depends on both
+`:android` and `:media3`. The samples declare them by their Maven Central coordinates, as an app
+does, and the `airkast.sample` convention substitutes the modules in this repository.
 
 ## Three levels
 
@@ -27,17 +40,18 @@ level for one thing and keep the rest.
    pairings in its `CredentialStore`. Its builder holds every option, and `copy { }` makes a
    variant. `Airkast(context)` in `:android` builds the same class with Android's defaults.
 3. **`AirkastPlayer`**: a media3 `Player` that runs a cast through a client: the connect, the
-   PIN or password, BACK on the TV's remote and the end, with a `connection` flow for the UI. With a local
-   player, it plays on the phone between casts. Setting its `session` by hand steps down to
-   level 1 and keeps the player.
+   PIN or password, BACK on the TV's remote and the end, with a `connection` flow for the UI.
+   With a local player, it plays on the phone between casts. Setting its `session` by hand steps
+   down to level 1 and keeps the player.
 
 A default lives in the level that knows it: Android's in `Airkast(context)`, the player's in
 `AirkastPlayer.Builder`, the protocol's in the session. Each one is a builder property an app
 can change.
 
-`build-logic/` holds the conventions every module applies: `airkast.jvm.library`,
-`airkast.android.library` and `airkast.publish`. A setting that applies to more than one module
-goes there, never into a module's own build file.
+`build-logic/` holds the conventions the modules apply: `airkast.jvm.library`,
+`airkast.android.library` and `airkast.publish` for the libraries, and `airkast.sample` for the
+samples. A setting that applies to more than one module goes there, never into a module's own
+build file.
 
 ## Layers in `:core`
 
@@ -46,25 +60,30 @@ goes there, never into a module's own build file.
 | `io.github.aivanyuk.airkast` | The public API: `Airkast`, `AirkastSession`, `Media`, `Receiver`, `Compatibility`, `Credentials`, `CredentialStore`, the values and events, `AirkastException` | everything below |
 | `.session` | The protocol's state: `DefaultVideoSession` (AirPlay video v2), `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder`, and `Log`, which writes to the client's logger | `wire`, `crypto` |
 | `.wire` | Encodings and framing: HTTP and RTSP messages, TLV8, binary plists, the encrypted `Link`. No protocol decisions | `crypto` |
-| `.crypto` | SRP-6a, HKDF-SHA512, ChaCha20-Poly1305, X25519, Ed25519, as pure functions with vector tests | nothing |
+| `.crypto` | SRP-6a, HKDF-SHA512, ChaCha20-Poly1305, X25519, Ed25519, as pure functions with vector tests. airkast carries its own ChaCha20-Poly1305 because Android's JCA has no provider for it below Android 9, and its own X25519 and Ed25519 because the JCA has none below Android 13 | nothing |
 | `.internal` | Build support, such as the `@Poko` annotation | nothing |
 
 Everything outside the root package is `internal`. A lower layer never imports a higher one.
 
 ## One session
 
-`Airkast.connect` opens the control connection, pairs, and encrypts it. It pairs transiently,
-or, with credentials in the client's `CredentialStore`, proves the pairing `Airkast.pair` made with
-a PIN or password (pair-verify), and the channel keys derive from that pairing's secret. A
-receiver that advertises a PIN or password and has no credentials pairs first, when the caller
-gave a way to ask for it. A receiver that answers the base SETUP with a Digest challenge, as a
-Mac with a password does, gets the password kept with the credentials, which then signs every
-request on the control connection. With none kept, or a wrong one, the open fails, and a connect
-with a prompt opens again with the one the user types, and keeps it. `DefaultVideoSession`
-then sends the base SETUP, opens the event channel, sends RECORD and a SETUP for the type-130
-stream, and from there drives playback with `POST /command`. The receiver answers every command
-with 200 and sends results and events over the event channel. A request carries a `messageID`,
-and its answer comes back on the event channel with the same ID.
+`Airkast.connect` opens a session in these steps:
+
+1. **Pair.** It opens the control connection and pairs. With credentials for the receiver in the
+   client's `CredentialStore`, it proves the pairing that `Airkast.pair` made with a PIN or
+   password (pair-verify). Without them, a receiver that advertises a PIN or password pairs first,
+   if the caller gave a prompt function. Any other receiver pairs transiently.
+2. **Encrypt.** The control connection's keys derive from the pairing's shared secret.
+3. **Set up the stream.** `DefaultVideoSession` sends the base SETUP, opens the event channel,
+   and sends RECORD and a SETUP for the type-130 stream.
+4. **Answer a Digest challenge, if any.** A receiver may answer the base SETUP with an HTTP Digest
+   challenge, as a Mac with a password does. The password kept with the credentials answers it,
+   and then signs every request on the control connection. With no password kept, or a wrong one,
+   the open fails, and a connect with a prompt opens again with the password the user types, and
+   keeps it.
+5. **Play.** From there it drives playback with `POST /command`. The receiver answers every
+   command with 200, and sends the result over the event channel. A request carries a
+   `messageID`, and its result comes back on the event channel with the same ID.
 
 The protocol facts, with the receivers they were seen on, are in
 [compatibility.md](compatibility.md).

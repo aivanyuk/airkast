@@ -60,7 +60,9 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
 - **A time is a `kotlin.time.Duration`**, never a number with the unit in its name, and a volume
   runs from 0 to 1. The API is Kotlin's: every call suspends, so Java is not a target.
 - **`sample/` compiles against the modules**, so a change to the API changes the sample with it,
-  and the sample shows the current way to make the call.
+  and the sample shows the current way to make the call. The samples declare airkast by its Maven
+  Central coordinates, as an app does, and the `airkast.sample` convention substitutes the
+  modules in this repository.
 - **Sealed types and enums may gain members** in a minor release (`ReceiverEvent`,
   `AirkastException`, `Compatibility`, `PlaybackState`). Their KDoc says so where it matters;
   callers keep an `else` branch.
@@ -101,13 +103,20 @@ Raising a floor is a breaking change ([releasing](docs/releasing.md#what-counts-
 ## Tests
 
 - New logic comes with tests, failure paths included.
-- Crypto is tested against published vectors, codecs by round trip and against bytes captured
-  from a receiver, and protocol steps against `FakeReceiver` over loopback.
+- Crypto is tested against published vectors: SRP-6a and HKDF against srptools and pyatv,
+  ChaCha20-Poly1305 against RFC 8439, X25519 against RFC 7748 and Ed25519 against RFC 8032, and
+  the curves against the JDK's own providers. Codecs are tested by round trip and against bytes
+  captured from a receiver, and protocol steps against `FakeReceiver` over loopback.
 - Android code runs under Robolectric at the API levels where the platform changed. A test pins
   them with `@Config(sdk = [...])`.
-- A change to what goes over the wire also runs the live test against a real receiver
-  (`AIRKAST_RECEIVER`), and records the receiver, its firmware and `srcvers`, the date and the
-  result in [docs/compatibility.md](docs/compatibility.md).
+- A change to what goes over the wire also runs the live test against a real receiver, and
+  records the receiver, its firmware and `srcvers`, the date and the result in
+  [docs/compatibility.md](docs/compatibility.md). The live test runs only when
+  `AIRKAST_RECEIVER` names a receiver's address:
+
+  ```bash
+  AIRKAST_RECEIVER=192.168.1.20 ./gradlew :core:test --tests '*LiveReceiverTest'
+  ```
 
 ## Receiver quirks
 
