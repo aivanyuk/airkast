@@ -1,5 +1,8 @@
 # Releasing
 
+How airkast is versioned, what counts as a breaking change, and how a release is published to
+Maven Central.
+
 ## Versions
 
 - **[Semantic Versioning](https://semver.org/)**: `MAJOR.MINOR.PATCH`, with pre-releases as
@@ -47,7 +50,8 @@ From 1.0. Before it, a break is recorded in the changelog and nothing more.
 ## Cutting a release
 
 1. In a pull request, move "Unreleased" in [CHANGELOG.md](../CHANGELOG.md) under a heading for
-   the version, with the date, and check the version against the rules above. Merge it.
+   the version, with the date, and check the version against the rules above. Change the version
+   in the README's Install section to the new one. Merge it.
 2. Tag `main` at that merge and push the tag:
 
    ```bash
