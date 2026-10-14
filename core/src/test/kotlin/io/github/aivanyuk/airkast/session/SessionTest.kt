@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Media
+import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
@@ -60,6 +61,35 @@ class SessionTest {
                     withTimeout(2_000) { session.state.first { it == PlaybackState.Paused } }
                     session.stop()
                     assertThat(fake.commands.last()["type"]).isEqualTo("stop")
+                }
+            }
+        }
+
+    @Test
+    fun aFileLoadsAsAFileAndPausesAsPaused() =
+        runBlocking<Unit> {
+            FakeReceiver().use { fake ->
+                airkast.connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    session.load(Media("https://example.com/song.mp3", startAt = 1.minutes))
+                    val item = fake.commands.first { it["type"] == "insertPlayQueueItem" }["item"] as Map<*, *>
+                    assertThat(item["mediaType"]).isEqualTo("file")
+                    assertThat(item["Content-Location"]).isEqualTo("https://example.com/song.mp3")
+                    assertThat(DefaultVideoSession.duration(item["Start-Position"])).isEqualTo(1.minutes)
+
+                    session.pause()
+                    withTimeout(2_000) { session.state.first { it == PlaybackState.Paused } }
+                }
+            }
+        }
+
+    @Test
+    fun anHlsUrlWithoutItsExtensionLoadsAsAFileWhenTold() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                airkast.connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    session.load(Media("https://example.com/watch/7", format = MediaFormat.File))
+                    val item = fake.commands.first { it["type"] == "insertPlayQueueItem" }["item"] as Map<*, *>
+                    assertThat(item["mediaType"]).isEqualTo("file")
                 }
             }
         }

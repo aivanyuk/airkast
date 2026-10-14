@@ -259,14 +259,28 @@ public final class io/github/aivanyuk/airkast/Credentials$Companion {
 }
 
 public final class io/github/aivanyuk/airkast/Media {
-	public synthetic fun <init> (Ljava/lang/String;JZILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/lang/String;JZLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;JLio/github/aivanyuk/airkast/MediaFormat;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;JLio/github/aivanyuk/airkast/MediaFormat;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFormat ()Lio/github/aivanyuk/airkast/MediaFormat;
 	public final fun getStartAt-UwyO8pc ()J
-	public final fun getStreaming ()Z
 	public final fun getUrl ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/MediaFormat : java/lang/Enum {
+	public static final field Companion Lio/github/aivanyuk/airkast/MediaFormat$Companion;
+	public static final field File Lio/github/aivanyuk/airkast/MediaFormat;
+	public static final field Hls Lio/github/aivanyuk/airkast/MediaFormat;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/MediaFormat;
+	public static fun values ()[Lio/github/aivanyuk/airkast/MediaFormat;
+}
+
+public final class io/github/aivanyuk/airkast/MediaFormat$Companion {
+	public final fun of (Ljava/lang/String;Ljava/lang/String;)Lio/github/aivanyuk/airkast/MediaFormat;
+	public static synthetic fun of$default (Lio/github/aivanyuk/airkast/MediaFormat$Companion;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/MediaFormat;
 }
 
 public final class io/github/aivanyuk/airkast/PlaybackInfo {

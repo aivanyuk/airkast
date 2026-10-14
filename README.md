@@ -30,8 +30,9 @@ Before you adopt it, check these limitations:
   set to "Anyone on the same network". Other receivers may work, but nobody has tested them.
   [docs/compatibility.md](docs/compatibility.md) lists every check.
 - **The receiver must reach the URL itself.** airkast does not mirror the screen or stream local
-  files. HLS is the only format that has been checked. The LG's player runs in a web page, so the
-  server must send CORS headers for every playlist and segment.
+  files. It loads HLS streams and MP4, MP3 and AAC files, but only HLS has been checked on a
+  receiver, and MPEG-DASH does not play ([formats](docs/guide.md#formats)). The LG's player runs
+  in a web page, so the server must send CORS headers for every playlist, segment and file.
 - **Some receivers are not supported yet:**
   - receivers that let in only their owner's Apple devices, which includes a Mac at its default
     setting, "Current User";

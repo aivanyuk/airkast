@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.ReceiverEvent
 import org.junit.After
@@ -47,7 +48,7 @@ class AirkastPlayerTest {
         idle()
         assertThat(fake.loaded?.url).isEqualTo("https://example.com/master.m3u8")
         assertThat(fake.loaded?.startAt).isEqualTo(10.minutes)
-        assertThat(fake.loaded?.streaming).isTrue()
+        assertThat(fake.loaded?.format).isEqualTo(MediaFormat.Hls)
         assertThat(player.playbackState).isEqualTo(Player.STATE_READY)
         assertThat(player.isPlaying).isTrue()
         assertThat(wakeLock().isHeld).isTrue()
@@ -114,13 +115,25 @@ class AirkastPlayerTest {
     }
 
     @Test
-    fun streamingOffLoadsItemsAsFiles() {
-        val files = AirkastPlayer(ApplicationProvider.getApplicationContext(), Airkast()) { streaming = false }
-        files.session = fake
-        files.setMediaItem(item)
+    fun aFileLoadsAsAFile() {
+        player.session = fake
+        player.setMediaItem(MediaItem.fromUri("https://example.com/film.mp4"))
         idle()
-        assertThat(fake.loaded?.streaming).isFalse()
-        files.release()
+        assertThat(fake.loaded?.format).isEqualTo(MediaFormat.File)
+    }
+
+    @Test
+    fun theItemsMimeTypeSaysWhatItIs() {
+        player.session = fake
+        player.setMediaItem(
+            MediaItem
+                .Builder()
+                .setUri("https://example.com/play?id=7")
+                .setMimeType("audio/mpeg")
+                .build(),
+        )
+        idle()
+        assertThat(fake.loaded?.format).isEqualTo(MediaFormat.File)
     }
 
     @Test

@@ -72,6 +72,20 @@ A receiver may ask for a PIN or password without setting flag `0x8` or `0x80`. T
 then fails with `PairingFailed`, and the app can call `Airkast.pair` with the secret the user
 picks. The sample app offers both.
 
+### Formats
+
+What goes in `insertPlayQueueItem`'s `mediaType` for each `MediaFormat`, and what is known about
+each receiver playing it. [The guide](guide.md#formats) explains formats from the app's side.
+
+| Format | `mediaType` | What is known |
+| --- | --- | --- |
+| HLS | `streaming` | Plays on the LG CX and the Mac, with tracks and buffered ranges on the LG. HLS loaded as `file` plays on the LG too, without them |
+| MP4, MOV, MP3, AAC, M4A and other files | `file` | Not checked on a receiver yet. send-airplay2 casts MP4 files as `file` to an Apple TV (tvOS 26.6) and a Mac, and reports them playing. The live test plays an MP4 and an MP3 file when run (`AIRKAST_FILE_URL`, `AIRKAST_AUDIO_URL`) |
+| MPEG-DASH | none | Not played. The LG's player is hls.js, and the Mac's and the Apple TV's is AVFoundation, which plays HLS and files. A sender would have to rewrite the manifest as HLS and serve it |
+
+A speaker that takes AirPlay audio only reads as `NoVideo`. It plays what the sender decodes and
+streams itself (RAOP, or AirPlay 2's buffered audio), which airkast does not do yet.
+
 ### Pairing
 
 How each kind of pairing goes over the wire. [The guide](guide.md#pairing) explains pairing from

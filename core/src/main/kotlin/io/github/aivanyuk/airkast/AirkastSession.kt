@@ -39,7 +39,7 @@ public interface AirkastSession : AutoCloseable {
 
     /**
      * The renditions the receiver has selected, at most one per [TrackKind]. The LG reports them
-     * only for [Media] loaded as `streaming`, the default: for a `file` item the list is empty, and
+     * only for [MediaFormat.Hls] items: for a [MediaFormat.File] item the list is empty, and
      * [selectTrack] is ignored.
      */
     public suspend fun tracks(): List<Track>

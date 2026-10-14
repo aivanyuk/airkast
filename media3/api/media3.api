@@ -18,7 +18,6 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public final fun getLogger ()Lio/github/aivanyuk/airkast/Airkast$Logger;
 	public final fun getLooper ()Landroid/os/Looper;
 	public final fun getPositionPollInterval-UwyO8pc ()J
-	public final fun getStreaming ()Z
 	public final fun setDisconnectOnBack (Z)V
 	public final fun setEventListener (Lkotlin/jvm/functions/Function1;)V
 	public final fun setKeepAwake (Z)V
@@ -26,7 +25,6 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public final fun setLogger (Lio/github/aivanyuk/airkast/Airkast$Logger;)V
 	public final fun setLooper (Landroid/os/Looper;)V
 	public final fun setPositionPollInterval-LRDsOJo (J)V
-	public final fun setStreaming (Z)V
 }
 
 public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
