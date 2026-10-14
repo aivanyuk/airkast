@@ -1,46 +1,54 @@
 # airkast
 
 airkast is a Kotlin library that plays a video URL on an AirPlay receiver, such as a smart TV with
-AirPlay 2 built in, and controls playback from your app. It runs on Android and on a desktop JVM.
+AirPlay 2 built in, or plays your app's audio on an AirPlay speaker, and controls playback from
+your app. It runs on Android and on a desktop JVM.
 
-Your app sends the receiver a URL. The receiver downloads and plays the stream itself, and airkast
+To a TV, your app sends a URL. The receiver downloads and plays the stream itself, and airkast
 sends it commands (play, pause, seek, switch audio or subtitle tracks) and reports what it does.
+To a speaker or a soundbar, your app's own player decodes the audio, and airkast streams it there.
 On Android, `AirkastPlayer` is a media3 `Player`, so the player UI, notification and lock-screen
-controls your app already has can drive the TV.
+controls your app already has can drive the TV or the speaker.
 
 A few terms used throughout:
 
-- **Receiver**: the device that plays the video, such as a TV or a Mac. Represented by `Receiver`.
+- **Receiver**: the device that plays, such as a TV, a Mac or a speaker. Represented by `Receiver`.
 - **Sender**: your app, which tells the receiver what to play.
 - **Pairing**: the handshake that sets up an encrypted connection. Some receivers, such as the
   LG CX at its default settings, pair without user input. Others ask for a PIN shown on the TV,
   or a password, the first time.
-- **Session**: one open connection to one receiver, represented by `AirkastSession`.
+- **Session**: one open connection to one receiver, represented by `AirkastSession`, or by
+  `AudioStream` for audio your app streams.
 
 ## When to use it
 
 Use airkast to add "play on TV" for AirPlay receivers to an Android or JVM app that plays video
-from a URL. Apple's AirPlay frameworks exist only on Apple platforms.
+from a URL, or "play on speaker" to a music app, whatever its player. Apple's AirPlay frameworks
+exist only on Apple platforms.
 
 Before you adopt it, check these limitations:
 
 - **The API is not stable yet.** airkast is versioned 0.x, and a minor release may change the
   API. [docs/releasing.md](docs/releasing.md) has the rules.
-- **Only two receivers have been checked**: an LG OLED CX TV (webOS) and a Mac's AirPlay Receiver
-  set to "Anyone on the same network". Other receivers may work, but nobody has tested them.
+- **Only three receivers have been checked**: an LG OLED CX TV (webOS), a Mac's AirPlay Receiver
+  set to "Anyone on the same network", and a Samsung HW-Q990B soundbar, for audio. Other
+  receivers may work, but nobody has tested them.
   [docs/compatibility.md](docs/compatibility.md) lists every check.
-- **The receiver must reach the URL itself.** airkast does not mirror the screen or stream local
-  files. It loads HLS streams and MP4, MP3 and AAC files, files so far checked on the LG only,
+- **A TV must reach the URL itself.** airkast does not mirror the screen, and streams only audio
+  itself. It loads HLS streams and MP4, MP3 and AAC files, files so far checked on the LG only,
   and MPEG-DASH does not play ([formats](docs/guide.md#formats)). The LG plays HLS in a web page,
   so the server must send CORS headers for every playlist and segment. Files play without them.
 - **Some receivers are not supported yet:**
   - receivers that let in only their owner's Apple devices, which includes a Mac at its default
     setting, "Current User";
   - receivers that accept URLs only over the older AirPlay video v1 protocol;
-  - receivers that don't offer transient pairing, the pairing airkast starts with;
-  - receivers without video, such as speakers.
-- **The volume cannot be set.** airkast reads the TV's volume, but the LG ignores every way of
-  changing it.
+  - receivers that don't offer transient pairing, the pairing airkast starts with, which
+    includes AirPlay 1 speakers;
+  - more than one speaker at a time (multi-room).
+- **A TV's volume cannot be set.** airkast reads the TV's volume, but the LG ignores every way of
+  changing it. A speaker's can be set.
+- **Audio reaches a speaker a second late.** The stream buffers one second ahead of the speaker
+  (`audioLatency`), so play, pause and seek take effect that much later there.
 - **Apple TV has not been checked.**
 
 ## Install
@@ -51,6 +59,8 @@ airkast is on Maven Central:
 dependencies {
     implementation("io.github.aivanyuk:airkast-android:0.4.0")
     implementation("io.github.aivanyuk:airkast-media3:0.4.0")
+    // For speakers, with ExoPlayer:
+    implementation("io.github.aivanyuk:airkast-exoplayer:0.4.0")
 }
 ```
 
@@ -59,13 +69,14 @@ dependencies {
 | `airkast-core` | Connecting, pairing and the session's commands and events. Plain Kotlin, no Android. | You target a desktop JVM. The other two artifacts include it. |
 | `airkast-android` | Receiver discovery, Android 17's local network permission, binding connections to the receiver's Wi-Fi, and `Airkast(context)`, a client with Android defaults. | You target Android. |
 | `airkast-media3` | `AirkastPlayer`, a media3 `Player` that runs a cast, and `AirkastSessionService`. | Your Android app uses media3. |
+| `airkast-exoplayer` | `AirkastAudioSink`, an ExoPlayer `AudioSink` that sends ExoPlayer's audio to a speaker. | Your app plays on speakers through ExoPlayer. An app with another player writes to an `AudioStream` itself. |
 
 Requirements:
 
 - Android 6.0 (API 23) or later, or Java 11 or later on a desktop JVM.
 - Kotlin 2.2 or later. The API is built on coroutines (`suspend` functions and `Flow`), so it is
   meant for Kotlin callers. Java is not a target.
-- media3 1.11.1 or later, for `airkast-media3`.
+- media3 1.11.1 or later, for `airkast-media3` and `airkast-exoplayer`.
 
 Versions up to 0.3.2 were published on JitPack only, as `com.github.aivanyuk.airkast:airkast-core`
 and so on. 0.1.0 and 0.3.0 never built there.
@@ -165,6 +176,27 @@ The `ExoPlayer` plays until a cast starts. The current item then moves to the TV
 position. When the cast ends, the item comes back to the `ExoPlayer`, paused where the TV stopped.
 One `MediaSession` over the `AirkastPlayer` controls both.
 
+### Play music on a speaker
+
+A speaker or a soundbar plays no URL: your player decodes, and the speaker plays its audio. With
+ExoPlayer, give the player `AirkastAudioSink` as its audio route:
+
+```kotlin
+import io.github.aivanyuk.airkast.exoplayer.AirkastAudioSink
+
+val sink = AirkastAudioSink(context)
+val player = AirkastPlayer(context, airkast) {
+    localPlayer = ExoPlayer.Builder(context, sink.renderersFactory(context)).build()
+    audioRoute = sink
+}
+```
+
+`player.connect(receiver)` to a speaker then keeps the `ExoPlayer` playing, playlist and all, and
+moves its audio to the speaker; `connection` turns `Streaming`, and the phone's volume keys set
+the speaker's volume. A picker lists speakers with `receiver.isAudioSupported`. An app with its
+own player opens the stream itself with `airkast.connectAudio(receiver)` and writes PCM to it
+([guide](docs/guide.md#stream-audio-yourself)).
+
 ### Keep casting with the app in the background
 
 Subclass `AirkastSessionService`, a media3 `MediaSessionService`, and return your player. media3
@@ -230,10 +262,11 @@ a media URL, a key, a PIN or a password. See [docs/guide.md](docs/guide.md#logs-
 ## Sample apps
 
 [`sample/`](sample) holds two small apps with the same screen, one built with Compose and one with
-views. Both find TVs or take an address, ask for the local network permission, cast a URL, switch
-tracks, and list what the TV reports. They share one integration module:
+views. Both find TVs and speakers or take an address, ask for the local network permission, cast
+a URL, play music on a speaker, switch tracks, and list what the receiver reports. They share one integration module:
 
-- [`sample/cast`](sample/cast) builds the app's client and `AirkastPlayer` in
+- [`sample/cast`](sample/cast) builds the app's client, and the `AirkastPlayer` over an `ExoPlayer`
+  with `AirkastAudioSink`, in
   [`Cast.kt`](sample/cast/src/main/kotlin/io/github/aivanyuk/airkast/sample/Cast.kt), and the
   `AirkastSessionService` in
   [`CastService.kt`](sample/cast/src/main/kotlin/io/github/aivanyuk/airkast/sample/CastService.kt).
@@ -252,7 +285,8 @@ device:
 ## Documentation
 
 - [docs/guide.md](docs/guide.md): the full usage guide: the client's options, pairing, the
-  player, using a session without media3, logs and statistics, and errors.
+  player, speakers, using a session or an audio stream without media3, logs and statistics, and
+  errors.
 - [docs/compatibility.md](docs/compatibility.md): the receivers, Android versions and networks
   airkast has been checked on, and how each receiver behaves.
 - [docs/architecture.md](docs/architecture.md): how the code is organised, for contributors.
@@ -265,7 +299,9 @@ device:
 
 The protocol facts come from [pyatv](https://github.com/postlund/pyatv) (MIT) and
 [send-airplay2](https://github.com/ilyalissoboi/send-airplay2) (Apache-2.0), and from watching a
-real receiver. No code is copied from either. The Curve25519 field arithmetic follows
+real receiver. No code is copied from either. How a sender streams audio to an AirPlay 2 speaker
+comes from [owntone](https://github.com/owntone/owntone-server) (GPL-2.0), as facts only: no
+code is taken from it. The Curve25519 field arithmetic follows
 [TweetNaCl](https://tweetnacl.cr.yp.to/) (public domain).
 
 ## Licence

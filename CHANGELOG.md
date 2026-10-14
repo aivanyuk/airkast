@@ -12,8 +12,29 @@ caller sees adds its line under "Unreleased".
   audio, and the receiver loads it that way. It is read from the URL's extension by default, and
   `MediaFormat.of(url, mimeType)` reads it from a MIME type too. `AirkastPlayer` reads it from each
   media item's MIME type, or from its URL.
+- Speakers and soundbars: `Airkast.connectAudio(receiver, format)` opens an `AudioStream`, which
+  plays PCM the app's own player decodes, as an `AudioTrack` does: `write` and `offer`, `play`,
+  `pause`, `flush`, `position`, `setVolume`, and `setNowPlaying` for a receiver with a screen. It
+  plays on any receiver that takes AirPlay 2 audio, TVs and Macs included, with 44.1 or 48 kHz
+  PCM. Checked on a Samsung HW-Q990B soundbar. `Airkast.Builder.audioLatency`, one second by
+  default, sets how far ahead of the receiver it sends.
+- `Receiver.audioCompatibility` and `Receiver.isAudioSupported` say whether a receiver takes an
+  audio stream, and `Compatibility.NoAudio` when it does not.
+- `airkast-exoplayer`, a new artifact: `AirkastAudioSink`, an ExoPlayer `AudioSink` that plays on
+  the phone until an `AudioStream` attaches, then sends ExoPlayer's audio there, resampled and
+  mixed as the stream needs.
+- `AirkastPlayer.Builder.audioRoute` and `streamsAudio`: with a route, such as `AirkastAudioSink`,
+  `connect` to a speaker keeps the local player playing and moves its audio to the speaker. The
+  new state `Connection.Streaming` says so, the device volume is the speaker's, so the phone's
+  volume keys set it, and the speaker is told what plays. `AudioRoute` is the interface in
+  `airkast-core` that a player of the app's own implements.
 
 ### Changed
+
+- `AirkastPlayer.Connection` has a fifth state, `Streaming`, so a `when` over it needs a branch
+  for it.
+- The NTP timing replies read a monotonic clock, to the nanosecond, where they read the wall
+  clock to the millisecond.
 
 - `Media.streaming` is replaced by `Media.format`, and `AirkastPlayer.Builder.streaming` is
   removed. A URL ending in a file's extension, such as `.mp4` or `.mp3`, now loads as a file
