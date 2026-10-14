@@ -8,5 +8,6 @@ configurations.configureEach {
         substitute(module("io.github.aivanyuk:airkast-core")).using(project(":core"))
         substitute(module("io.github.aivanyuk:airkast-android")).using(project(":android"))
         substitute(module("io.github.aivanyuk:airkast-media3")).using(project(":media3"))
+        substitute(module("io.github.aivanyuk:airkast-exoplayer")).using(project(":exoplayer"))
     }
 }

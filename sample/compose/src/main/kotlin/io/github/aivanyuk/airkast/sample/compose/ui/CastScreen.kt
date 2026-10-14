@@ -92,7 +92,7 @@ fun CastScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (!access.granted) PermissionCard(onGrant = access.request)
-        Receivers(enabled = access.granted, onPick = { cast.start(it, url, format) })
+        Receivers(cast, enabled = access.granted, onPick = { cast.start(it, url, format) })
         // A receiver typed in by hand has no TXT record, so its compatibility is Unknown.
         AddressEntry(onConnect = { host -> cast.start(Receiver(typedIn, host), url, format) })
         OutlinedTextField(
@@ -178,6 +178,7 @@ private fun rememberDiscovery(enabled: Boolean): Discovery {
 
 @Composable
 private fun Receivers(
+    cast: Cast,
     enabled: Boolean,
     onPick: (Receiver) -> Unit,
 ) {
@@ -187,7 +188,7 @@ private fun Receivers(
         when (discovery) {
             is Discovery.Found -> {
                 for (receiver in discovery.receivers) {
-                    val usable = receiver.isSupported
+                    val usable = cast.canCast(receiver)
                     ListItem(
                         headlineContent = { Text(receiver.name) },
                         supportingContent = {
@@ -195,7 +196,11 @@ private fun Receivers(
                                 stringResource(
                                     R.string.receiver_detail,
                                     receiver.model ?: receiver.host,
-                                    describe(receiver.compatibility),
+                                    if (cast.streamsAudio(receiver)) {
+                                        stringResource(R.string.compat_speaker)
+                                    } else {
+                                        describe(receiver.compatibility)
+                                    },
                                 ),
                             )
                         },
@@ -324,6 +329,14 @@ private fun CastStatus(
                     Button(onClick = cast.player::disconnect) { Text(stringResource(R.string.disconnect)) }
                 }
             }
+
+            is Connection.Streaming -> {
+                Text(
+                    stringResource(R.string.streaming, state.stream.receiver.name),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Button(onClick = cast.player::disconnect) { Text(stringResource(R.string.disconnect)) }
+            }
         }
     }
     selected?.let { tracks ->
@@ -448,6 +461,7 @@ private fun describe(sample: SampleMedia): String =
         SampleMedia.Stream -> stringResource(R.string.sample_stream)
         SampleMedia.Video -> stringResource(R.string.sample_video)
         SampleMedia.Audio -> stringResource(R.string.sample_audio)
+        SampleMedia.Music -> stringResource(R.string.sample_music)
     }
 
 @Composable

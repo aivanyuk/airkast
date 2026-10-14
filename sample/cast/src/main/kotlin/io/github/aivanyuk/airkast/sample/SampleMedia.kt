@@ -12,4 +12,7 @@ enum class SampleMedia(
     /** An hour of frame counter, for seeking. */
     Video("https://storage.googleapis.com/exoplayer-test-media-1/mp4/frame-counter-one-hour.mp4"),
     Audio("https://storage.googleapis.com/exoplayer-test-media-0/play.mp3"),
+
+    /** A few minutes of music, for a speaker. */
+    Music("https://storage.googleapis.com/exoplayer-test-media-0/Jazz_In_Paris.mp3"),
 }

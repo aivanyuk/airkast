@@ -1,10 +1,14 @@
 package io.github.aivanyuk.airkast.sample
 
 import android.content.Context
+import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
@@ -14,6 +18,7 @@ import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.android.Airkast
 import io.github.aivanyuk.airkast.android.logcat
+import io.github.aivanyuk.airkast.exoplayer.AirkastAudioSink
 import io.github.aivanyuk.airkast.media3.AirkastPlayer
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import kotlinx.coroutines.MainScope
@@ -31,8 +36,10 @@ import java.util.Locale
  * One player for the whole process: the [AirkastPlayer] that [CastService]'s MediaSession and the
  * UI's controls drive. It plays on the phone through an ExoPlayer until a cast starts, connects,
  * asks for a PIN or password, moves the item to the TV and back, and [AirkastPlayer.connection] says where it
- * stands; this adds a log of what the TV reported. Call it on the main thread.
+ * stands; this adds a log of what the TV reported. A cast to a speaker leaves the ExoPlayer
+ * playing, and its audio goes to the speaker. Call it on the main thread.
  */
+@OptIn(UnstableApi::class)
 class Cast(
     context: Context,
 ) {
@@ -45,9 +52,14 @@ class Cast(
      */
     val airkast = Airkast(context) { logger = Airkast.Logger.logcat() }
 
+    /** The ExoPlayer's audio output, which a cast to a speaker moves there. */
+    private val sink = AirkastAudioSink(context)
+
     val player: AirkastPlayer =
         AirkastPlayer(context, airkast) {
-            localPlayer = ExoPlayer.Builder(context).build()
+            localPlayer = ExoPlayer.Builder(context, sink.renderersFactory(context)).build()
+            audioRoute = sink
+            streamsAudio = ::streamsAudio
             // Where an app would count its casts for its statistics.
             eventListener = { note(it.toString()) }
         }
@@ -67,7 +79,17 @@ class Cast(
             player.connection.collectLatest { connection ->
                 note(connection.toString())
                 // Completes when the session ends.
-                if (connection is Connection.Connected) connection.session.events.collect { note(it.toString()) }
+                when (connection) {
+                    is Connection.Connected -> {
+                        connection.session.events.collect { note(it.toString()) }
+                    }
+
+                    is Connection.Streaming -> {
+                        connection.stream.events.collect { note(it.toString()) }
+                    }
+
+                    else -> {}
+                }
             }
         }
     }
@@ -84,11 +106,23 @@ class Cast(
         pairWith: Secret? = null,
     ) {
         show(url, format)
-        // The phone stops while the TV connects, and the TV plays from where it stopped.
-        player.stop()
-        player.playWhenReady = true
+        if (streamsAudio(receiver)) {
+            // The phone's player plays on, and its audio moves to the speaker once it connects.
+            player.prepare()
+            player.play()
+        } else {
+            // The phone stops while the TV connects, and the TV plays from where it stopped.
+            player.stop()
+            player.playWhenReady = true
+        }
         player.connect(receiver, pairWith)
     }
+
+    /** Whether the cast to [receiver] streams the phone's audio: a speaker, which plays no URL. */
+    fun streamsAudio(receiver: Receiver): Boolean = !receiver.isSupported && receiver.isAudioSupported
+
+    /** Whether the app can cast to [receiver]: a TV that plays the URL, or a speaker. */
+    fun canCast(receiver: Receiver): Boolean = receiver.isSupported || receiver.isAudioSupported
 
     /** Plays [url] on the phone, from where the TV was in it when casting. */
     fun playHere(
@@ -124,6 +158,8 @@ class Cast(
                     .Builder()
                     .setUri(url)
                     .setMimeType(mimeType)
+                    // What a speaker or TV with a screen shows while it plays.
+                    .setMediaMetadata(MediaMetadata.Builder().setTitle(Uri.parse(url).lastPathSegment).build())
                     .build(),
             )
         }
