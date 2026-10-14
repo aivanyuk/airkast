@@ -41,7 +41,7 @@ internal class FakeReceiver(
      */
     private val namesTheNewItem: Boolean = true,
     private val corruptProof: Boolean = false,
-    /** Milliseconds to wait before the first answer to a path or a command type. */
+    /** Milliseconds to wait before the first answer to a path, a command type, or `SETUP`. */
     lateAnswers: Map<String, Long> = emptyMap(),
     /** A path or command type that the receiver goes silent at, for good. */
     private val hangsAt: String? = null,
@@ -277,6 +277,8 @@ internal class FakeReceiver(
                 }
 
                 request.startLine.startsWith("SETUP") -> {
+                    // A Mac holds SETUP while it asks its user whether to allow the sender.
+                    stall("SETUP")
                     signedIn = signedIn || signed
                     request.header("X-Apple-Client-Name")?.let {
                         clientName = String(it.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8)

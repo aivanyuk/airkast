@@ -107,6 +107,9 @@ internal object Opening {
      * Sends the base SETUP and returns its reply. A Digest challenge in a 401 is answered with the
      * options' password, which then signs every request on [control]; without one, it fails with
      * what makes `Airkast.connect` ask for it.
+     *
+     * Each SETUP may take the options' approval timeout: a Mac (960.13.25) asks its user whether
+     * to allow a sender it has not seen, and holds SETUP until they answer.
      */
     fun setUp(
         control: ControlConnection,
@@ -116,10 +119,25 @@ internal object Opening {
         log: Log,
     ): Map<*, *> {
         val encoded = BinaryPlist.encode(body)
-        var base = control.exchange("SETUP", uri, body = encoded, contentType = ControlConnection.BPLIST)
+
+        fun setUp() =
+            try {
+                control.exchange(
+                    "SETUP",
+                    uri,
+                    body = encoded,
+                    contentType = ControlConnection.BPLIST,
+                    timeout = options.approvalTimeout,
+                )
+            } catch (e: LateReply) {
+                throw AirkastException.Timeout(
+                    "No answer to SETUP in ${options.approvalTimeout}: the receiver may be asking its user to allow this sender",
+                )
+            }
+        var base = setUp()
         if (base.status == UNAUTHORIZED) {
             control.digest = answer(base, options, log)
-            base = control.exchange("SETUP", uri, body = encoded, contentType = ControlConnection.BPLIST)
+            base = setUp()
             if (base.status == UNAUTHORIZED) throw AirkastException.SecretRejected(Secret.Password)
         }
         base.requireSuccess("SETUP")
@@ -177,7 +195,7 @@ internal object Opening {
         }
         val socket =
             connect(InetSocketAddress(receiver.host, receiver.port), options).apply {
-                soTimeout = options.requestTimeout.inWholeMilliseconds.toInt()
+                soTimeout = options.requestTimeout.toSocketTimeout()
                 tcpNoDelay = true
             }
         return ControlConnection(socket, identity, Log(options.logger, "control"))

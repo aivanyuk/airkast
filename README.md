@@ -230,9 +230,10 @@ that lives as long as the process, such as your `Application`.
 
 ### Configure the client
 
-`Airkast(context)` sets Android defaults: it names the sender after your app's label, checks the
-local network permission, binds connections to the receiver's Wi-Fi, and keeps pairings in the
-app's no-backup files. Every default is a builder property you can change:
+`Airkast(context)` sets Android defaults: it names the sender after your app's label, gives it an
+ID that stays the same across launches, checks the local network permission, binds connections to
+the receiver's Wi-Fi, and keeps pairings in the app's no-backup files. Every default is a builder
+property you can change:
 
 ```kotlin
 import io.github.aivanyuk.airkast.Airkast
@@ -242,14 +243,19 @@ import io.github.aivanyuk.airkast.android.logcat
 import kotlin.time.Duration.Companion.seconds
 
 val airkast = Airkast(context) {
-    identity = SenderIdentity(name = "Living room remote")  // the name the TV shows
+    identity = SenderIdentity(name = "Living room remote", deviceId = identity.deviceId)
     requestTimeout = 3.seconds
     logger = Airkast.Logger.logcat()
 }
 ```
 
+The TV shows the sender's `name`. Keep `identity.deviceId` when you set a new identity: a Mac or
+an Apple TV asks its user to allow each sender ID it has not seen, so a new ID on every launch
+means a new question on every launch.
+
 On a desktop JVM, build the client with `Airkast { ... }` from `airkast-core`, and connect to a
-receiver by its address: `Receiver("TV", "192.168.1.20")`.
+receiver by its address: `Receiver("TV", "192.168.1.20")`. Its sender ID is random unless you set
+one, for example with `SenderIdentity.deviceIdFrom(seed)` and a seed your app keeps.
 [docs/guide.md](docs/guide.md#the-client) lists every property and its default.
 
 ### Log and measure what happens

@@ -8,6 +8,7 @@ import java.io.IOException
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.security.SecureRandom
+import kotlin.time.Duration
 
 /**
  * The connection a sender pairs on and sends its RTSP and HTTP requests over, one at a time. A
@@ -15,7 +16,7 @@ import java.security.SecureRandom
  * next exchange reads and drops it first, and fails for good if it has not come by then.
  */
 internal class ControlConnection(
-    socket: Socket,
+    private val socket: Socket,
     private val identity: SenderIdentity,
     private val log: Log = Log.NONE,
 ) : AutoCloseable {
@@ -51,6 +52,8 @@ internal class ControlConnection(
         headers: List<Pair<String, String>> = emptyList(),
         body: ByteArray = ByteArray(0),
         contentType: String? = null,
+        /** How long to wait for the answer to start, in place of the socket's own timeout. */
+        timeout: Duration? = null,
     ): HttpMessage {
         val all =
             buildList {
@@ -76,6 +79,8 @@ internal class ControlConnection(
             log.warn { "dropped a late answer" }
         }
         link.write(HttpMessage("$method $target $protocol", all, body).encode())
+        val usual = socket.soTimeout
+        if (timeout != null) socket.soTimeout = timeout.toSocketTimeout()
         val response =
             try {
                 read()
@@ -86,6 +91,8 @@ internal class ControlConnection(
             } catch (e: IOException) {
                 log.warn(e) { "$method $target got no answer" }
                 throw IOException("$method $target: ${e.message}", e)
+            } finally {
+                if (timeout != null) runCatching { socket.soTimeout = usual }
             }
         log.verbose { "$method $target -> ${response.startLine}, ${response.body.size} bytes" }
         return response
@@ -112,3 +119,6 @@ internal class LateReply(
     request: String,
     cause: SocketTimeoutException,
 ) : IOException("$request: no answer in time", cause)
+
+/** This as a socket timeout: whole milliseconds, at most `Int.MAX_VALUE`, a little under 25 days, for a longer or infinite one. */
+internal fun Duration.toSocketTimeout(): Int = inWholeMilliseconds.coerceIn(1, Int.MAX_VALUE.toLong()).toInt()

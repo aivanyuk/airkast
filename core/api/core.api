@@ -4,6 +4,7 @@ public final class io/github/aivanyuk/airkast/Airkast {
 	public final fun connectAudio (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/PcmFormat;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun connectAudio$default (Lio/github/aivanyuk/airkast/Airkast;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/PcmFormat;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun copy (Lkotlin/jvm/functions/Function1;)Lio/github/aivanyuk/airkast/Airkast;
+	public final fun getApprovalTimeout-UwyO8pc ()J
 	public final fun getAudioLatency-UwyO8pc ()J
 	public final fun getConnectTimeout-UwyO8pc ()J
 	public final fun getCredentialStore ()Lio/github/aivanyuk/airkast/CredentialStore;
@@ -22,6 +23,7 @@ public final class io/github/aivanyuk/airkast/Airkast {
 public final class io/github/aivanyuk/airkast/Airkast$Builder {
 	public fun <init> ()V
 	public final fun build ()Lio/github/aivanyuk/airkast/Airkast;
+	public final fun getApprovalTimeout-UwyO8pc ()J
 	public final fun getAudioLatency-UwyO8pc ()J
 	public final fun getConnectTimeout-UwyO8pc ()J
 	public final fun getCredentialStore ()Lio/github/aivanyuk/airkast/CredentialStore;
@@ -33,6 +35,7 @@ public final class io/github/aivanyuk/airkast/Airkast$Builder {
 	public final fun getNtpTiming ()Z
 	public final fun getRequestTimeout-UwyO8pc ()J
 	public final fun getSocketFactory ()Lkotlin/jvm/functions/Function1;
+	public final fun setApprovalTimeout-LRDsOJo (J)V
 	public final fun setAudioLatency-LRDsOJo (J)V
 	public final fun setConnectTimeout-LRDsOJo (J)V
 	public final fun setCredentialStore (Lio/github/aivanyuk/airkast/CredentialStore;)V
@@ -525,6 +528,7 @@ public final class io/github/aivanyuk/airkast/SenderIdentity {
 }
 
 public final class io/github/aivanyuk/airkast/SenderIdentity$Companion {
+	public final fun deviceIdFrom (Ljava/lang/String;)Ljava/lang/String;
 	public final fun randomDeviceId ()Ljava/lang/String;
 }
 
