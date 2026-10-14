@@ -14,18 +14,21 @@ Two terms appear throughout:
 
 | Module | Artifact | Holds | Depends on |
 | --- | --- | --- | --- |
-| `:core` | `airkast-core` | The protocol: pairing, the session, its commands and events. Plain JVM | kotlin-stdlib, kotlinx-coroutines-core |
+| `:core` | `airkast-core` | The protocol: pairing, the session, its commands and events, and the audio stream. Plain JVM | kotlin-stdlib, kotlinx-coroutines-core |
 | `:android` | `airkast-android` | Discovery through `NsdManager`, the local network permission, binding to the receiver's network, and `Airkast(context)`, a client with those as its defaults | `:core` |
-| `:media3` | `airkast-media3` | `AirkastPlayer`, a media3 `Player` that runs a cast through an `Airkast`, so a media3 UI and `MediaSession` drive a receiver, hands the item to and from the app's local player, and holds the wake and Wi-Fi locks a cast needs; `AirkastSessionService`, a `MediaSessionService` over it | `:core`, media3-common, media3-session, kotlinx-coroutines-android |
-| `:sample:cast` | none | The reference integration: `Cast` builds the app's `Airkast` and an `AirkastPlayer` over an `ExoPlayer`, and `CastService` puts a `MediaSession` over the player | `airkast-android` and `airkast-media3`, built from `:android` and `:media3`; media3-exoplayer |
+| `:media3` | `airkast-media3` | `AirkastPlayer`, a media3 `Player` that runs a cast through an `Airkast`, so a media3 UI and `MediaSession` drive a receiver, hands the item to and from the app's local player, routes that player's audio to a speaker through an `AudioRoute`, and holds the wake and Wi-Fi locks a cast needs; `AirkastSessionService`, a `MediaSessionService` over it | `:core`, media3-common, media3-session, kotlinx-coroutines-android |
+| `:exoplayer` | `airkast-exoplayer` | `AirkastAudioSink`, an ExoPlayer `AudioSink` that plays on the phone until an `AudioStream` attaches, and is an `AudioRoute` | `:core`, media3-exoplayer |
+| `:sample:cast` | none | The reference integration: `Cast` builds the app's `Airkast` and an `AirkastPlayer` over an `ExoPlayer` with `AirkastAudioSink`, and `CastService` puts a `MediaSession` over the player | `airkast-android`, `airkast-media3` and `airkast-exoplayer`, built from `:android`, `:media3` and `:exoplayer`; media3-exoplayer |
 | `:sample:compose`, `:sample:views` | none | The sample apps: one screen over `Cast`, in Compose and in views | `:sample:cast` |
 
 Modules depend on `:core` and never on each other, so an app that draws its own controls doesn't
 pull in media3, and a desktop JVM doesn't pull in Android. All artifacts share one version
 ([releasing](releasing.md)).
 
-The `:sample:*` modules are never published. `:sample:cast` is the one place that depends on both
-`:android` and `:media3`. The samples declare them by their Maven Central coordinates, as an app
+The `:sample:*` modules are never published. `:sample:cast` is the one place that depends on
+`:android`, `:media3` and `:exoplayer` together. `:media3` routes a speaker's audio through
+`AudioRoute`, an interface in `:core`, so it never depends on `:exoplayer`, and an app without
+ExoPlayer passes a route of its own. The samples declare them by their Maven Central coordinates, as an app
 does, and the `airkast.sample` convention substitutes the modules in this repository.
 
 ## Three levels
@@ -35,14 +38,16 @@ and `AsyncImage`. Each level uses only the public API of the one below, so an ap
 level for one thing and keep the rest.
 
 1. **`AirkastSession`**: one connection to one receiver, from `Airkast.connect`. Its calls are the
-   protocol's: load, play, seek, tracks, events.
+   protocol's: load, play, seek, tracks, events. **`AudioStream`**, from `Airkast.connectAudio`, is
+   its counterpart for a speaker: the app writes PCM, as to an `AudioTrack`.
 2. **`Airkast`**: the client, configured once and shared. It opens sessions, pairs, and keeps
    pairings in its `CredentialStore`. Its builder holds every option, and `copy { }` makes a
    variant. `Airkast(context)` in `:android` builds the same class with Android's defaults.
 3. **`AirkastPlayer`**: a media3 `Player` that runs a cast through a client: the connect, the
    PIN or password, BACK on the TV's remote and the end, with a `connection` flow for the UI.
-   With a local player, it plays on the phone between casts. Setting its `session` by hand steps
-   down to level 1 and keeps the player.
+   With a local player, it plays on the phone between casts, and with an `AudioRoute` too it casts
+   to a speaker by leaving that player playing and routing its audio to an `AudioStream`. Setting
+   its `session` by hand steps down to level 1 and keeps the player.
 
 A default lives in the level that knows it: Android's in `Airkast(context)`, the player's in
 `AirkastPlayer.Builder`, the protocol's in the session. Each one is a builder property an app
@@ -57,9 +62,9 @@ build file.
 
 | Package | Holds | May use |
 | --- | --- | --- |
-| `io.github.aivanyuk.airkast` | The public API: `Airkast`, `AirkastSession`, `Media`, `Receiver`, `Compatibility`, `Credentials`, `CredentialStore`, the values and events, `AirkastException` | everything below |
-| `.session` | The protocol's state: `DefaultVideoSession` (AirPlay video v2), `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder`, and `Log`, which writes to the client's logger | `wire`, `crypto` |
-| `.wire` | Encodings and framing: HTTP and RTSP messages, TLV8, binary plists, the encrypted `Link`. No protocol decisions | `crypto` |
+| `io.github.aivanyuk.airkast` | The public API: `Airkast`, `AirkastSession`, `AudioStream`, `AudioRoute`, `Media`, `PcmFormat`, `NowPlaying`, `Receiver`, `Compatibility`, `Credentials`, `CredentialStore`, the values and events, `AirkastException` | everything below |
+| `.session` | The protocol's state: `Opening` (the control connection, pairing and base SETUP every session starts with), `DefaultVideoSession` (AirPlay video v2), `DefaultAudioStream` (AirPlay 2 realtime audio) and its `PcmBuffer`, `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder`, and `Log`, which writes to the client's logger | `wire`, `crypto` |
+| `.wire` | Encodings and framing: HTTP and RTSP messages, TLV8, binary plists, the encrypted `Link`, RTP audio and sync packets, uncompressed ALAC frames, DMAP. No protocol decisions | `crypto` |
 | `.crypto` | SRP-6a, HKDF-SHA512, ChaCha20-Poly1305, X25519, Ed25519, as pure functions with vector tests. airkast carries its own ChaCha20-Poly1305 because Android's JCA has no provider for it below Android 9, and its own X25519 and Ed25519 because the JCA has none below Android 13 | nothing |
 | `.internal` | Build support, such as the `@Poko` annotation | nothing |
 
@@ -85,15 +90,41 @@ Everything outside the root package is `internal`. A lower layer never imports a
    command with 200, and sends the result over the event channel. A request carries a
    `messageID`, and its result comes back on the event channel with the same ID.
 
+## One audio stream
+
+`Airkast.connectAudio` pairs as `connect` does, with the same prompts, then:
+
+1. **Set up the session.** `DefaultAudioStream` sends the base SETUP with NTP timing, sends the
+   receiver's timing port one request so a firewall lets the receiver's in, and opens the event
+   channel.
+2. **RECORD, then set up the stream.** RECORD names the first packet's sequence number and RTP
+   time; a SETUP for a type-96 stream of ALAC follows, with a random key for the packets.
+3. **Send.** One thread wakes every few milliseconds and sends every packet that falls due within
+   `audioLatency` of the receiver's output, each 352 frames of what the app wrote, or silence when
+   one falls due within a quarter of it with nothing written. A sync each second maps the RTP
+   clock to NTP time, read from the same clock the timing replies use. Another thread sends the
+   packets the receiver asks for again.
+4. **Pause and flush** send FLUSH in the order the app called them, and the next timeline starts
+   once the receiver has answered. A pause keeps what was sent and not heard, so play goes on
+   from the frame that was playing.
+
+The position is counted from what each packet carried and when the sync says it plays, so it
+stands still through silence and pauses, and is what the receiver plays, not what was written.
+
 The protocol facts, with the receivers they were seen on, are in
 [compatibility.md](compatibility.md).
 
 ## Seams
 
+- **`AudioStream` is the speaker seam.** A speaker plays what the sender decodes, which no
+  `Media` URL can say, so it is a stream of PCM, not an `AirkastSession`, and the app's own player
+  stays the decoder. `AudioRoute` is how a player's output moves to one: `AirkastPlayer` attaches
+  the stream it opened, and `:exoplayer`'s sink is one route. Buffered audio (type 103), PTP
+  timing and a group of speakers are further implementations behind the same interface.
 - **`AirkastSession` is the protocol seam.** Another protocol is another implementation, picked
   in `Airkast.connect` from what the receiver advertises and what the `Media` holds: AirPlay
-  video v1's `POST /play`, a receiver that plays only audio (RAOP, where the sender decodes and
-  streams the audio itself), or a local file or DASH stream the sender serves over HTTP. Callers
+  video v1's `POST /play`, or a local file or DASH stream the sender serves over HTTP. A speaker
+  is not one: its audio comes from the app's player, through an `AudioStream`. Callers
   don't change, which is why neither the session nor the item is named for video. The
   `Compatibility` case it clears becomes `Supported` in the same change. With a second
   implementation, the choice becomes a list of factories on `Airkast.Builder`, as Retrofit's
@@ -191,7 +222,14 @@ internal and no unstable type reaches airkast's API dump.
 - **It connects through `Airkast`, never `airkast-android`.** The app passes the client in, so
   `:media3` depends on `:core` alone.
 - **Locks follow the state.** A partial wake lock and a Wi-Fi lock are held while a session is
-  attached and the item is buffering or ready, paused included, since the keepalive has to go on.
+  attached and the item is buffering or ready, paused included, since the keepalive has to go on,
+  and for as long as a stream to a speaker is open.
+- **A speaker keeps the local player.** A cast to a receiver that `streamsAudio` picks opens an
+  `AudioStream` and attaches it to the `audioRoute`; `HandoffPlayer` keeps forwarding to the local
+  player, seeks it to where it is so it sends its audio again into the new output, tells the
+  receiver what plays, and reports a remote device whose volume is the receiver's. The end of the
+  cast attaches null, and seeks again. The route belongs to the local player, so `build()` asks for
+  one with the other.
 
 ## Public API rules
 

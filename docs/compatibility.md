@@ -22,14 +22,16 @@ Terms used on this page:
 | --- | --- |
 | LG OLED CX (webOS 04.64.00) | Plays. Checked with transient pairing and with a PIN, from a desktop JVM and from an Android 13 phone. |
 | Mac's AirPlay Receiver (macOS, `srcvers` 960.13.25) | Plays when "Allow AirPlay for" is set to "Anyone on the same network", with or without "Require password". At the default, "Current User", it refuses airkast. |
+| Samsung HW-Q990B soundbar (AirPlay SDK 2.0.7, `srcvers` 366.0) | Plays audio the app streams (`Airkast.connectAudio`), from a desktop JVM and from an Android 13 phone. Plays no URL: it is a speaker. |
 | Apple TV | Not checked. |
 | Other TVs with AirPlay 2 | Not checked. |
+| Other AirPlay 2 speakers | Not checked. Those built on Apple's AirPlay SDK, as the Samsung is, are likely to behave the same. |
 
 | Sender | Requirement |
 | --- | --- |
 | Android | Android 6.0 (API 23) or later. Android 17 needs the local network permission for apps that target SDK 37. |
 | Desktop JVM | Java 11 or later. |
-| Network | The receiver must reach the media URL, and, with `ntpTiming` on, reach the sender over UDP. |
+| Network | The receiver must reach the media URL, and, with `ntpTiming` on or for an audio stream, reach the sender over UDP. |
 
 ## Receivers
 
@@ -48,6 +50,9 @@ Terms used on this page:
 | MacBook Pro (MacBookPro18,1, macOS build 25G241 as above, not read again) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app | `NeedsPassword` with "Require password" on. By hand, through `AirkastPlayer.connect`: transient pairing refused; a wrong password refused at pair-setup M4 (`SecretRejected`); the right one paired (M1 to M6) with no `/pair-pin-start`, and later connects verified the pairing (pair-verify). Every base SETUP, even after pair-verify, answered 401 with a Digest challenge, a second 401 to a wrong password, and 200 to the right one, which the credentials then kept: later connects went in without asking. Played; `AirkastPlayer`'s notification did not follow, since the Mac's `currentItemChanged` carries no item uuid |
 | MacBook Pro (MacBookPro18,1, macOS build 25G241 as above, not read again) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app | With `X-Apple-Client-Name` sent: the "Allow … to AirPlay" prompt for a new sender named the app ("airkast sample - compose"), where it showed "" without the header. An ASCII name only |
 | LG OLED CX (webOS) | 04.64.00 as on 2026-10-08, not read again; 377.25.06 from the connect log | 2026-10-14, at e650851 | Xiaomi 2201117TY, Android 13, the sample app | `NeedsPassword`, paired before. By hand, through `AirkastPlayer`: ExoPlayer's test MP4 (`frame-counter-one-hour.mp4`) and MP3 (`play.mp3`), served without CORS headers, loaded as `file` (the sample's "Auto: File") and played. The MP4 from where the phone was, seek forward, pause (reported `Paused`), play, playback info (a 1 h duration, no buffered or seekable ranges), tracks (none reported), stop. The MP3 played to its end: `itemPlayedToEnd`, then `stopped`. `LiveReceiverTest` not run, since the TV now asks for a password |
+| Samsung HW-Q990B (soundbar) | SAT-iMX8M22WWC-1010.0, 366.0 (`sdk` AirPlay;2.0.7) | 2026-10-14, before 0.5.0 | desktop JVM 21 (WSL) | `NoVideo`, audio `Supported`. `LiveAudioTest` passes at 44.1 and 48 kHz: transient pairing, NTP timing, a type-96 ALAC stream, play, pause and resume from the frame that played, flush, volume set and read back, the track's name and progress sent. The beeps, the pause, the resume and the tone after the flush heard by a microphone in the room, at the times the test's positions said |
+| Samsung HW-Q990B (soundbar) | as above | 2026-10-14, before 0.5.0 | Xiaomi 2201117TY, Android 13, the sample app | By hand, through `AirkastPlayer` with an `ExoPlayer` over `AirkastAudioSink`: found by `ReceiverDiscovery` and listed as a speaker, connected in 1.2 s, ExoPlayer's test MP3 (`Jazz_In_Paris.mp3`) played on the soundbar, pause and play from the notification, the phone's volume keys changed the soundbar's volume, and Disconnect brought the audio back to the phone |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06, not read again | 2026-10-14, before 0.5.0 | Xiaomi 2201117TY, Android 13, the sample app | After the shared connect code moved and the timing clock changed to the monotonic one: played through `AirkastPlayer` from the sample app, by hand |
 
 ### How `Receiver.compatibility` decides
 
@@ -65,6 +70,18 @@ checked in this order, and the first that matches wins. Bit numbers follow pyatv
 | `NeedsPin` | Status flag `0x8`. The first `Airkast.connect` with a prompt pairs, and later ones use the stored `Credentials` | the LG CX set to ask for a PIN; a receiver set to require a code |
 | `NoTransientPairing` | Neither system pairing (bit 43) nor CoreUtils pairing (bit 48) | none seen yet |
 | `Supported` | Anything else | the LG CX |
+
+`Receiver.audioCompatibility` decides the same way for an audio stream, with one case of its own
+in place of `NoVideo` and `VideoV1Only`:
+
+| Case | When | Receivers |
+| --- | --- | --- |
+| `NoAudio` | No AirPlay audio (feature bit 9) | receivers that only show video or a screen |
+
+Every other case is as above, so a speaker that asks for a PIN reads as `NeedsPin`, and one
+without system or CoreUtils pairing, such as an AirPlay 1 speaker that needs RSA or FairPlay
+authentication, as `NoTransientPairing`. The Samsung HW-Q990B (`0x445F8A00,0x1C340`, flags `0x4`)
+is `NoVideo` and, for audio, `Supported`; the LG CX is `Supported` for both.
 
 pyatv also reads status flag `0x200` as "pairing mandatory". The LG CX sets it (flags `0x244`) but
 pairs without a PIN, so airkast ignores that flag.
@@ -85,7 +102,44 @@ each receiver playing it. [The guide](guide.md#formats) explains formats from th
 | MPEG-DASH | none | Not played. The LG's player is hls.js, and the Mac's and the Apple TV's is AVFoundation, which plays HLS and files. A sender would have to rewrite the manifest as HLS and serve it |
 
 A speaker that takes AirPlay audio only reads as `NoVideo`. It plays what the sender decodes and
-streams itself (RAOP, or AirPlay 2's buffered audio), which airkast does not do yet.
+streams itself, which `Airkast.connectAudio` does: see [Audio streams](#audio-streams).
+
+### Audio streams
+
+How an `AudioStream` goes over the wire. It is AirPlay 2's realtime audio, as owntone sends it
+with NTP timing; the facts come from owntone's sender, which is GPL, so no code does.
+
+| Step | Wire |
+| --- | --- |
+| Pairing | As for a session: transient, or pair-verify with credentials |
+| Base SETUP | The session's plist, with `timingProtocol: NTP` and the sender's `timingPort`. The reply names `eventPort` and the receiver's own `timingPort`, to which the sender sends one timing request so a stateful firewall in front of it lets the receiver's requests in |
+| RECORD | Before the stream's SETUP, with `RTP-Info: seq=…;rtptime=…` naming the first packet |
+| Stream SETUP | `type` 96, `ct` 2 (ALAC), `audioFormat` `0x40000` (ALAC 44100/16/2) or `0x100000` (48000/16/2), `spf` 352, `sr`, `latencyMin` a quarter second and `latencyMax` two, `shk` a random 32-byte key, and the sender's `controlPort`. The reply names `dataPort` and `controlPort` |
+| Audio | RTP over UDP to `dataPort`: payload type 96, the marker bit on the first packet of a timeline, 352 frames each as an uncompressed ALAC frame (a channel-pair element with the not-compressed bit, the samples big-endian, the end element), sealed with ChaCha20-Poly1305 under `shk`, with the header's timestamp and SSRC as AAD, then the tag and the last 8 bytes of the nonce, which holds the sequence number |
+| Sync | Each second, to the receiver's `controlPort`: `0x80 0xD4 0x0007` (`0x90` first after a start or a flush), the RTP time playing now, NTP now, and the RTP time `latency` ahead. The first one's last field is RECORD's `rtptime` |
+| Retransmit | The receiver asks on the sender's control port (`0x80 0xD5`, first sequence number, count); the sender sends the packets again to `dataPort` |
+| Pause, flush | `FLUSH` with `RTP-Info` naming the next packet; once it is answered, a new timeline starts with a `0x90` sync and a marked packet |
+| Volume | `SET_PARAMETER`, `text/parameters`, `volume: -30.0` to `0.0` dB, `-144.0` for silent; `GET_PARAMETER` reads it |
+| Now playing | `SET_PARAMETER` with `RTP-Info: rtptime=…`: DMAP (`mlit` with `minm`, `asar`, `asal`), the artwork as `image/jpeg` or `image/png`, and `progress: start/now/end` in RTP time |
+| Keepalive, end | `POST /feedback` every two seconds; `TEARDOWN` when the app closes the stream |
+
+A failed UDP send drops the packet, which the receiver asks for again; sends that fail for three
+seconds end the stream. Buffered audio (type 103) and PTP timing are not used.
+
+### Samsung HW-Q990B (AirPlay SDK 2.0.7, 366.0)
+
+What the soundbar does, as seen on the wire.
+
+- It announces AirPlay on port 36617, not 7000, as host `Samsung.local`, with features
+  `0x445F8A00,0x1C340`: AirPlay audio (bit 9), buffered audio (40), PTP (41) and CoreUtils
+  pairing (48), and no video bit. `GET /info` names `sdk: AirPlay;2.0.7` and an OpenAVNU PTP
+  stack.
+- It pairs transiently, and takes NTP timing though it advertises PTP: after the base SETUP it
+  asks for the time over UDP, and answers the stream's SETUP once it has it.
+- It needs RECORD before the stream's SETUP. In the other order it answers every request with 200
+  and plays nothing.
+- It sets its volume from `SET_PARAMETER` and reads it back, to about 0.3 dB of what was set.
+- It plays 44.1 and 48 kHz ALAC.
 
 ### Pairing
 
@@ -230,6 +284,9 @@ who granted Bluetooth's nearby devices permission is not asked again.
 - **Inbound UDP.** With `ntpTiming` on, the default, the receiver sends timing requests to the
   sender over UDP. A sender behind a firewall that drops them, such as WSL behind Windows'
   firewall, gets a SETUP that a Mac never answers. A phone on the receiver's Wi-Fi is reachable.
+  An audio stream always times over NTP, and sends the receiver's timing port a request first,
+  which lets its requests through a stateful firewall: WSL's, for one. The receiver's
+  retransmit requests come back the same way, to the port the syncs go out from.
 - **Wi-Fi without internet.** Android may keep mobile data as the default network, and a socket
   that is not bound to Wi-Fi then goes over mobile data and times out. A connect through
   `Airkast(context)` binds the session to the Wi-Fi or Ethernet network whose subnet holds the
@@ -268,4 +325,6 @@ What an app that depends on airkast needs.
 - Gradle metadata says JVM 11 (`org.gradle.jvm.version`).
 - `airkast-media3`: media3 1.11.1 at least. Its player extends `SimpleBasePlayer`, which media3
   marks unstable, so a media3 release that changes it may need an airkast release to match.
+- `airkast-exoplayer`: media3-exoplayer 1.11.1 at least. `AirkastAudioSink` is an ExoPlayer
+  `AudioSink`, which media3 marks unstable, with the same consequence.
 - No reflection, so R8 needs no keep rules.

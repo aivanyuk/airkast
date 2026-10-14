@@ -1,7 +1,8 @@
 # Guide
 
 This guide covers airkast in detail: the client's options, finding receivers, pairing, the media3
-player, using a session directly, logs and statistics, and errors. Start with the
+player, casting to speakers, using a session or an audio stream directly, logs and statistics, and
+errors. Start with the
 [README](../README.md) for installation and a quick start.
 
 ## Three levels of API
@@ -14,6 +15,7 @@ the level that fits your app, and step down a level for one task without giving 
 | Player | `AirkastPlayer` (`airkast-media3`) | Your Android app uses media3. The player runs the whole cast: it connects, pairs, plays, and ends the cast. |
 | Client | `Airkast` (`airkast-core`) | You open sessions yourself, for example without media3 or on a desktop JVM. You build one client and share it. |
 | Session | `AirkastSession` (`airkast-core`) | You send commands to one receiver: load, play, pause, seek, switch tracks, read events. |
+| Session | `AudioStream` (`airkast-core`) | Your own player decodes the audio, and you write its PCM to a speaker. |
 
 The player opens its sessions through a client, and the client opens sessions. You can also open
 a session yourself and give it to the player
@@ -69,7 +71,8 @@ val airkast = Airkast(context) {
 | `requestTimeout` | 5 seconds | How long the receiver may take to answer a request. |
 | `loadTimeout` | 10 seconds | How long a `load` waits for the receiver to take the item. |
 | `keepAlive` | `true` | Sends a keepalive request every two seconds, as Apple's senders do. |
-| `ntpTiming` | `true` | Answers the receiver's clock-sync (NTP) requests. The receiver must be able to reach the sender over UDP. A Mac rejects a session without it. |
+| `ntpTiming` | `true` | Answers the receiver's clock-sync (NTP) requests. The receiver must be able to reach the sender over UDP. A Mac rejects a session without it. An audio stream always answers them. |
+| `audioLatency` | 1 second | How far ahead of the receiver's output an `AudioStream` sends: the time from `play()` to the first sound, and how long a gap on the network can last. |
 | `socketFactory` | none; with `Airkast(context)`, the permission check and network binding above | Picks the socket factory for each receiver. Setting your own replaces both Android behaviours. |
 | `credentialStore` | `CredentialStore.inMemory()`; a file in the no-backup files with `Airkast(context)` | Where pairings are kept (see [Pairing](#pairing)). |
 | `logger` | none | Takes debugging lines (see [Logs and statistics](#logs-and-statistics)). |
@@ -106,7 +109,13 @@ can, and if not, why:
 | `AccessRestricted` | Lets in only its owner's Apple devices, such as a Mac at its default, "Current User". | no |
 | `NoTransientPairing` | Does not offer the pairing airkast starts with. | no |
 | `VideoV1Only` | Accepts URLs only over AirPlay video v1, which airkast does not speak. | no |
-| `NoVideo` | Does not play video, such as a speaker. | no |
+| `NoVideo` | Does not play video, such as a speaker. A speaker takes an audio stream instead. | no |
+| `NoAudio` | Plays no AirPlay audio: only for `audioCompatibility`. | no |
+
+`Receiver.audioCompatibility` says the same for an audio stream ([Play on a
+speaker](#play-on-a-speaker)), and `isAudioSupported` is its `isSupported`. A soundbar is
+`NoVideo` for `compatibility` and `Supported` for `audioCompatibility`; a TV that plays AirPlay
+audio is `Supported` for both. A music app lists `it.isSupported || it.isAudioSupported`.
 
 New cases may be added in a minor release, so a `when` over `Compatibility` keeps an `else`
 branch. [compatibility.md](compatibility.md#how-receivercompatibility-decides) explains how each
@@ -209,7 +218,7 @@ with any `Player`.
 
 ### Connection states
 
-`player.connection` is a `StateFlow` of four states:
+`player.connection` is a `StateFlow` of five states:
 
 | State | Meaning |
 | --- | --- |
@@ -217,6 +226,7 @@ with any `Player`.
 | `Connecting` | Connecting to `receiver`. |
 | `AwaitingSecret` | `receiver` asks for a `secret`, the PIN on its screen or its password. Pass what the user typed to `enterSecret`, or call `disconnect()`. |
 | `Connected` | Playing on `session`. |
+| `Streaming` | The local player plays, and its audio goes to `stream`'s receiver: a cast to a speaker (see [Play on a speaker](#play-on-a-speaker)). |
 
 ### What the player does for you
 
@@ -249,6 +259,8 @@ val player = AirkastPlayer(context, airkast) {
 | Property | Default | What it does |
 | --- | --- | --- |
 | `localPlayer` | none | A player that plays while no cast does, such as your `ExoPlayer`. It must run on the same looper as the `AirkastPlayer`, or `build()` throws. See [Play on the phone too](#play-on-the-phone-too). |
+| `audioRoute` | none | Where the local player's audio goes for a cast to a speaker, such as `AirkastAudioSink` from `airkast-exoplayer`. Needs `localPlayer`. See [Play on a speaker](#play-on-a-speaker). |
+| `streamsAudio` | a speaker: `!it.isSupported && it.isAudioSupported` | Which receivers `connect` streams the local player's audio to, rather than handing them the item's URL. Applies only with an `audioRoute`. |
 | `disconnectOnBack` | `true` | Whether BACK on the TV's remote ends a cast the player opened. |
 | `keepAwake` | `true` | Whether to hold the wake lock and Wi-Fi lock described above. |
 | `positionPollInterval` | 1 second | How often the player asks the receiver for its position. |
@@ -268,6 +280,53 @@ because nobody may be at the phone when a cast ends, for example after a dropped
 One `MediaSession` over the `AirkastPlayer` serves both. Commands, the timeline and the device info
 follow whichever player plays. The video surface always goes to the local player. Releasing the
 `AirkastPlayer` releases the local player.
+
+### Play on a speaker
+
+A speaker or a soundbar fetches no URL: the sender decodes the audio and streams it. With an
+`audioRoute`, `connect` casts to one by leaving your local player playing and sending its audio
+there. `AirkastAudioSink` from `airkast-exoplayer` is the route for an `ExoPlayer`:
+
+```kotlin
+import io.github.aivanyuk.airkast.exoplayer.AirkastAudioSink
+
+val sink = AirkastAudioSink(context)
+val player = AirkastPlayer(context, airkast) {
+    localPlayer = ExoPlayer.Builder(context, sink.renderersFactory(context)).build()
+    audioRoute = sink
+}
+
+player.connect(soundbar) // a receiver whose isAudioSupported is true
+```
+
+Until a cast to a speaker starts, the sink plays on the phone as ExoPlayer's own sink does. While
+one is on:
+
+- **ExoPlayer plays on.** The playlist, gapless playback, local files and protected streams play
+  as they do on the phone, since ExoPlayer still decodes them. The player seeks ExoPlayer to where
+  it was when the stream attaches and detaches, so it sends the audio again from there into the
+  new output.
+- **The position is the speaker's.** ExoPlayer reports what the speaker plays, which starts
+  `audioLatency` (one second by default) after play, and after every pause and seek.
+- **The device volume is the speaker's.** The player reports a remote device whose volume runs
+  from 0 to 100, so a `MediaSession` sends the phone's volume keys to the speaker.
+- **The speaker shows what plays,** if it has a screen: the media item's title, artist, album,
+  artwork data and progress, sent again after each seek and each new item.
+- **`connection` is `Streaming`.** `disconnect()`, a failure, or a connect to another receiver
+  ends the cast, and the audio comes back to the phone where the speaker left it.
+
+Receivers that also play URLs, such as TVs, still get the URL. A music app that plays what a TV
+cannot fetch streams to TVs too: `streamsAudio = { it.isAudioSupported }`.
+
+`AirkastAudioSink` resamples and mixes ExoPlayer's PCM to the stream's 44.1 kHz stereo. It has
+ExoPlayer decode every format itself, never passing a compressed one through to the phone's
+output. Playback speed stays at 1 while it streams, and ExoPlayer's own volume does not change
+the speaker's. It uses media3's unstable `AudioSink` API, as `ExoPlayer.Builder`'s renderers
+factory does, so building the player needs `@OptIn(UnstableApi::class)`.
+
+An app with its own player implements `AudioRoute`: `attach(stream)` sends the player's audio to
+the stream from then on, and `attach(null)` back to the phone. See
+[Stream audio yourself](#stream-audio-yourself) for what a stream takes.
 
 ### Keep casting in the background
 
@@ -374,6 +433,48 @@ All times are `kotlin.time.Duration` values. A volume runs from 0 to 1.
 
 A session does not reconnect by itself, because only the app knows whether the user still wants
 the cast. Cancelling a `connect` closes whatever it opened.
+
+## Stream audio yourself
+
+A speaker plays PCM the sender decodes. `Airkast.connectAudio` opens an `AudioStream` to it, which
+works as Android's `AudioTrack` does: write 16-bit PCM, play, pause, flush.
+
+```kotlin
+val stream = airkast.connectAudio(soundbar, PcmFormat(sampleRate = 44_100, channels = 2)) { secret ->
+    showPromptAndWait(secret)
+}
+
+stream.setVolume(0.3)
+stream.play()
+while (decoding) stream.write(nextPcmChunk()) // suspends while the stream's buffer is full
+stream.setNowPlaying(NowPlaying(title = "Song", artist = "Artist", duration = 3.minutes))
+
+stream.pause()   // the speaker stops at once; play() goes on from the frame that was playing
+stream.flush()   // a seek or another track: drops what was written and not heard
+stream.close()
+```
+
+- **Which receivers.** `receiver.audioCompatibility` says whether one takes a stream, and
+  `isAudioSupported` lists speakers, soundbars, and TVs and Macs that play AirPlay audio. A
+  speaker's `compatibility` is `NoVideo`, since it plays no URL.
+- **PCM.** 16-bit signed little-endian samples, channels interleaved, at 44.1 or 48 kHz, mono or
+  stereo. A player resamples any other rate; mono plays on both channels.
+- **Timing.** What is written plays `latency` (the client's `audioLatency`) after `play()`, or
+  after it is written if the stream ran dry. `position` is how much the receiver has played since
+  the stream opened or flushed, by its clock, and `buffered` how much it has yet to play; both
+  leave out the silence the stream sends while it has nothing to play.
+- **Back-pressure.** The stream holds `latency` and a second more. `write` suspends while it is
+  full; `offer` takes what fits and returns at once, for a player whose output must not block.
+- **Control.** `play`, `pause` and `flush` return at once and tell the receiver in the background.
+  `setVolume` and `volume` run from 0 to 1. `setNowPlaying` tells a receiver with a screen what
+  plays, and how far into the track it is.
+- **The end.** `events` ends with `ReceiverEvent.Disconnected`, after which `write` and `offer`
+  throw `AirkastException.Disconnected`. `close()` ends playback and lets the receiver go back to
+  its own input.
+
+The stream uses the receiver's UDP ports and its own, and the receiver must reach the sender over
+UDP for its clock and to ask for lost packets again. [compatibility.md](compatibility.md#audio-streams)
+has what goes over the wire.
 
 ## Logs and statistics
 
@@ -484,6 +585,6 @@ media3 item's or a server's `Content-Type`, then from the extension of the URL's
 | An MP4 or MOV video file, or an MP3, AAC or M4A audio file | `File` | Loaded as a file, as other AirPlay senders load them. Checked on the LG CX, not on a Mac yet. The receiver reports no tracks, and the LG no buffered or seekable ranges. |
 | MPEG-DASH (`.mpd`) | none | Not played. The receivers' players take HLS and files, not DASH. |
 
-An audio file goes to a TV or a Mac the same way as a video file. A speaker, such as a HomePod,
-is `Compatibility.NoVideo` and not supported yet: it takes audio only as a stream the sender
-decodes and sends itself.
+An audio file goes to a TV or a Mac the same way as a video file. A speaker, such as a soundbar,
+is `Compatibility.NoVideo`: it takes audio only as a stream the sender decodes and sends itself
+(see [Play on a speaker](#play-on-a-speaker) and [Stream audio yourself](#stream-audio-yourself)).
