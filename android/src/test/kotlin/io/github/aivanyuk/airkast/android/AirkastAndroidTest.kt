@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.Looper
+import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
@@ -28,6 +29,20 @@ class AirkastAndroidTest {
     @Test
     fun theTvShowsTheAppsLabel() {
         assertThat(Airkast(app).identity.name).isEqualTo(app.applicationInfo.loadLabel(app.packageManager).toString())
+    }
+
+    @Test
+    fun theSenderKeepsItsIdAcrossLaunches() {
+        Settings.Secure.putString(app.contentResolver, Settings.Secure.ANDROID_ID, "8f3c2a1b9d7e6f50")
+        val id = Airkast(app).identity.deviceId
+        assertThat(Airkast(app).identity.deviceId).isEqualTo(id)
+        assertThat(id).isEqualTo(SenderIdentity.deviceIdFrom("8f3c2a1b9d7e6f50:${app.packageName}"))
+        assertThat(id).doesNotContain("8F3C")
+        // Locally administered and unicast: bit 1 of the first byte set, bit 0 clear.
+        assertThat(id.substring(0, 2).toInt(16) and 0x3).isEqualTo(0x2)
+
+        Settings.Secure.putString(app.contentResolver, Settings.Secure.ANDROID_ID, "0123456789abcdef")
+        assertThat(Airkast(app).identity.deviceId).isNotEqualTo(id)
     }
 
     @Test
