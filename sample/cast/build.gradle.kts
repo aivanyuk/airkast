@@ -38,6 +38,8 @@ dependencies {
     // repository.
     api(libs.airkast.android)
     api(libs.airkast.media3)
+    // AirkastAudioSink, which sends the ExoPlayer's audio to a speaker.
+    implementation(libs.airkast.exoplayer)
     // The phone's own player, which the AirkastPlayer hands the item to and from.
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.exoplayer.hls)

@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity() {
         binding.sampleStream.setOnClickListener { pick(SampleMedia.Stream) }
         binding.sampleVideo.setOnClickListener { pick(SampleMedia.Video) }
         binding.sampleAudio.setOnClickListener { pick(SampleMedia.Audio) }
+        binding.sampleMusic.setOnClickListener { pick(SampleMedia.Music) }
 
         binding.grant.setOnClickListener { permission.launch(LocalNetwork.PERMISSION) }
         binding.host.doAfterTextChanged { binding.connect.isEnabled = !it.isNullOrBlank() }
@@ -181,10 +182,18 @@ class MainActivity : AppCompatActivity() {
         for (receiver in receivers) {
             val item = ItemReceiverBinding.inflate(layoutInflater, binding.receivers, true)
             item.name.text = receiver.name
-            item.detail.text =
-                getString(R.string.receiver_detail, receiver.model ?: receiver.host, describe(receiver.compatibility))
-            item.root.isEnabled = receiver.isSupported
-            item.root.alpha = if (receiver.isSupported) 1f else 0.5f
+            val plays =
+                if (cast.streamsAudio(
+                        receiver,
+                    )
+                ) {
+                    getString(R.string.compat_speaker)
+                } else {
+                    describe(receiver.compatibility)
+                }
+            item.detail.text = getString(R.string.receiver_detail, receiver.model ?: receiver.host, plays)
+            item.root.isEnabled = cast.canCast(receiver)
+            item.root.alpha = if (cast.canCast(receiver)) 1f else 0.5f
             item.root.setOnClickListener { cast.start(receiver, url(), format()) }
         }
     }
@@ -204,9 +213,13 @@ class MainActivity : AppCompatActivity() {
                 is Connection.Connecting -> getString(R.string.connecting, state.receiver.name)
                 is Connection.AwaitingSecret -> getString(R.string.awaiting_secret, state.receiver.name)
                 is Connection.Connected -> getString(R.string.casting, state.session.receiver.name)
+                is Connection.Streaming -> getString(R.string.streaming, state.stream.receiver.name)
             }
         binding.status.isVisible = state !is Connection.Idle
-        binding.casting.isVisible = state is Connection.Connected
+        binding.casting.isVisible = state is Connection.Connected || state is Connection.Streaming
+        // A speaker has no renditions and no playback info: the phone's player plays.
+        binding.tracks.isVisible = state is Connection.Connected
+        binding.info.isVisible = state is Connection.Connected
         if (state is Connection.AwaitingSecret) {
             if (secretDialog == null) secretDialog = showSecret(state.receiver, state.secret)
         } else {

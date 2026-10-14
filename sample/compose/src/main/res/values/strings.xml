@@ -15,6 +15,7 @@
     <string name="sample_stream">HLS stream</string>
     <string name="sample_video">MP4 video</string>
     <string name="sample_audio">MP3 audio</string>
+    <string name="sample_music">Music</string>
     <string name="format_auto">Auto: %1$s</string>
     <string name="format_hls">HLS</string>
     <string name="format_file">File</string>
@@ -25,6 +26,7 @@
     <string name="compat_supported">plays</string>
     <string name="compat_unknown">unknown: typed in</string>
     <string name="compat_no_video">plays no video</string>
+    <string name="compat_speaker">speaker: plays the phone\'s audio</string>
     <string name="compat_video_v1">older video protocol only, not supported yet</string>
     <string name="compat_needs_pin">asks for a PIN once</string>
     <string name="compat_needs_password">asks for a password once</string>
@@ -41,6 +43,7 @@
     <string name="pair_with_pin">Pair with a PIN</string>
     <string name="pair_with_password">Pair with a password</string>
     <string name="casting">Playing on %1$s</string>
+    <string name="streaming">Playing the phone\'s audio on %1$s</string>
     <string name="renditions">Tracks</string>
     <string name="info">Info</string>
     <string name="disconnect">Disconnect</string>
