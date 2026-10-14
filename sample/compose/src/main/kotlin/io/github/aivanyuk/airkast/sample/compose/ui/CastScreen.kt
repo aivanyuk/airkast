@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,8 +17,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -47,6 +50,7 @@ import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
+import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.Track
@@ -55,6 +59,7 @@ import io.github.aivanyuk.airkast.android.LocalNetwork
 import io.github.aivanyuk.airkast.android.ReceiverDiscovery
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.Cast
+import io.github.aivanyuk.airkast.sample.SampleMedia
 import io.github.aivanyuk.airkast.sample.compose.R
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
@@ -73,8 +78,9 @@ fun CastScreen(
 ) {
     val connection by cast.player.connection.collectAsStateWithLifecycle()
     val log by cast.log.collectAsStateWithLifecycle()
-    val defaultUrl = stringResource(R.string.default_url)
-    var url by rememberSaveable { mutableStateOf(defaultUrl) }
+    var url by rememberSaveable { mutableStateOf(SampleMedia.Stream.url) }
+    // Null reads it from the URL.
+    var format by rememberSaveable { mutableStateOf<MediaFormat?>(null) }
     val typedIn = stringResource(R.string.typed_in)
     val access = rememberLocalNetworkAccess()
 
@@ -86,9 +92,9 @@ fun CastScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (!access.granted) PermissionCard(onGrant = access.request)
-        Receivers(enabled = access.granted, onPick = { cast.start(it, url) })
+        Receivers(enabled = access.granted, onPick = { cast.start(it, url, format) })
         // A receiver typed in by hand has no TXT record, so its compatibility is Unknown.
-        AddressEntry(onConnect = { host -> cast.start(Receiver(typedIn, host), url) })
+        AddressEntry(onConnect = { host -> cast.start(Receiver(typedIn, host), url, format) })
         OutlinedTextField(
             value = url,
             onValueChange = { url = it },
@@ -96,9 +102,16 @@ fun CastScreen(
             maxLines = 3,
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(onClick = { cast.playHere(url) }) { Text(stringResource(R.string.play_here)) }
+        Samples(
+            onPick = {
+                url = it.url
+                format = null
+            },
+        )
+        FormatPicker(url, format, onPick = { format = it })
+        Button(onClick = { cast.playHere(url, format) }) { Text(stringResource(R.string.play_here)) }
         PlayerControls(player)
-        CastStatus(cast, connection, onPair = { receiver, secret -> cast.start(receiver, url, pairWith = secret) })
+        CastStatus(cast, connection, onPair = { receiver, secret -> cast.start(receiver, url, format, secret) })
         EventLog(log)
     }
 }
@@ -219,6 +232,34 @@ private fun AddressEntry(onConnect: (String) -> Unit) {
         )
         Button(onClick = { onConnect(host.trim()) }, enabled = host.isNotBlank()) {
             Text(stringResource(R.string.connect))
+        }
+    }
+}
+
+@Composable
+private fun Samples(onPick: (SampleMedia) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (sample in SampleMedia.entries) {
+            AssistChip(onClick = { onPick(sample) }, label = { Text(describe(sample)) })
+        }
+    }
+}
+
+/** How the item loads: as its URL says, the default, or as picked for a URL that says nothing. */
+@Composable
+private fun FormatPicker(
+    url: String,
+    format: MediaFormat?,
+    onPick: (MediaFormat?) -> Unit,
+) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = format == null,
+            onClick = { onPick(null) },
+            label = { Text(stringResource(R.string.format_auto, describe(MediaFormat.of(url.trim())))) },
+        )
+        for (each in MediaFormat.entries) {
+            FilterChip(selected = format == each, onClick = { onPick(each) }, label = { Text(describe(each)) })
         }
     }
 }
@@ -400,6 +441,21 @@ private fun EventLog(lines: List<String>) {
         Text(lines.joinToString("\n"), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
     }
 }
+
+@Composable
+private fun describe(sample: SampleMedia): String =
+    when (sample) {
+        SampleMedia.Stream -> stringResource(R.string.sample_stream)
+        SampleMedia.Video -> stringResource(R.string.sample_video)
+        SampleMedia.Audio -> stringResource(R.string.sample_audio)
+    }
+
+@Composable
+private fun describe(format: MediaFormat): String =
+    when (format) {
+        MediaFormat.Hls -> stringResource(R.string.format_hls)
+        MediaFormat.File -> stringResource(R.string.format_file)
+    }
 
 @Composable
 private fun describe(compatibility: Compatibility): String =

@@ -11,8 +11,13 @@
     <string name="by_address_title">Or type its address</string>
     <string name="host_hint" translatable="false">192.168.1.20</string>
     <string name="connect">Connect</string>
-    <string name="url_title">Video URL (HLS, with CORS headers)</string>
-    <string name="default_url" translatable="false">https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8</string>
+    <string name="url_title">Media URL: an HLS stream, or an MP4 or audio file</string>
+    <string name="sample_stream">HLS stream</string>
+    <string name="sample_video">MP4 video</string>
+    <string name="sample_audio">MP3 audio</string>
+    <string name="format_auto">Auto: %1$s</string>
+    <string name="format_hls">HLS</string>
+    <string name="format_file">File</string>
     <string name="play_here">Play on this phone</string>
     <string name="typed_in">Typed in</string>
 

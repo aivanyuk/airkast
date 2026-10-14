@@ -2,12 +2,14 @@ package io.github.aivanyuk.airkast.sample
 
 import android.content.Context
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
+import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.android.Airkast
@@ -73,14 +75,15 @@ class Cast(
     /**
      * Plays [url] on [receiver], from where the phone was in it, ending the cast before. A
      * receiver that asks for a PIN or password, or any receiver when [pairWith] is set, pairs
-     * first unless it paired before.
+     * first unless it paired before. [format] is read from the URL when null.
      */
     fun start(
         receiver: Receiver,
         url: String,
+        format: MediaFormat? = null,
         pairWith: Secret? = null,
     ) {
-        show(url)
+        show(url, format)
         // The phone stops while the TV connects, and the TV plays from where it stopped.
         player.stop()
         player.playWhenReady = true
@@ -88,17 +91,42 @@ class Cast(
     }
 
     /** Plays [url] on the phone, from where the TV was in it when casting. */
-    fun playHere(url: String) {
+    fun playHere(
+        url: String,
+        format: MediaFormat? = null,
+    ) {
         player.disconnect()
-        show(url)
+        show(url, format)
         player.prepare()
         player.play()
     }
 
-    /** Makes [url] the item unless it is already, so moving it between phone and TV keeps its position. */
-    private fun show(url: String) {
+    /**
+     * Makes [url] the item unless it is already, so moving it between phone and TV keeps its
+     * position. AirkastPlayer reads the format from the item's MIME type, so a [format] picked
+     * by hand goes there. Any `video/` or `audio/` type loads as a file, and ExoPlayer plays
+     * every one of them as a progressive file, whatever the container.
+     */
+    private fun show(
+        url: String,
+        format: MediaFormat?,
+    ) {
+        val mimeType =
+            when (format) {
+                MediaFormat.Hls -> MimeTypes.APPLICATION_M3U8
+                MediaFormat.File -> MimeTypes.VIDEO_MP4
+                else -> null
+            }
         val current = player.currentMediaItem?.localConfiguration
-        if (current?.uri?.toString() != url) player.setMediaItem(MediaItem.fromUri(url))
+        if (current?.uri?.toString() != url || current.mimeType != mimeType) {
+            player.setMediaItem(
+                MediaItem
+                    .Builder()
+                    .setUri(url)
+                    .setMimeType(mimeType)
+                    .build(),
+            )
+        }
     }
 
     /** Runs [block] on the session, or notes why it failed. Every failure is an [AirkastException]. */

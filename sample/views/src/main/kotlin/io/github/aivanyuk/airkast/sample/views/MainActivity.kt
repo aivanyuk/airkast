@@ -22,6 +22,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
+import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.Track
@@ -30,6 +31,7 @@ import io.github.aivanyuk.airkast.android.LocalNetwork
 import io.github.aivanyuk.airkast.android.ReceiverDiscovery
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.CastService
+import io.github.aivanyuk.airkast.sample.SampleMedia
 import io.github.aivanyuk.airkast.sample.cast
 import io.github.aivanyuk.airkast.sample.views.databinding.ActivityMainBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.DialogSecretBinding
@@ -63,6 +65,13 @@ class MainActivity : AppCompatActivity() {
             WindowInsetsCompat.CONSUMED
         }
 
+        if (savedInstanceState == null) binding.url.setText(SampleMedia.Stream.url)
+        binding.url.doAfterTextChanged { showAutoFormat() }
+        showAutoFormat()
+        binding.sampleStream.setOnClickListener { pick(SampleMedia.Stream) }
+        binding.sampleVideo.setOnClickListener { pick(SampleMedia.Video) }
+        binding.sampleAudio.setOnClickListener { pick(SampleMedia.Audio) }
+
         binding.grant.setOnClickListener { permission.launch(LocalNetwork.PERMISSION) }
         binding.host.doAfterTextChanged { binding.connect.isEnabled = !it.isNullOrBlank() }
         // A receiver typed in by hand has no TXT record, so its compatibility is Unknown.
@@ -75,9 +84,10 @@ class MainActivity : AppCompatActivity() {
                         .trim(),
                 ),
                 url(),
+                format(),
             )
         }
-        binding.playHere.setOnClickListener { cast.playHere(url()) }
+        binding.playHere.setOnClickListener { cast.playHere(url(), format()) }
         binding.tracks.setOnClickListener { lifecycleScope.launch { cast.attempt { tracks() }?.let(::showTracks) } }
         binding.info.setOnClickListener {
             lifecycleScope.launch { cast.attempt { "${playbackInfo()}\nvolume ${volume()}" }?.let(::showInfo) }
@@ -127,6 +137,23 @@ class MainActivity : AppCompatActivity() {
             .toString()
             .trim()
 
+    /** The format picked by hand, or null to read it from the URL. */
+    private fun format(): MediaFormat? =
+        when (binding.formats.checkedChipId) {
+            R.id.format_hls -> MediaFormat.Hls
+            R.id.format_file -> MediaFormat.File
+            else -> null
+        }
+
+    private fun pick(sample: SampleMedia) {
+        binding.url.setText(sample.url)
+        binding.formats.check(R.id.format_auto)
+    }
+
+    private fun showAutoFormat() {
+        binding.formatAuto.text = getString(R.string.format_auto, describe(MediaFormat.of(url())))
+    }
+
     /**
      * Scans while started and permitted: the flow scans while it is collected. Runs again when
      * the permission is granted, and on every start, since the user may change it in Settings.
@@ -158,7 +185,7 @@ class MainActivity : AppCompatActivity() {
                 getString(R.string.receiver_detail, receiver.model ?: receiver.host, describe(receiver.compatibility))
             item.root.isEnabled = receiver.isSupported
             item.root.alpha = if (receiver.isSupported) 1f else 0.5f
-            item.root.setOnClickListener { cast.start(receiver, url()) }
+            item.root.setOnClickListener { cast.start(receiver, url(), format()) }
         }
     }
 
@@ -190,7 +217,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Connects again to the receiver that refused, pairing first with [secret]. */
     private fun pairWith(secret: Secret) {
-        (cast.player.connection.value as? Connection.Idle)?.receiver?.let { cast.start(it, url(), pairWith = secret) }
+        (cast.player.connection.value as? Connection.Idle)?.receiver?.let { cast.start(it, url(), format(), secret) }
     }
 
     /** The PIN [receiver] shows on its screen, or the password set on it, typed in once to pair. */
@@ -262,6 +289,12 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton(android.R.string.ok, null)
             .show()
     }
+
+    private fun describe(format: MediaFormat): String =
+        when (format) {
+            MediaFormat.Hls -> getString(R.string.format_hls)
+            MediaFormat.File -> getString(R.string.format_file)
+        }
 
     private fun describe(compatibility: Compatibility): String =
         when (compatibility) {
