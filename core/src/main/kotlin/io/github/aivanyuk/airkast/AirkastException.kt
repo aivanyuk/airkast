@@ -44,7 +44,9 @@ public sealed class AirkastException(
     /**
      * The receiver did not answer in time. The session stays open: the late answer is dropped when
      * it comes, and the session ends with [Disconnected] only if the receiver is still silent at
-     * the next request. A load the receiver does not take in time ends here too.
+     * the next request. A load the receiver does not take in time ends here too, and so does a
+     * connect whose SETUP the receiver holds past [Airkast.approvalTimeout], as a Mac does while
+     * it asks its user whether to allow the sender.
      */
     public class Timeout(
         message: String,

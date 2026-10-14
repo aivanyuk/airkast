@@ -35,6 +35,14 @@ public class Airkast private constructor(
     public val connectTimeout: Duration = builder.connectTimeout
     public val requestTimeout: Duration = builder.requestTimeout
 
+    /**
+     * How long a connect waits for the receiver to take the session: a Mac or an Apple TV asks its
+     * user whether to allow a sender it has not seen, and answers once they have. A minute by
+     * default. A sender keeps its [SenderIdentity.deviceId] across launches so the receiver asks
+     * once.
+     */
+    public val approvalTimeout: Duration = builder.approvalTimeout
+
     /** How long a load waits for the receiver to take the item. */
     public val loadTimeout: Duration = builder.loadTimeout
 
@@ -259,6 +267,7 @@ public class Airkast private constructor(
         return SessionOptions(
             connectTimeout = connectTimeout,
             requestTimeout = requestTimeout,
+            approvalTimeout = approvalTimeout,
             loadTimeout = loadTimeout,
             keepAlive = keepAlive,
             ntpTiming = ntpTiming,
@@ -438,6 +447,7 @@ public class Airkast private constructor(
         public var identity: SenderIdentity = SenderIdentity()
         public var connectTimeout: Duration = 5.seconds
         public var requestTimeout: Duration = 5.seconds
+        public var approvalTimeout: Duration = 60.seconds
         public var loadTimeout: Duration = 10.seconds
         public var keepAlive: Boolean = true
         public var ntpTiming: Boolean = true
@@ -451,6 +461,7 @@ public class Airkast private constructor(
             identity = airkast.identity
             connectTimeout = airkast.connectTimeout
             requestTimeout = airkast.requestTimeout
+            approvalTimeout = airkast.approvalTimeout
             loadTimeout = airkast.loadTimeout
             keepAlive = airkast.keepAlive
             ntpTiming = airkast.ntpTiming

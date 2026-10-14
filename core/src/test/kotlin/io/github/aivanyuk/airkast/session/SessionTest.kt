@@ -66,6 +66,34 @@ class SessionTest {
         }
 
     @Test
+    fun aSetupHeldWhileTheReceiverAsksItsUserGoesThrough() =
+        runBlocking {
+            FakeReceiver(lateAnswers = mapOf("SETUP" to 1_500)).use { fake ->
+                val patient =
+                    airkast.copy {
+                        requestTimeout = 500.milliseconds
+                        approvalTimeout = 3.seconds
+                    }
+                patient.connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    session.load(Media("https://example.com/master.m3u8"))
+                    assertThat(fake.commands.first()["type"]).isEqualTo("insertPlayQueueItem")
+                }
+            }
+        }
+
+    @Test
+    fun aSetupHeldPastTheApprovalTimeoutFails() {
+        FakeReceiver(lateAnswers = mapOf("SETUP" to 2_000)).use { fake ->
+            val hasty = airkast.copy { approvalTimeout = 500.milliseconds }
+            val failure =
+                assertThrows(AirkastException.Timeout::class.java) {
+                    runBlocking { hasty.connect(Receiver("fake", "127.0.0.1", fake.port)) }
+                }
+            assertThat(failure).hasMessageThat().contains("asking its user to allow this sender")
+        }
+    }
+
+    @Test
     fun aFileLoadsAsAFileAndPausesAsPaused() =
         runBlocking<Unit> {
             FakeReceiver().use { fake ->

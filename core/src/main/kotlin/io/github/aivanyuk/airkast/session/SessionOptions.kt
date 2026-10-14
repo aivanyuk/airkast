@@ -13,6 +13,7 @@ import kotlin.time.Duration
 internal class SessionOptions(
     val connectTimeout: Duration,
     val requestTimeout: Duration,
+    val approvalTimeout: Duration,
     val loadTimeout: Duration,
     val keepAlive: Boolean,
     val ntpTiming: Boolean,
@@ -27,6 +28,7 @@ internal class SessionOptions(
         SessionOptions(
             connectTimeout,
             requestTimeout,
+            approvalTimeout,
             loadTimeout,
             keepAlive,
             ntpTiming,
