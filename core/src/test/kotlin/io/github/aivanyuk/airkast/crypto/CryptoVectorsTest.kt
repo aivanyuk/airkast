@@ -77,6 +77,60 @@ class CryptoVectorsTest {
         }
     }
 
+    @Test
+    fun poly1305AgreesWithBigIntegerArithmetic() {
+        val random = java.util.Random(7)
+        for (length in listOf(0, 1, 15, 16, 17, 63, 64, 65, 255, 1412, 1500)) {
+            val key = ByteArray(32).also(random::nextBytes)
+            val nonce = ByteArray(12).also(random::nextBytes)
+            val aad = ByteArray(length % 13).also(random::nextBytes)
+            val plaintext = ByteArray(length).also(random::nextBytes)
+            val sealed = ChaCha20Poly1305.seal(key, nonce, plaintext, aad)
+            val expected = poly1305(ChaCha20Poly1305.block(key, nonce, 0).copyOf(32), aead(aad, sealed.copyOf(length)))
+            assertThat(sealed.copyOfRange(length, sealed.size).hex()).isEqualTo(expected.hex())
+        }
+        // Every limb near its largest: a key and a message of 0xff bytes.
+        val key = ByteArray(32) { -1 }
+        val sealed = ChaCha20Poly1305.seal(key, ByteArray(12), ByteArray(80) { -1 }, ByteArray(0))
+        val expected =
+            poly1305(ChaCha20Poly1305.block(key, ByteArray(12), 0).copyOf(32), aead(ByteArray(0), sealed.copyOf(80)))
+        assertThat(sealed.copyOfRange(80, 96).hex()).isEqualTo(expected.hex())
+    }
+
+    /** What the AEAD tags (RFC 8439 section 2.8): the AAD and ciphertext, each zero-padded, then their lengths. */
+    private fun aead(
+        aad: ByteArray,
+        ciphertext: ByteArray,
+    ): ByteArray {
+        fun padded(b: ByteArray) = b + ByteArray((16 - b.size % 16) % 16)
+        val lengths =
+            java.nio.ByteBuffer
+                .allocate(16)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        lengths.putLong(aad.size.toLong()).putLong(ciphertext.size.toLong())
+        return padded(aad) + padded(ciphertext) + lengths.array()
+    }
+
+    /** Poly1305 as RFC 8439 section 2.5.1 writes it, in BigInteger arithmetic. */
+    private fun poly1305(
+        key: ByteArray,
+        message: ByteArray,
+    ): ByteArray {
+        fun le(b: ByteArray) = BigInteger(1, b.reversedArray())
+        val p = BigInteger.ONE.shiftLeft(130).subtract(BigInteger.valueOf(5))
+        val r = le(key.copyOf(16)).and(BigInteger("0ffffffc0ffffffc0ffffffc0fffffff", 16))
+        var acc = BigInteger.ZERO
+        for (at in message.indices step 16) {
+            val block = message.copyOfRange(at, minOf(at + 16, message.size))
+            acc = acc.add(le(block).setBit(8 * block.size)).multiply(r).mod(p)
+        }
+        return acc
+            .add(le(key.copyOfRange(16, 32)))
+            .toByteArray()
+            .reversedArray()
+            .copyOf(16)
+    }
+
     private fun client() =
         SrpClient(
             "Pair-Setup",

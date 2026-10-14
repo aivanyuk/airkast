@@ -1,6 +1,5 @@
 package io.github.aivanyuk.airkast.crypto
 
-import java.math.BigInteger
 import java.security.GeneralSecurityException
 import java.security.MessageDigest
 
@@ -161,13 +160,28 @@ internal object ChaCha20Poly1305 {
         for (i in 0 until 8) b[o + i] = (v ushr (8 * i)).toByte()
     }
 
-    /** Poly1305 over BigInteger: receiver messages are small, so clarity wins over speed. */
+    /**
+     * Poly1305 (RFC 8439, section 2.5) in five 26-bit limbs, so every product fits a Long: an audio
+     * stream tags over a hundred packets a second.
+     */
     private class Poly1305(
         key: ByteArray,
     ) {
-        private val r = leInt(key, 0, 16).and(CLAMP)
-        private val s = leInt(key, 16, 16)
-        private var acc = BigInteger.ZERO
+        private val r0 = intLe(key, 0).toLong() and 0x3ffffff
+        private val r1 = (intLe(key, 3).toLong() ushr 2) and 0x3ffff03
+        private val r2 = (intLe(key, 6).toLong() ushr 4) and 0x3ffc0ff
+        private val r3 = (intLe(key, 9).toLong() ushr 6) and 0x3f03fff
+        private val r4 = (intLe(key, 12).toLong() ushr 8) and 0x00fffff
+        private val s1 = r1 * 5
+        private val s2 = r2 * 5
+        private val s3 = r3 * 5
+        private val s4 = r4 * 5
+        private val pad = LongArray(4) { intLe(key, 16 + it * 4).toLong() and MASK_32 }
+        private var h0 = 0L
+        private var h1 = 0L
+        private var h2 = 0L
+        private var h3 = 0L
+        private var h4 = 0L
         private val pending = ByteArray(16)
         private var pendingSize = 0
 
@@ -176,10 +190,23 @@ internal object ChaCha20Poly1305 {
             offset: Int,
             length: Int,
         ) {
-            for (i in 0 until length) {
-                pending[pendingSize++] = data[offset + i]
-                if (pendingSize == 16) flushBlock()
+            var at = offset
+            val end = offset + length
+            if (pendingSize > 0) {
+                val n = minOf(16 - pendingSize, end - at)
+                data.copyInto(pending, pendingSize, at, at + n)
+                pendingSize += n
+                at += n
+                if (pendingSize < 16) return
+                block(pending, 0, HIBIT)
+                pendingSize = 0
             }
+            while (end - at >= 16) {
+                block(data, at, HIBIT)
+                at += 16
+            }
+            data.copyInto(pending, 0, at, end)
+            pendingSize = end - at
         }
 
         /** Zero-pads the current input to a 16-byte boundary, as the AEAD construction asks. */
@@ -188,37 +215,107 @@ internal object ChaCha20Poly1305 {
         }
 
         fun finish(): ByteArray {
-            if (pendingSize > 0) flushBlock()
-            val tag = acc.add(s).and(MASK_128)
+            if (pendingSize > 0) {
+                pending[pendingSize] = 1
+                pending.fill(0, pendingSize + 1)
+                block(pending, 0, 0)
+            }
+            var c = h1 ushr 26
+            h1 = h1 and MASK_26
+            h2 += c
+            c = h2 ushr 26
+            h2 = h2 and MASK_26
+            h3 += c
+            c = h3 ushr 26
+            h3 = h3 and MASK_26
+            h4 += c
+            c = h4 ushr 26
+            h4 = h4 and MASK_26
+            h0 += c * 5
+            c = h0 ushr 26
+            h0 = h0 and MASK_26
+            h1 += c
+
+            // h - p, kept when it does not go below zero, which is when h >= p.
+            var g0 = h0 + 5
+            c = g0 ushr 26
+            g0 = g0 and MASK_26
+            var g1 = h1 + c
+            c = g1 ushr 26
+            g1 = g1 and MASK_26
+            var g2 = h2 + c
+            c = g2 ushr 26
+            g2 = g2 and MASK_26
+            var g3 = h3 + c
+            c = g3 ushr 26
+            g3 = g3 and MASK_26
+            val g4 = h4 + c - (1L shl 26)
+            if (g4 >= 0) {
+                h0 = g0
+                h1 = g1
+                h2 = g2
+                h3 = g3
+                h4 = g4
+            }
+
+            val words =
+                longArrayOf(
+                    (h0 or (h1 shl 26)) and MASK_32,
+                    ((h1 ushr 6) or (h2 shl 20)) and MASK_32,
+                    ((h2 ushr 12) or (h3 shl 14)) and MASK_32,
+                    ((h3 ushr 18) or (h4 shl 8)) and MASK_32,
+                )
             val out = ByteArray(16)
-            val bytes = tag.toByteArray()
-            for (i in 0 until 16) {
-                val index = bytes.size - 1 - i
-                out[i] = if (index >= 0) bytes[index] else 0
+            var carry = 0L
+            for (i in 0 until 4) {
+                val f = words[i] + pad[i] + carry
+                carry = f ushr 32
+                for (b in 0 until 4) out[i * 4 + b] = (f ushr (8 * b)).toByte()
             }
             return out
         }
 
-        private fun flushBlock() {
-            val n = leInt(pending, 0, pendingSize).setBit(8 * pendingSize)
-            acc = acc.add(n).multiply(r).mod(P)
-            pendingSize = 0
+        private fun block(
+            m: ByteArray,
+            at: Int,
+            hibit: Long,
+        ) {
+            h0 += intLe(m, at).toLong() and MASK_26
+            h1 += (intLe(m, at + 3).toLong() ushr 2) and MASK_26
+            h2 += (intLe(m, at + 6).toLong() ushr 4) and MASK_26
+            h3 += (intLe(m, at + 9).toLong() ushr 6) and MASK_26
+            h4 += (intLe(m, at + 12).toLong() and MASK_32 ushr 8) or hibit
+
+            val d0 = h0 * r0 + h1 * s4 + h2 * s3 + h3 * s2 + h4 * s1
+            var d1 = h0 * r1 + h1 * r0 + h2 * s4 + h3 * s3 + h4 * s2
+            var d2 = h0 * r2 + h1 * r1 + h2 * r0 + h3 * s4 + h4 * s3
+            var d3 = h0 * r3 + h1 * r2 + h2 * r1 + h3 * r0 + h4 * s4
+            var d4 = h0 * r4 + h1 * r3 + h2 * r2 + h3 * r1 + h4 * r0
+
+            var c = d0 ushr 26
+            h0 = d0 and MASK_26
+            d1 += c
+            c = d1 ushr 26
+            h1 = d1 and MASK_26
+            d2 += c
+            c = d2 ushr 26
+            h2 = d2 and MASK_26
+            d3 += c
+            c = d3 ushr 26
+            h3 = d3 and MASK_26
+            d4 += c
+            c = d4 ushr 26
+            h4 = d4 and MASK_26
+            h0 += c * 5
+            c = h0 ushr 26
+            h0 = h0 and MASK_26
+            h1 += c
         }
 
         private companion object {
-            val P: BigInteger = BigInteger.ONE.shiftLeft(130).subtract(BigInteger.valueOf(5))
-            val MASK_128: BigInteger = BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE)
-            val CLAMP = BigInteger("0ffffffc0ffffffc0ffffffc0fffffff", 16)
-
-            fun leInt(
-                b: ByteArray,
-                offset: Int,
-                length: Int,
-            ): BigInteger {
-                val be = ByteArray(length + 1)
-                for (i in 0 until length) be[length - i] = b[offset + i]
-                return BigInteger(be)
-            }
+            const val MASK_26 = 0x3ffffffL
+            const val MASK_32 = 0xffffffffL
+            const val HIBIT = 1L shl 24
         }
     }
 }
