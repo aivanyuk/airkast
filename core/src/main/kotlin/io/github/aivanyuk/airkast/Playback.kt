@@ -31,7 +31,8 @@ public enum class MediaFormat(
 
     /**
      * A file the receiver downloads while it plays, loaded as `file`: MP4 or MOV video, or audio
-     * such as MP3, AAC or M4A. The receiver reports no tracks and no buffered ranges for it.
+     * such as MP3, AAC or M4A. The receiver reports no tracks for it, and the LG no buffered or
+     * seekable ranges.
      */
     File("file"),
     ;

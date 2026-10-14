@@ -461,10 +461,10 @@ The receiver fetches and plays the URL itself, so:
 
 - The receiver must reach the URL. A server on the phone's `localhost` does not work.
 - `Media` holds only the URL, so the receiver cannot send your app's cookies or request headers.
-- The receiver takes HLS streams and whole files, but not DASH, and only HLS has been checked
-  (see [Formats](#formats)).
-- The LG CX plays through a web page, so the server must send CORS headers for every playlist,
-  segment and file.
+- The receiver takes HLS streams and whole files, but not DASH, and files have been checked on
+  the LG CX only (see [Formats](#formats)).
+- The LG CX plays HLS through a web page, so the server must send CORS headers for every
+  playlist and segment. It plays files from a server that sends none.
 - With `ntpTiming` on, the default, the receiver sends clock-sync requests to the sender over
   UDP. A sender behind a firewall that drops them cannot start a session with a Mac.
 
@@ -481,7 +481,7 @@ media3 item's or a server's `Content-Type`, then from the extension of the URL's
 | What you play | `MediaFormat` | Status |
 | --- | --- | --- |
 | An HLS playlist (`.m3u8`) | `Hls` | Checked on the LG CX and a Mac. The receiver reports buffered ranges, and reports and switches tracks. |
-| An MP4 or MOV video file, or an MP3, AAC or M4A audio file | `File` | Loaded as a file, as other AirPlay senders load them. Not checked on a receiver yet. The receiver reports no tracks and no buffered ranges. |
+| An MP4 or MOV video file, or an MP3, AAC or M4A audio file | `File` | Loaded as a file, as other AirPlay senders load them. Checked on the LG CX, not on a Mac yet. The receiver reports no tracks, and the LG no buffered or seekable ranges. |
 | MPEG-DASH (`.mpd`) | none | Not played. The receivers' players take HLS and files, not DASH. |
 
 An audio file goes to a TV or a Mac the same way as a video file. A speaker, such as a HomePod,

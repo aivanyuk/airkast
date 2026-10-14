@@ -47,6 +47,7 @@ Terms used on this page:
 | MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app with `ntpTiming = true` | Plays with NTP timing, set to "Anyone on the same network". Transient pairing, load, play, pause from the Mac, the next item, tracks read and switched (closed captions, subtitles, subtitles off), playback info, stop, by hand. At "Current User" transient pairing is refused |
 | MacBook Pro (MacBookPro18,1, macOS build 25G241 as above, not read again) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app | `NeedsPassword` with "Require password" on. By hand, through `AirkastPlayer.connect`: transient pairing refused; a wrong password refused at pair-setup M4 (`SecretRejected`); the right one paired (M1 to M6) with no `/pair-pin-start`, and later connects verified the pairing (pair-verify). Every base SETUP, even after pair-verify, answered 401 with a Digest challenge, a second 401 to a wrong password, and 200 to the right one, which the credentials then kept: later connects went in without asking. Played; `AirkastPlayer`'s notification did not follow, since the Mac's `currentItemChanged` carries no item uuid |
 | MacBook Pro (MacBookPro18,1, macOS build 25G241 as above, not read again) | 960.13.25 | 2026-10-10, before 0.3.0 | Xiaomi 2201117TY, Android 13, the sample app | With `X-Apple-Client-Name` sent: the "Allow … to AirPlay" prompt for a new sender named the app ("airkast sample - compose"), where it showed "" without the header. An ASCII name only |
+| LG OLED CX (webOS) | 04.64.00 as on 2026-10-08, not read again; 377.25.06 from the connect log | 2026-10-14, at e650851 | Xiaomi 2201117TY, Android 13, the sample app | `NeedsPassword`, paired before. By hand, through `AirkastPlayer`: ExoPlayer's test MP4 (`frame-counter-one-hour.mp4`) and MP3 (`play.mp3`), served without CORS headers, loaded as `file` (the sample's "Auto: File") and played. The MP4 from where the phone was, seek forward, pause (reported `Paused`), play, playback info (a 1 h duration, no buffered or seekable ranges), tracks (none reported), stop. The MP3 played to its end: `itemPlayedToEnd`, then `stopped`. `LiveReceiverTest` not run, since the TV now asks for a password |
 
 ### How `Receiver.compatibility` decides
 
@@ -80,7 +81,7 @@ each receiver playing it. [The guide](guide.md#formats) explains formats from th
 | Format | `mediaType` | What is known |
 | --- | --- | --- |
 | HLS | `streaming` | Plays on the LG CX and the Mac, with tracks and buffered ranges on the LG. HLS loaded as `file` plays on the LG too, without them |
-| MP4, MOV, MP3, AAC, M4A and other files | `file` | Not checked on a receiver yet. send-airplay2 casts MP4 files as `file` to an Apple TV (tvOS 26.6) and a Mac, and reports them playing. The live test plays an MP4 and an MP3 file when run (`AIRKAST_FILE_URL`, `AIRKAST_AUDIO_URL`) |
+| MP4, MOV, MP3, AAC, M4A and other files | `file` | Plays on the LG CX: an MP4 and an MP3, from a server that sends no CORS headers, with seek, pause and play, and the MP3 to its end. No tracks, and no buffered or seekable ranges. Not checked on a Mac yet; send-airplay2 casts MP4 files as `file` to an Apple TV (tvOS 26.6) and a Mac, and reports them playing. The live test plays an MP4 and an MP3 file when run (`AIRKAST_FILE_URL`, `AIRKAST_AUDIO_URL`) |
 | MPEG-DASH | none | Not played. The LG's player is hls.js, and the Mac's and the Apple TV's is AVFoundation, which plays HLS and files. A sender would have to rewrite the manifest as HLS and serve it |
 
 A speaker that takes AirPlay audio only reads as `NoVideo`. It plays what the sender decodes and
@@ -135,12 +136,13 @@ What the LG CX does, as seen on the wire.
   then subtitles 2–9, on a kino.pub hls4 master subtitles 0–8 then audio 9–17. Turning subtitles
   off keeps the forced one.
 - With `mediaType: streaming`, a pause reads as `loading` with rate 0 for as long as it lasts,
-  as an event and on a poll. `file` reports it as `paused`, and reports no buffered ranges.
+  as an event and on a poll. `file` reports it as `paused`, and reports no buffered or seekable ranges.
   airkast reports `Paused` for `loading` while the rate is 0, so a caller sees the same in both.
 - It reads its volume (`GET_PARAMETER`), but ignores every way of setting it.
 - BACK on its remote arrives as `pbpr` then `pbal`, and it leaves the player only once the
   sender stops. Its volume keys arrive as `dvlc`, with a volume from 0 to 1.
-- Its player is Apple's web receiver on hls.js, so streams need CORS headers.
+- Its player is Apple's web receiver on hls.js, so streams need CORS headers. A `file` item
+  plays from a server that sends none.
 - A second sender takes over, and the first one's connection closes.
 - Once, 13 minutes into a session, it left a `/feedback` unanswered for over 5 s, and played on.
   A late answer therefore costs the sender one `Timeout`, and the session ends only if the
