@@ -246,7 +246,7 @@ internal class DefaultVideoSession private constructor(
                     "item" to
                         mapOf(
                             "uuid" to id,
-                            "mediaType" to if (item.streaming) "streaming" else "file",
+                            "mediaType" to item.format.wire,
                             "Content-Location" to item.url,
                             "Start-Position" to cmTime(item.startAt),
                         ),

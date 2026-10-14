@@ -221,7 +221,9 @@ with any `Player`.
 ### What the player does for you
 
 - **Loads the item.** A media item set while a session is attached loads at once. One set before
-  waits for a session. The receiver fetches the item's URL itself.
+  waits for a session. The receiver fetches the item's URL itself. The item's MIME type, set with
+  `MediaItem.Builder.setMimeType`, says whether it is an HLS stream or a file, and without one the
+  URL's extension does (see [Formats](#formats)).
 - **Ends the cast on BACK.** By default, BACK on the TV's remote ends a cast the player opened, as
   `disconnect()` does. With `disconnectOnBack = false`, the app hears BACK as
   `ReceiverEvent.Back` on the session's events, and decides what to do.
@@ -249,7 +251,6 @@ val player = AirkastPlayer(context, airkast) {
 | `localPlayer` | none | A player that plays while no cast does, such as your `ExoPlayer`. It must run on the same looper as the `AirkastPlayer`, or `build()` throws. See [Play on the phone too](#play-on-the-phone-too). |
 | `disconnectOnBack` | `true` | Whether BACK on the TV's remote ends a cast the player opened. |
 | `keepAwake` | `true` | Whether to hold the wake lock and Wi-Fi lock described above. |
-| `streaming` | `true` | Loads items as `streaming` rather than `file`. The LG reports tracks and buffered ranges only for `streaming` items. |
 | `positionPollInterval` | 1 second | How often the player asks the receiver for its position. |
 | `looper` | the current thread's looper, or the main looper | The player's application looper. |
 | `logger` | the client's `logger` | Takes the player's lines, under the tag `player`. |
@@ -352,8 +353,14 @@ session.close()
 | `stop()` | Ends playback. The receiver leaves its player, and the session stays open for another `load`. |
 | `close()` | Closes the connections. |
 
-`Media` takes the URL, a start position (`startAt`) and `streaming`, which is `true` by default.
-See the player's `streaming` option above for what it changes.
+`Media` takes the URL, a start position (`startAt`) and a `format`, read from the URL by default
+(see [Formats](#formats)). A file served from a URL without its extension needs it given:
+
+```kotlin
+session.load(Media("https://example.com/watch/7", format = MediaFormat.File))
+// or from the Content-Type the server sends
+session.load(Media(url, format = MediaFormat.of(url, mimeType = "video/mp4")))
+```
 
 `session.events` emits what the receiver reports: state changes, the end of an item, a new item,
 rate changes, time jumps, volume changes, and BACK on the TV's remote. The flow ends with
@@ -454,11 +461,29 @@ The receiver fetches and plays the URL itself, so:
 
 - The receiver must reach the URL. A server on the phone's `localhost` does not work.
 - `Media` holds only the URL, so the receiver cannot send your app's cookies or request headers.
-- HLS is the only format that has been checked.
-- The LG CX plays through a web page, so the server must send CORS headers for every playlist and
-  segment.
+- The receiver takes HLS streams and whole files, but not DASH, and only HLS has been checked
+  (see [Formats](#formats)).
+- The LG CX plays through a web page, so the server must send CORS headers for every playlist,
+  segment and file.
 - With `ntpTiming` on, the default, the receiver sends clock-sync requests to the sender over
   UDP. A sender behind a firewall that drops them cannot start a session with a Mac.
 
 [compatibility.md](compatibility.md) has the details for each receiver, Android version and
 network setup.
+
+### Formats
+
+The receiver loads an HLS stream and a file in different ways, so `Media.format` says which one
+the URL is. `MediaFormat.of(url, mimeType)` reads it from a MIME type when one is given, such as a
+media3 item's or a server's `Content-Type`, then from the extension of the URL's path, and picks
+`Hls` when neither says. `AirkastPlayer` reads it from each media item that way.
+
+| What you play | `MediaFormat` | Status |
+| --- | --- | --- |
+| An HLS playlist (`.m3u8`) | `Hls` | Checked on the LG CX and a Mac. The receiver reports buffered ranges, and reports and switches tracks. |
+| An MP4 or MOV video file, or an MP3, AAC or M4A audio file | `File` | Loaded as a file, as other AirPlay senders load them. Not checked on a receiver yet. The receiver reports no tracks and no buffered ranges. |
+| MPEG-DASH (`.mpd`) | none | Not played. The receivers' players take HLS and files, not DASH. |
+
+An audio file goes to a TV or a Mac the same way as a video file. A speaker, such as a HomePod,
+is `Compatibility.NoVideo` and not supported yet: it takes audio only as a stream the sender
+decodes and sends itself.

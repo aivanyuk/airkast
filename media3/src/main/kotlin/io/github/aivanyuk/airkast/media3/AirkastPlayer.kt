@@ -7,6 +7,7 @@ import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Compatibility
+import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.Secret
@@ -23,10 +24,11 @@ import kotlin.time.Duration.Companion.seconds
  * pressed on the TV's remote. [connection] says where it stands. An app that opens its own
  * sessions sets [session] instead, and the player only plays on it.
  *
- * It plays one media item, whose URL the receiver fetches itself. A media item set while a session
- * is attached loads at once, as a Cast player's does, and one set before waits for a session. The
- * device volume can be read but not set. What a `Player` has no place for, such as switching
- * tracks, the app takes from [session].
+ * It plays one media item, whose URL the receiver fetches itself: an HLS stream, or an MP4 or audio
+ * file. The item's MIME type says which, and without one its URL's extension does
+ * ([MediaFormat.of]). A media item set while a session is attached loads at once, as a Cast
+ * player's does, and one set before waits for a session. The device volume can be read but not
+ * set. What a `Player` has no place for, such as switching tracks, the app takes from [session].
  *
  * With a [Builder.localPlayer], it plays on the phone too: the app's own player plays until a cast
  * starts and takes the item back when it ends, and a `MediaSession` over this player drives both.
@@ -224,12 +226,6 @@ public interface AirkastPlayer : Player {
         public var positionPollInterval: Duration = 1.seconds
 
         /**
-         * Whether to load items as `streaming`, the default, rather than `file`. The LG reports
-         * tracks and buffered ranges only for a `streaming` item.
-         */
-        public var streaming: Boolean = true
-
-        /**
          * Whether BACK on the TV's remote ends a cast the player connected, as [disconnect] does.
          * The receiver leaves BACK to the sender, and the TV stays in its player until the sender
          * stops. With false, the app hears it as [ReceiverEvent.Back] on the session's events, and
@@ -261,7 +257,6 @@ public interface AirkastPlayer : Player {
                     looper = looper,
                     awake = if (keepAwake) KeepAwake(context, log) else null,
                     pollInterval = positionPollInterval,
-                    streaming = streaming,
                     disconnectOnBack = disconnectOnBack,
                     connector = connector,
                     log = log,

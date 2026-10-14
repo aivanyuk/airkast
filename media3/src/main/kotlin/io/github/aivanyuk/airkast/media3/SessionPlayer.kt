@@ -15,6 +15,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Media
+import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
@@ -53,7 +54,6 @@ internal class SessionPlayer(
     looper: Looper,
     private val awake: KeepAwake?,
     private val pollInterval: Duration,
-    private val streaming: Boolean,
     private val disconnectOnBack: Boolean,
     private val connector: Connector,
     private val log: PlayerLog = PlayerLog(null),
@@ -494,7 +494,8 @@ internal class SessionPlayer(
         s: AirkastSession,
         media: MediaItem,
     ) {
-        val url = media.localConfiguration?.uri?.toString()
+        val configuration = media.localConfiguration
+        val url = configuration?.uri?.toString()
         if (url == null) {
             playback = Player.STATE_IDLE
             error =
@@ -511,7 +512,7 @@ internal class SessionPlayer(
         loadJob =
             scope.launch {
                 try {
-                    s.load(Media(url, startAt = startMs.milliseconds, streaming = streaming))
+                    s.load(Media(url, startMs.milliseconds, MediaFormat.of(url, configuration.mimeType)))
                     loaded = true
                     if (!wantsPlay) s.pause()
                 } catch (e: AirkastException) {

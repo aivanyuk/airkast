@@ -9,12 +9,69 @@ public class Media(
     public val url: String,
     public val startAt: Duration = Duration.ZERO,
     /**
-     * Loads the item as `streaming`, the default, rather than `file`. The LG reports what it has
-     * buffered, and reports and switches tracks ([AirkastSession.tracks]), only for a `streaming`
-     * item. See docs/compatibility.md.
+     * How the receiver loads the item, read from the URL's extension by default. A URL with no
+     * extension airkast knows reads as [MediaFormat.Hls], so a file served from such a URL is
+     * given [MediaFormat.File] here, or its MIME type through [MediaFormat.of].
      */
-    public val streaming: Boolean = true,
+    public val format: MediaFormat = MediaFormat.of(url),
 )
+
+/**
+ * How a receiver loads a [Media]: as an HLS stream, or as a file it downloads while it plays.
+ * New formats may join in a minor release. docs/compatibility.md has what each receiver plays.
+ */
+public enum class MediaFormat(
+    internal val wire: String,
+) {
+    /**
+     * An HLS playlist, loaded as `streaming`. The LG reports what it has buffered, and reports and
+     * switches tracks ([AirkastSession.tracks]), only for an item loaded this way.
+     */
+    Hls("streaming"),
+
+    /**
+     * A file the receiver downloads while it plays, loaded as `file`: MP4 or MOV video, or audio
+     * such as MP3, AAC or M4A. The receiver reports no tracks and no buffered ranges for it.
+     */
+    File("file"),
+    ;
+
+    public companion object {
+        private val HLS_TYPES =
+            setOf("application/vnd.apple.mpegurl", "application/x-mpegurl", "audio/mpegurl", "audio/x-mpegurl")
+        private val HLS_EXTENSIONS = setOf("m3u8", "m3u")
+        private val FILE_EXTENSIONS = setOf("mp4", "m4v", "mov", "m4a", "m4b", "mp3", "aac", "wav", "flac")
+
+        /**
+         * The format of [url]: from [mimeType] when it is HLS's or any `video/` or `audio/` type,
+         * as a media3 `MediaItem` or an HTTP `Content-Type` gives it, and from the extension of
+         * the URL's path otherwise. [Hls] when neither says.
+         */
+        public fun of(
+            url: String,
+            mimeType: String? = null,
+        ): MediaFormat = mimeType?.let(::ofMimeType) ?: ofPath(url) ?: Hls
+
+        private fun ofMimeType(mimeType: String): MediaFormat? {
+            val type = mimeType.substringBefore(';').trim().lowercase()
+            return when {
+                type in HLS_TYPES -> Hls
+                type.startsWith("video/") || type.startsWith("audio/") -> File
+                else -> null
+            }
+        }
+
+        private fun ofPath(url: String): MediaFormat? {
+            val name = url.substringBefore('#').substringBefore('?').substringAfterLast('/')
+            val extension = name.substringAfterLast('.', "").lowercase()
+            return when (extension) {
+                in HLS_EXTENSIONS -> Hls
+                in FILE_EXTENSIONS -> File
+                else -> null
+            }
+        }
+    }
+}
 
 /** What the receiver says it is doing. New states may join in a minor release. */
 public enum class PlaybackState { Loading, Playing, Paused, Stopped, Unknown }
@@ -26,7 +83,7 @@ public class PlaybackInfo(
     public val rate: Double,
     public val position: Duration?,
     public val duration: Duration?,
-    /** What the receiver has buffered. Empty unless the item was loaded as `streaming`. */
+    /** What the receiver has buffered. Empty unless the item is [MediaFormat.Hls]. */
     public val buffered: List<ClosedRange<Duration>>,
     public val seekable: List<ClosedRange<Duration>>,
     public val itemId: String?,

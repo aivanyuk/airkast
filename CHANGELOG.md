@@ -4,6 +4,21 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## Unreleased
+
+### Added
+
+- `Media.format` says whether the URL is an HLS stream or a file, such as MP4 video or MP3 or AAC
+  audio, and the receiver loads it that way. It is read from the URL's extension by default, and
+  `MediaFormat.of(url, mimeType)` reads it from a MIME type too. `AirkastPlayer` reads it from each
+  media item's MIME type, or from its URL.
+
+### Changed
+
+- `Media.streaming` is replaced by `Media.format`, and `AirkastPlayer.Builder.streaming` is
+  removed. A URL ending in a file's extension, such as `.mp4` or `.mp3`, now loads as a file
+  rather than as a stream; any other URL loads as HLS, as before.
+
 ## 0.4.0 - 2026-10-12
 
 ### Changed

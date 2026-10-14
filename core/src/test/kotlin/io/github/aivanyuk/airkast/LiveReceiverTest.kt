@@ -15,13 +15,21 @@ import kotlin.time.DurationUnit
 
 /**
  * Plays on a real receiver: `AIRKAST_RECEIVER=192.168.1.20 ./gradlew :core:test`. `AIRKAST_URL`
- * picks the stream, Apple's public test stream by default. Skipped without a receiver.
+ * picks the stream, Apple's public test stream by default; `AIRKAST_FILE_URL` and
+ * `AIRKAST_AUDIO_URL` pick the video and audio files, ExoPlayer's public test media by default.
+ * Skipped without a receiver.
  */
 class LiveReceiverTest {
     private val host = System.getenv("AIRKAST_RECEIVER").orEmpty()
     private val url =
         System.getenv("AIRKAST_URL")?.takeIf { it.isNotBlank() }
             ?: "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8"
+    private val fileUrl =
+        System.getenv("AIRKAST_FILE_URL")?.takeIf { it.isNotBlank() }
+            ?: "https://storage.googleapis.com/exoplayer-test-media-1/mp4/frame-counter-one-hour.mp4"
+    private val audioUrl =
+        System.getenv("AIRKAST_AUDIO_URL")?.takeIf { it.isNotBlank() }
+            ?: "https://storage.googleapis.com/exoplayer-test-media-0/play.mp3"
 
     @Test
     fun playsSeeksPausesAndStops() =
@@ -77,6 +85,51 @@ class LiveReceiverTest {
                 val without = session.tracks()
                 log("tracks without subtitles", without)
                 assertThat(without.filter { it.kind == TrackKind.Subtitles && !it.forced }).isEmpty()
+                session.stop()
+            }
+        }
+
+    /** A file loads as `file`: no tracks and no buffered ranges, and a pause reads as paused. */
+    @Test
+    fun playsSeeksAndPausesAFile() =
+        runBlocking {
+            assumeTrue("Set AIRKAST_RECEIVER to run against a real receiver", host.isNotBlank())
+            Airkast().connect(Receiver("live", host)).use { session ->
+                val media = Media(fileUrl, startAt = 30.seconds)
+                assertThat(media.format).isEqualTo(MediaFormat.File)
+                session.load(media)
+                withTimeout(30_000) { session.state.first { it == PlaybackState.Playing } }
+                delay(5_000)
+                val started = session.playbackInfo()
+                log("started", started)
+                assertThat(started.position!!).isAtLeast(29.seconds)
+
+                val landed = session.seek(2.minutes)
+                log("seek", landed)
+                assertThat(landed!!.toDouble(DurationUnit.SECONDS)).isWithin(1.0).of(120.0)
+                withTimeout(15_000) { session.state.first { it == PlaybackState.Playing } }
+
+                session.pause()
+                withTimeout(10_000) { session.state.first { it == PlaybackState.Paused } }
+                session.play()
+                withTimeout(10_000) { session.state.first { it == PlaybackState.Playing } }
+                log("tracks", session.tracks())
+                session.stop()
+            }
+        }
+
+    @Test
+    fun playsAnAudioFile() =
+        runBlocking {
+            assumeTrue("Set AIRKAST_RECEIVER to run against a real receiver", host.isNotBlank())
+            Airkast().connect(Receiver("live", host)).use { session ->
+                session.load(Media(audioUrl))
+                withTimeout(30_000) { session.state.first { it == PlaybackState.Playing } }
+                val started = session.playbackInfo()
+                delay(5_000)
+                val later = session.playbackInfo()
+                log("5 s later", later)
+                assertThat((later.position!! - started.position!!).toDouble(DurationUnit.SECONDS)).isWithin(1.5).of(5.0)
                 session.stop()
             }
         }
