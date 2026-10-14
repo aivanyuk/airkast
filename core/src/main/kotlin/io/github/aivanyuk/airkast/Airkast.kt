@@ -118,6 +118,9 @@ public class Airkast private constructor(
      * [format]: on a speaker or a soundbar, or on a TV or Mac that plays AirPlay audio
      * ([Receiver.audioCompatibility]). It pairs as [connect] does, and [ask] works the same way.
      * The receiver's NTP timing requests must reach this device over UDP, whatever [ntpTiming] says.
+     *
+     * [format] is the one input that differs from stream to stream, so it is a parameter here;
+     * how streams behave, such as [audioLatency], is the client's, on its builder.
      */
     public suspend fun connectAudio(
         receiver: Receiver,

@@ -519,7 +519,10 @@ internal class DefaultAudioStream private constructor(
             val packet = DatagramPacket(buffer, buffer.size)
             try {
                 socket.receive(packet)
-            } catch (_: IOException) {
+            } catch (e: IOException) {
+                // Closing the stream closes the socket; anything else leaves no way to answer the
+                // receiver's retransmit requests, so the stream ends.
+                if (!closed.get()) end(e)
                 return
             }
             val (first, count) = Rtp.retransmitRequest(buffer, packet.length) ?: continue
