@@ -80,7 +80,7 @@ internal class ControlConnection(
         }
         link.write(HttpMessage("$method $target $protocol", all, body).encode())
         val usual = socket.soTimeout
-        if (timeout != null) socket.soTimeout = timeout.inWholeMilliseconds.toInt()
+        if (timeout != null) socket.soTimeout = timeout.toSocketTimeout()
         val response =
             try {
                 read()
@@ -119,3 +119,6 @@ internal class LateReply(
     request: String,
     cause: SocketTimeoutException,
 ) : IOException("$request: no answer in time", cause)
+
+/** This as a socket timeout: whole milliseconds, at most `Int.MAX_VALUE`, a little under 25 days, for a longer or infinite one. */
+internal fun Duration.toSocketTimeout(): Int = inWholeMilliseconds.coerceIn(1, Int.MAX_VALUE.toLong()).toInt()

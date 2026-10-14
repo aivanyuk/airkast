@@ -195,7 +195,7 @@ internal object Opening {
         }
         val socket =
             connect(InetSocketAddress(receiver.host, receiver.port), options).apply {
-                soTimeout = options.requestTimeout.inWholeMilliseconds.toInt()
+                soTimeout = options.requestTimeout.toSocketTimeout()
                 tcpNoDelay = true
             }
         return ControlConnection(socket, identity, Log(options.logger, "control"))

@@ -26,8 +26,9 @@ import java.io.File
  *   store finds that directory, which Android creates when asked for it, on its first use and off
  *   the caller's thread.
  *
- * Building one does no I/O, so it may run on the main thread, in `Application.onCreate` or a
- * dependency graph. Build one for the app and share it:
+ * Building one touches no disk and no network, so it may run on the main thread, in
+ * `Application.onCreate` or a dependency graph. It asks the package manager for the app's label
+ * and the settings provider for `ANDROID_ID`, which both answer from memory. Build one for the app and share it:
  * `Airkast(context) { logger = Airkast.Logger.logcat() }`.
  */
 public fun Airkast(
