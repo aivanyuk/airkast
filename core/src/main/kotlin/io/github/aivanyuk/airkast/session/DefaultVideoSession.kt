@@ -106,37 +106,11 @@ internal class DefaultVideoSession private constructor(
         identity: SenderIdentity,
         sessionKey: ByteArray,
     ) {
-        val body =
-            BinaryPlist.encode(
-                mapOf(
-                    "deviceID" to identity.deviceId,
-                    "sessionUUID" to sessionId,
-                    "timingProtocol" to if (timing != null) "NTP" else "None",
-                    "isMultiSelectAirPlay" to true,
-                    "groupContainsGroupLeader" to false,
-                    "macAddress" to identity.deviceId,
-                    "model" to identity.model,
-                    "name" to identity.name,
-                    "osBuildVersion" to identity.osBuildVersion,
-                    "osName" to identity.osName,
-                    "osVersion" to identity.osVersion,
-                    "senderSupportsRelay" to false,
-                    "sourceVersion" to identity.sourceVersion,
-                    "statsCollectionEnabled" to false,
-                ) + (timing?.let { mapOf("timingPort" to it.port.toLong()) } ?: emptyMap()),
-            )
-        var base = control.exchange("SETUP", rtspUri, body = body, contentType = ControlConnection.BPLIST)
-        if (base.status == UNAUTHORIZED) {
-            control.digest = answer(base)
-            base = control.exchange("SETUP", rtspUri, body = body, contentType = ControlConnection.BPLIST)
-            if (base.status == UNAUTHORIZED) throw AirkastException.SecretRejected(Secret.Password)
-        }
-        base.requireSuccess("SETUP")
-        log.debug { "SETUP ${base.status} ${plist(base).keys}" }
+        val base = Opening.setUp(control, rtspUri, Opening.sessionBody(identity, sessionId, timing), options, log)
         val eventPort =
-            (plist(base)["eventPort"] as? Long)?.toInt()
-                ?: throw AirkastException.Rejected("SETUP without an event port", base.status)
-        val eventSocket = connectWithRetry(eventPort)
+            (base["eventPort"] as? Long)?.toInt()
+                ?: throw AirkastException.Rejected("SETUP without an event port", 200)
+        val eventSocket = Opening.connectEvents(receiver, eventPort, options, log)
         log.debug { "event channel connected to $eventPort from ${eventSocket.localPort}" }
         eventChannel = EventChannel(eventSocket, sessionKey, ::onMessage, ::onEventChannelClosed, eventLog)
 
@@ -165,8 +139,9 @@ internal class DefaultVideoSession private constructor(
                         ),
                     contentType = ControlConnection.BPLIST,
                 ).requireSuccess("SETUP stream")
-        streamId = ((plist(stream)["streams"] as? List<*>)?.firstOrNull() as? Map<*, *>)?.get("streamID") as? Long
-            ?: throw AirkastException.Rejected("SETUP stream without an ID", stream.status)
+        streamId =
+            ((Opening.plist(stream)["streams"] as? List<*>)?.firstOrNull() as? Map<*, *>)?.get("streamID") as? Long
+                ?: throw AirkastException.Rejected("SETUP stream without an ID", stream.status)
 
         if (options.keepAlive) {
             scope.launch {
@@ -183,39 +158,6 @@ internal class DefaultVideoSession private constructor(
             }
         }
         opened = TimeSource.Monotonic.markNow()
-    }
-
-    /**
-     * Answers the Digest challenge in a SETUP's 401 with the connect's password. Without one, it
-     * fails with what makes `Airkast.connect` ask for it.
-     */
-    private fun answer(reply: HttpMessage): Digest {
-        val challenge =
-            Digest.challenge(reply.header("WWW-Authenticate"))
-                ?: throw AirkastException.Rejected("SETUP", reply.status)
-        log.debug { "SETUP asks for a password" }
-        val password =
-            options.password
-                ?: throw AirkastException.PairingFailed(
-                    "The receiver asks for a password",
-                    credentialsRefused = false,
-                    passwordAsked = true,
-                )
-        return challenge.answer(password)
-    }
-
-    private fun connectWithRetry(port: Int): Socket {
-        var attempt = 0
-        while (true) {
-            try {
-                return connect(InetSocketAddress(receiver.host, port), options)
-            } catch (e: AirkastException.Unreachable) {
-                // The event port can refuse for a moment right after SETUP names it.
-                if (e.cause !is ConnectException || ++attempt >= 5) throw e
-                log.debug { "the event port refused, attempt $attempt" }
-                Thread.sleep(200)
-            }
-        }
     }
 
     override suspend fun load(item: Media) {
@@ -524,14 +466,8 @@ internal class DefaultVideoSession private constructor(
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
-    private fun HttpMessage.requireSuccess(request: String): HttpMessage {
-        if (status !in 200..299) throw AirkastException.Rejected(request, status)
-        return this
-    }
-
     companion object {
         private const val STREAM_TYPE = 130L
-        private const val UNAUTHORIZED = 401
         private const val URL_STREAM_CLIENT_TYPE = "A6B27562-B43A-4F2D-B75F-82391E250194"
         private val FEEDBACK_INTERVAL = 2.seconds
 
@@ -543,115 +479,26 @@ internal class DefaultVideoSession private constructor(
             identity: SenderIdentity,
             options: SessionOptions,
         ): AirkastSession {
-            val control = control(receiver, identity, options)
+            var paired: Paired? = null
             var timing: TimingResponder? = null
             var session: DefaultVideoSession? = null
             try {
-                val credentials = options.credentials
-                val sessionKey =
-                    if (credentials != null) PairVerify.verify(control, credentials) else TransientPairing.pair(control)
-                control.encrypt(
-                    Hkdf.sha512(sessionKey, "Control-Salt", "Control-Write-Encryption-Key"),
-                    Hkdf.sha512(sessionKey, "Control-Salt", "Control-Read-Encryption-Key"),
-                )
-                Log(options.logger, "pairing").debug { if (credentials != null) "verified" else "paired transiently" }
+                paired = Opening.pair(receiver, identity, options)
+                val control = paired.control
                 if (options.ntpTiming) {
                     timing = TimingResponder(control.localAddress, control.remoteAddress, Log(options.logger, "timing"))
                 }
                 session = DefaultVideoSession(receiver, options, control, timing)
-                session.start(identity, sessionKey)
+                session.start(identity, paired.sessionKey)
                 return session
             } catch (e: Exception) {
                 // A session that got as far as its event channel closes that too.
                 runCatching { session?.close() }
                 runCatching { timing?.close() }
-                runCatching { control.close() }
-                throw failure(e)
+                runCatching { paired?.control?.close() }
+                throw Opening.failure(e)
             }
         }
-
-        /**
-         * Starts pairing with [receiver] for [secret], showing a PIN if it is one, over the
-         * connection the pairing then finishes on.
-         */
-        fun startPairing(
-            receiver: Receiver,
-            identity: SenderIdentity,
-            options: SessionOptions,
-            secret: Secret,
-        ): SecretPairing {
-            val control = control(receiver, identity, options)
-            try {
-                return SecretPairing.start(control, secret)
-            } catch (e: Exception) {
-                runCatching { control.close() }
-                throw failure(e)
-            }
-        }
-
-        /** [SecretPairing.finish], failing as the rest of the API does. */
-        fun finishPairing(
-            pairing: SecretPairing,
-            code: String,
-        ): Credentials =
-            try {
-                pairing.finish(code)
-            } catch (e: Exception) {
-                throw failure(e)
-            }
-
-        private fun control(
-            receiver: Receiver,
-            identity: SenderIdentity,
-            options: SessionOptions,
-        ): ControlConnection {
-            Log(options.logger, "connect").debug {
-                "receiver ${receiver.model} srcvers ${receiver.sourceVersion} " +
-                    "features 0x${receiver.features.toString(16)} ${receiver.compatibility}"
-            }
-            val socket =
-                connect(InetSocketAddress(receiver.host, receiver.port), options).apply {
-                    soTimeout = options.requestTimeout.inWholeMilliseconds.toInt()
-                    tcpNoDelay = true
-                }
-            return ControlConnection(socket, identity, Log(options.logger, "control"))
-        }
-
-        private fun failure(e: Exception): AirkastException =
-            when (e) {
-                is AirkastException -> e
-                is LateReply -> AirkastException.Timeout(e.message.orEmpty())
-                is IOException -> AirkastException.Disconnected(e)
-                else -> AirkastException.UnexpectedReply(e)
-            }
-
-        /** A connected socket, or [AirkastException.Unreachable]. */
-        private fun connect(
-            address: InetSocketAddress,
-            options: SessionOptions,
-        ): Socket {
-            val socket =
-                try {
-                    options.socketFactory?.createSocket() ?: Socket()
-                } catch (e: IOException) {
-                    throw AirkastException.Unreachable(e)
-                }
-            try {
-                socket.connect(address, options.connectTimeout.inWholeMilliseconds.toInt())
-            } catch (e: IOException) {
-                runCatching { socket.close() }
-                throw AirkastException.Unreachable(e)
-            }
-            return socket
-        }
-
-        private fun plist(message: HttpMessage): Map<*, *> =
-            if (BinaryPlist.isPlist(message.body)) {
-                BinaryPlist.decode(message.body) as? Map<*, *>
-                    ?: emptyMap<Any, Any>()
-            } else {
-                emptyMap<Any, Any>()
-            }
 
         fun cmTime(time: Duration): Map<String, Any?> =
             mapOf("value" to time.inWholeMilliseconds, "timescale" to 1000L, "flags" to 1L, "epoch" to 0L)

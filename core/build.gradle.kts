@@ -10,9 +10,12 @@ dependencies {
 }
 
 tasks.test {
-    // The live tests play on a real receiver only when AIRKAST_RECEIVER names one.
+    // The live tests play on a real receiver only when AIRKAST_RECEIVER or AIRKAST_AUDIO_RECEIVER names one.
     environment("AIRKAST_RECEIVER", System.getenv("AIRKAST_RECEIVER") ?: "")
     environment("AIRKAST_URL", System.getenv("AIRKAST_URL") ?: "")
+    environment("AIRKAST_AUDIO_RECEIVER", System.getenv("AIRKAST_AUDIO_RECEIVER") ?: "")
+    environment("AIRKAST_AUDIO_RATE", System.getenv("AIRKAST_AUDIO_RATE") ?: "")
+    environment("AIRKAST_AUDIO_VOLUME", System.getenv("AIRKAST_AUDIO_VOLUME") ?: "")
     testLogging {
         events("failed")
         showStandardStreams = true

@@ -57,6 +57,43 @@ class ReceiverTest {
     }
 
     @Test
+    fun theSamsungSoundbarTakesAudioOnly() {
+        // Its `_airplay._tcp` record, read on 2026-10-14.
+        val soundbar =
+            receiver(
+                "features" to "0x445F8A00,0x1C340",
+                "flags" to "0x4",
+                "model" to "HW-Q990B",
+                "srcvers" to "366.0",
+                "acl" to "0",
+            )
+        assertThat(soundbar.compatibility).isEqualTo(Compatibility.NoVideo)
+        assertThat(soundbar.isSupported).isFalse()
+        assertThat(soundbar.audioCompatibility).isEqualTo(Compatibility.Supported)
+        assertThat(soundbar.isAudioSupported).isTrue()
+    }
+
+    @Test
+    fun audioPairsAsVideoDoes() {
+        val lg = receiver("features" to lgFeatures, "flags" to "0x244")
+        assertThat(lg.audioCompatibility).isEqualTo(Compatibility.Supported)
+        val soundbar = "0x445F8A00,0x1C340"
+        assertThat(receiver("features" to soundbar, "flags" to "0x8").audioCompatibility)
+            .isEqualTo(Compatibility.NeedsPin)
+        val password = receiver("features" to soundbar, "pw" to "true")
+        assertThat(password.audioCompatibility).isEqualTo(Compatibility.NeedsPassword)
+        assertThat(password.isAudioSupported).isTrue()
+        assertThat(password.secret).isEqualTo(Secret.Password)
+        assertThat(receiver("features" to soundbar, "act" to "2").audioCompatibility)
+            .isEqualTo(Compatibility.AccessRestricted)
+        // Bit 9 alone: AirPlay audio without system or CoreUtils pairing, as an AirPlay 1 speaker.
+        assertThat(receiver("features" to "0x200").audioCompatibility).isEqualTo(Compatibility.NoTransientPairing)
+        // Video bits without bit 9.
+        assertThat(receiver("features" to "0x0,0x30000").audioCompatibility).isEqualTo(Compatibility.NoAudio)
+        assertThat(receiver().audioCompatibility).isEqualTo(Compatibility.Unknown)
+    }
+
+    @Test
     fun valuesCompareByContent() {
         val tv = Receiver("tv", "10.0.0.2", properties = mapOf("features" to lgFeatures))
         assertThat(tv).isEqualTo(Receiver("tv", "10.0.0.2", properties = mapOf("features" to lgFeatures)))

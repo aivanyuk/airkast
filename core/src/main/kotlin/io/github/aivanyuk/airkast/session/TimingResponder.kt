@@ -40,6 +40,26 @@ internal class TimingResponder(
         }
     }
 
+    /**
+     * Sends the receiver's timing [port] a request of the sender's own, whose answer it drops. A
+     * stateful firewall in front of the sender, as WSL's or a desktop's, then lets the receiver's
+     * requests from that port in, where it drops them otherwise.
+     */
+    fun reach(port: Int) {
+        val request =
+            ByteBuffer
+                .allocate(PACKET)
+                .put(0x80.toByte())
+                .put(0xD2.toByte())
+                .putShort(7)
+                .putInt(0)
+                .putLong(0)
+                .putLong(0)
+                .putLong(ntpNow())
+                .array()
+        runCatching { socket.send(DatagramPacket(request, request.size, InetSocketAddress(receiver, port))) }
+    }
+
     override fun close() = socket.close()
 
     companion object {
@@ -63,10 +83,22 @@ internal class TimingResponder(
                     putLong(now)
                 }.array()
 
-        fun ntpNow(): Long {
-            val millis = System.currentTimeMillis()
-            val seconds = millis / 1000 + NTP_EPOCH_OFFSET
-            val fraction = ((millis % 1000) shl 32) / 1000
+        /**
+         * Now in NTP's format, seconds since 1900 above a 32-bit fraction: the wall clock when the
+         * class loaded, moved on by the monotonic clock, so it never jumps and resolves below a
+         * millisecond. Timing replies and an audio stream's sync packets read the same clock.
+         */
+        fun ntpNow(): Long = ntp(EPOCH_NANOS + (System.nanoTime() - NANOS))
+
+        /** [ntpNow] at [nanoTime], a reading of `System.nanoTime()`. */
+        fun ntpAt(nanoTime: Long): Long = ntp(EPOCH_NANOS + (nanoTime - NANOS))
+
+        private val NANOS = System.nanoTime()
+        private val EPOCH_NANOS = System.currentTimeMillis() * 1_000_000
+
+        private fun ntp(epochNanos: Long): Long {
+            val seconds = epochNanos / 1_000_000_000 + NTP_EPOCH_OFFSET
+            val fraction = ((epochNanos % 1_000_000_000) shl 32) / 1_000_000_000
             return (seconds shl 32) or fraction
         }
     }
