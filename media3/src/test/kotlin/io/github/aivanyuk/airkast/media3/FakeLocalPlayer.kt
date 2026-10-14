@@ -22,6 +22,15 @@ internal class FakeLocalPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         private set
     var released = false
         private set
+
+    /** Plays on to [ms], as time passing would move it. */
+    fun moveTo(ms: Long) {
+        positionMs = ms
+        invalidateState()
+    }
+
+    /** Every seek, as (index, position in ms). */
+    val seeks = mutableListOf<Pair<Int, Long>>()
     private var wantsPlay = false
     private var playback = Player.STATE_IDLE
 
@@ -72,6 +81,7 @@ internal class FakeLocalPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     ): ListenableFuture<*> {
         if (mediaItemIndex != C.INDEX_UNSET) index = mediaItemIndex
         this.positionMs = positionMs
+        seeks += index to positionMs
         return Futures.immediateVoidFuture()
     }
 

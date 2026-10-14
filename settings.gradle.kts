@@ -20,6 +20,7 @@ rootProject.name = "airkast"
 include(":core")
 include(":android")
 include(":media3")
+include(":exoplayer")
 
 // The reference apps over the modules above, in Compose and in views, and the integration they
 // share. Not published.

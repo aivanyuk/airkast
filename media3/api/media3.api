@@ -11,6 +11,7 @@ public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer 
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public fun <init> (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast;)V
 	public final fun build ()Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
+	public final fun getAudioRoute ()Lio/github/aivanyuk/airkast/AudioRoute;
 	public final fun getDisconnectOnBack ()Z
 	public final fun getEventListener ()Lkotlin/jvm/functions/Function1;
 	public final fun getKeepAwake ()Z
@@ -18,6 +19,8 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public final fun getLogger ()Lio/github/aivanyuk/airkast/Airkast$Logger;
 	public final fun getLooper ()Landroid/os/Looper;
 	public final fun getPositionPollInterval-UwyO8pc ()J
+	public final fun getStreamsAudio ()Lkotlin/jvm/functions/Function1;
+	public final fun setAudioRoute (Lio/github/aivanyuk/airkast/AudioRoute;)V
 	public final fun setDisconnectOnBack (Z)V
 	public final fun setEventListener (Lkotlin/jvm/functions/Function1;)V
 	public final fun setKeepAwake (Z)V
@@ -25,6 +28,7 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public final fun setLogger (Lio/github/aivanyuk/airkast/Airkast$Logger;)V
 	public final fun setLooper (Landroid/os/Looper;)V
 	public final fun setPositionPollInterval-LRDsOJo (J)V
+	public final fun setStreamsAudio (Lkotlin/jvm/functions/Function1;)V
 }
 
 public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
@@ -53,6 +57,12 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$Id
 	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/AirkastException;)V
 	public final fun getFailure ()Lio/github/aivanyuk/airkast/AirkastException;
 	public final fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$Streaming : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
+	public fun <init> (Lio/github/aivanyuk/airkast/AudioStream;)V
+	public final fun getStream ()Lio/github/aivanyuk/airkast/AudioStream;
 	public fun toString ()Ljava/lang/String;
 }
 

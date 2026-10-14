@@ -14,6 +14,8 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
+import io.github.aivanyuk.airkast.AudioRoute
+import io.github.aivanyuk.airkast.AudioStream
 import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
@@ -35,6 +37,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -56,6 +59,9 @@ internal class SessionPlayer(
     private val pollInterval: Duration,
     private val disconnectOnBack: Boolean,
     private val connector: Connector,
+    private val audioRoute: AudioRoute? = null,
+    private val streamsAudio: (Receiver) -> Boolean = { false },
+    private val audioConnector: AudioConnector? = null,
     private val log: PlayerLog = PlayerLog(null),
     private val eventListener: ((Event) -> Unit)? = null,
 ) : SimpleBasePlayer(looper),
@@ -79,8 +85,12 @@ internal class SessionPlayer(
     private var sessionJob: Job? = null
     private var loadJob: Job? = null
 
-    /** When the session attached, which a cast's length counts from. */
+    /** When the session attached, or the stream opened, which a cast's length counts from. */
     private var attachedAt: TimeMark? = null
+
+    /** The stream a cast to a speaker plays the local player's audio on, through [audioRoute]. */
+    private var streaming: AudioStream? = null
+    private var streamJob: Job? = null
 
     /** The local player's side, when the player has one: see [HandoffPlayer]. */
     internal var handoff: Handoff? = null
@@ -303,6 +313,12 @@ internal class SessionPlayer(
         lastReceiver = receiver
         log.debug { if (pairWith != null) "connecting, pairing with a ${pairWith.name.lowercase()}" else "connecting" }
         mutableConnection.value = Connection.Connecting(receiver)
+        val route = audioRoute
+        val streams = audioConnector
+        if (route != null && streams != null && streamsAudio(receiver)) {
+            connecting = scope.launch { stream(receiver, pairWith, route, streams) }
+            return
+        }
         connecting =
             scope.launch {
                 val s =
@@ -326,6 +342,62 @@ internal class SessionPlayer(
                 changed()
                 handoff?.attached()
             }
+    }
+
+    /** Opens a stream to [receiver] and sends the local player's audio to it, through [route]. */
+    private suspend fun stream(
+        receiver: Receiver,
+        pairWith: Secret?,
+        route: AudioRoute,
+        streams: AudioConnector,
+    ) {
+        val stream =
+            try {
+                streams.connect(receiver, pairWith) { secret -> ask(receiver, secret) }
+            } catch (e: AirkastException) {
+                connecting = null
+                log.debug { "the connect failed: $e" }
+                report(Event.CastFailed(receiver, e))
+                mutableConnection.value = Connection.Idle(receiver, e)
+                changed()
+                return
+            }
+        connecting = null
+        streaming = stream
+        attachedAt = TimeSource.Monotonic.markNow()
+        streamJob =
+            scope.launch {
+                val end = stream.events.first { it is ReceiverEvent.Disconnected } as ReceiverEvent.Disconnected
+                if (streaming !== stream) return@launch
+                val failure = AirkastException.Disconnected(end.cause)
+                stopStreaming(EndReason.Lost, failure)
+                mutableConnection.value = Connection.Idle(receiver, failure)
+                changed()
+            }
+        route.attach(stream)
+        mutableConnection.value = Connection.Streaming(stream)
+        log.info { "cast started, streaming audio" }
+        report(Event.CastStarted(receiver))
+        handoff?.rerouted(stream)
+        changed()
+    }
+
+    /** Ends a cast to a speaker: the local player's audio comes back to the phone, and the stream closes. */
+    private fun stopStreaming(
+        reason: EndReason,
+        failure: AirkastException? = null,
+    ) {
+        val stream = streaming ?: return
+        streaming = null
+        streamJob?.cancel()
+        streamJob = null
+        val lasted = attachedAt?.elapsedNow() ?: Duration.ZERO
+        attachedAt = null
+        log.info { "cast ended ($reason) after ${lasted.inWholeMilliseconds} ms" }
+        report(Event.CastEnded(stream.receiver, reason, lasted, failure))
+        audioRoute?.attach(null)
+        handoff?.rerouted(null)
+        stream.close()
     }
 
     private suspend fun ask(
@@ -403,6 +475,7 @@ internal class SessionPlayer(
         stop: Boolean,
         reason: EndReason,
     ) {
+        stopStreaming(reason)
         val s = attached ?: return
         ended(s, reason, null)
         val mine = s === owned
@@ -707,7 +780,11 @@ internal class SessionPlayer(
     }
 
     private fun hold() {
-        awake?.hold(attached != null && (playback == Player.STATE_BUFFERING || playback == Player.STATE_READY))
+        // A stream's keepalive and packets go on while the local player pauses, as a session's do.
+        awake?.hold(
+            streaming != null ||
+                (attached != null && (playback == Player.STATE_BUFFERING || playback == Player.STATE_READY)),
+        )
     }
 
     private fun changed() {
