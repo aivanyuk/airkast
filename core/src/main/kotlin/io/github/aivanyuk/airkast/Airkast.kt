@@ -38,8 +38,9 @@ public class Airkast private constructor(
     /**
      * How long a connect waits for the receiver to take the session: a Mac or an Apple TV asks its
      * user whether to allow a sender it has not seen, and answers once they have. A minute by
-     * default. A sender keeps its [SenderIdentity.deviceId] across launches so the receiver asks
-     * once.
+     * default. It replaces [requestTimeout] for the base SETUP alone, so one shorter than
+     * [requestTimeout] gives up on SETUP sooner than on any other request. A sender keeps its
+     * [SenderIdentity.deviceId] across launches so the receiver asks once.
      */
     public val approvalTimeout: Duration = builder.approvalTimeout
 
