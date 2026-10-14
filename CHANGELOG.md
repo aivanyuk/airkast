@@ -4,7 +4,7 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
-## Unreleased
+## 0.5.0 - 2026-10-14
 
 ### Added
 
@@ -28,7 +28,6 @@ caller sees adds its line under "Unreleased".
   new state `Connection.Streaming` says so, the device volume is the speaker's, so the phone's
   volume keys set it, and the speaker is told what plays. `AudioRoute` is the interface in
   `airkast-core` that a player of the app's own implements.
-
 - `Airkast.Builder.approvalTimeout`, a minute by default: how long a connect waits for the
   receiver to take the session, while a Mac or an Apple TV asks its user to allow the sender.
 - `SenderIdentity.deviceIdFrom(seed)` makes a sender ID that is the same for the same seed.

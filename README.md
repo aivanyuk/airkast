@@ -57,16 +57,16 @@ airkast is on Maven Central:
 
 ```kotlin
 dependencies {
-    implementation("io.github.aivanyuk:airkast-android:0.4.0")
-    implementation("io.github.aivanyuk:airkast-media3:0.4.0")
+    implementation("io.github.aivanyuk:airkast-android:0.5.0")
+    implementation("io.github.aivanyuk:airkast-media3:0.5.0")
     // For speakers, with ExoPlayer:
-    implementation("io.github.aivanyuk:airkast-exoplayer:0.4.0")
+    implementation("io.github.aivanyuk:airkast-exoplayer:0.5.0")
 }
 ```
 
 | Artifact | What it contains | Add it when |
 | --- | --- | --- |
-| `airkast-core` | Connecting, pairing and the session's commands and events. Plain Kotlin, no Android. | You target a desktop JVM. The other two artifacts include it. |
+| `airkast-core` | Connecting, pairing and the session's commands and events. Plain Kotlin, no Android. | You target a desktop JVM. The other artifacts include it. |
 | `airkast-android` | Receiver discovery, Android 17's local network permission, binding connections to the receiver's Wi-Fi, and `Airkast(context)`, a client with Android defaults. | You target Android. |
 | `airkast-media3` | `AirkastPlayer`, a media3 `Player` that runs a cast, and `AirkastSessionService`. | Your Android app uses media3. |
 | `airkast-exoplayer` | `AirkastAudioSink`, an ExoPlayer `AudioSink` that sends ExoPlayer's audio to a speaker. | Your app plays on speakers through ExoPlayer. An app with another player writes to an `AudioStream` itself. |
