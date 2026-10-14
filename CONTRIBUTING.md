@@ -84,7 +84,8 @@ changes its row there in the same PR. A PR labelled `skip-review` is left alone.
 - **No new runtime dependency** in `airkast-core` beyond the Kotlin standard library and
   kotlinx-coroutines. `airkast-android` adds only the Android platform. `airkast-media3` adds
   media3-common, media3-session and kotlinx-coroutines-android, and uses media3's unstable API
-  only in internal classes.
+  only in internal classes. `airkast-exoplayer` adds media3-exoplayer; its public sink is an
+  ExoPlayer `AudioSink`, which media3 marks unstable, since an ExoPlayer takes no other kind.
 
 ## Compatibility floors
 
@@ -96,7 +97,7 @@ The build enforces these, and [docs/compatibility.md](docs/compatibility.md) exp
   sits behind a `Build.VERSION.SDK_INT` check.
 - Callers need Kotlin 2.2 or later: the code compiles at language and API version 2.2, against
   kotlin-stdlib 2.2.21 and kotlinx-coroutines 1.10.2.
-- `airkast-media3` compiles against media3 1.11.1.
+- `airkast-media3` and `airkast-exoplayer` compile against media3 1.11.1.
 
 Raising a floor is a breaking change ([releasing](docs/releasing.md#what-counts-as-a-break)).
 

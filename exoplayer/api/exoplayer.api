@@ -1,0 +1,19 @@
+public final class io/github/aivanyuk/airkast/exoplayer/AirkastAudioSink : androidx/media3/exoplayer/audio/ForwardingAudioSink, io/github/aivanyuk/airkast/AudioRoute {
+	public fun <init> (Landroid/content/Context;)V
+	public fun <init> (Landroidx/media3/exoplayer/audio/AudioSink;)V
+	public fun attach (Lio/github/aivanyuk/airkast/AudioStream;)V
+	public fun configure (Landroidx/media3/exoplayer/audio/AudioSink$AudioSinkConfig;)V
+	public fun flush ()V
+	public fun getCurrentPositionUs (Z)J
+	public fun getFormatSupport (Landroidx/media3/common/Format;)I
+	public fun handleBuffer (Ljava/nio/ByteBuffer;JI)Z
+	public fun hasPendingData ()Z
+	public fun isEnded ()Z
+	public fun pause ()V
+	public fun play ()V
+	public fun playToEndOfStream ()V
+	public final fun renderersFactory (Landroid/content/Context;)Landroidx/media3/exoplayer/RenderersFactory;
+	public fun reset ()V
+	public fun supportsFormat (Landroidx/media3/common/Format;)Z
+}
+

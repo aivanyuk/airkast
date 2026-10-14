@@ -6,6 +6,8 @@ import androidx.media3.common.Player
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
+import io.github.aivanyuk.airkast.AudioRoute
+import io.github.aivanyuk.airkast.AudioStream
 import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
@@ -32,6 +34,8 @@ import kotlin.time.Duration.Companion.seconds
  *
  * With a [Builder.localPlayer], it plays on the phone too: the app's own player plays until a cast
  * starts and takes the item back when it ends, and a `MediaSession` over this player drives both.
+ * With a [Builder.audioRoute] as well, [connect] plays on a speaker: the local player keeps playing
+ * and decoding, and its audio goes to the speaker through an [AudioStream] ([Connection.Streaming]).
  *
  * Call it on its application looper, as any `Player`.
  */
@@ -45,7 +49,9 @@ public interface AirkastPlayer : Player {
 
     /**
      * Connects to [receiver] and plays the media item on it. A cast to another receiver ends first,
-     * and the item moves to [receiver] at the position it reached. A receiver that asks for a PIN
+     * and the item moves to [receiver] at the position it reached. A receiver that
+     * [Builder.streamsAudio] picks, a speaker by default, takes the local player's audio instead,
+     * through the [Builder.audioRoute], and the local player plays on. A receiver that asks for a PIN
      * ([Compatibility.NeedsPin]) or a password ([Compatibility.NeedsPassword]), or any receiver
      * when [pairWith] is set, pairs first unless it paired before: [connection] turns
      * [Connection.AwaitingSecret] until [enterSecret].
@@ -81,7 +87,7 @@ public interface AirkastPlayer : Player {
      */
     public var session: AirkastSession?
 
-    /** Where a cast stands: a `when` over the four states is exhaustive. */
+    /** Where a cast stands: a `when` over the five states is exhaustive. */
     public sealed interface Connection {
         /**
          * No session. [failure] says why the last cast to [receiver] ended, when it did not end
@@ -118,6 +124,16 @@ public interface AirkastPlayer : Player {
         ) : Connection {
             override fun toString(): String = "Connected(receiver=${session.receiver.name})"
         }
+
+        /**
+         * The local player's audio plays on [stream]'s receiver, through the [Builder.audioRoute]:
+         * a cast to a speaker. The local player drives it, and the device volume is the receiver's.
+         */
+        public class Streaming(
+            public val stream: AudioStream,
+        ) : Connection {
+            override fun toString(): String = "Streaming(receiver=${stream.receiver.name})"
+        }
     }
 
     /**
@@ -135,7 +151,10 @@ public interface AirkastPlayer : Player {
     public sealed interface Event {
         public val receiver: Receiver
 
-        /** A session attached, from [connect] or set by hand as [session], and the player plays on [receiver]. */
+        /**
+         * A session attached, from [connect] or set by hand as [session], and the player plays on
+         * [receiver]; or a [connect] opened a stream to it, and the local player's audio plays there.
+         */
         public class CastStarted(
             override val receiver: Receiver,
         ) : Event {
@@ -246,11 +265,31 @@ public interface AirkastPlayer : Player {
          */
         public var localPlayer: Player? = null
 
+        /**
+         * Where the [localPlayer]'s audio goes for a cast to a speaker: [connect] attaches the
+         * [AudioStream] it opens, and detaches it when the cast ends. `AirkastAudioSink` from
+         * airkast-exoplayer is one for an `ExoPlayer`. Null, the default, casts only to receivers
+         * that fetch the media item's URL. It needs a [localPlayer].
+         */
+        public var audioRoute: AudioRoute? = null
+
+        /**
+         * Whether [connect] streams the local player's audio to a receiver, rather than handing it
+         * the media item's URL. With an [audioRoute], a receiver that plays no URL but plays audio:
+         * a speaker or a soundbar. A music app that plays what a TV cannot fetch, such as local
+         * files or protected streams, streams to TVs too with `{ it.isAudioSupported }`.
+         */
+        public var streamsAudio: (Receiver) -> Boolean = { !it.isSupported && it.isAudioSupported }
+
         /** Opens the sessions [connect] asks for; tests replace it. */
         internal var connector: Connector = airkast.connector()
 
+        /** Opens the audio streams [connect] asks for; tests replace it. */
+        internal var audioConnector: AudioConnector = airkast.audioConnector()
+
         public fun build(): AirkastPlayer {
             require(positionPollInterval.isPositive()) { "The poll interval must be positive" }
+            require(audioRoute == null || localPlayer != null) { "An audio route needs the local player it belongs to" }
             val log = PlayerLog(logger)
             val remote =
                 SessionPlayer(
@@ -259,6 +298,9 @@ public interface AirkastPlayer : Player {
                     pollInterval = positionPollInterval,
                     disconnectOnBack = disconnectOnBack,
                     connector = connector,
+                    audioRoute = audioRoute,
+                    streamsAudio = streamsAudio,
+                    audioConnector = audioConnector,
                     log = log,
                     eventListener = eventListener,
                 )
@@ -287,6 +329,21 @@ internal fun interface Connector {
         ask: suspend (Secret) -> String,
     ): AirkastSession
 }
+
+/** How [AirkastPlayer.connect] opens a stream to a speaker: pairing first when asked to, then connecting. */
+internal fun interface AudioConnector {
+    suspend fun connect(
+        receiver: Receiver,
+        pairWith: Secret?,
+        ask: suspend (Secret) -> String,
+    ): AudioStream
+}
+
+internal fun Airkast.audioConnector() =
+    AudioConnector { receiver, pairWith, ask ->
+        if (pairWith != null && credentialStore.get(receiver) == null) pair(receiver, pairWith) { ask(pairWith) }
+        connectAudio(receiver, ask = ask)
+    }
 
 internal fun Airkast.connector() =
     Connector { receiver, pairWith, ask ->
