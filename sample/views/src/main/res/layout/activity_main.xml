@@ -100,9 +100,65 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="textUri|textMultiLine"
-                android:maxLines="3"
-                android:text="@string/default_url" />
+                android:maxLines="3" />
         </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.chip.ChipGroup
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/sample_stream"
+                style="@style/Widget.Material3.Chip.Assist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/sample_stream" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/sample_video"
+                style="@style/Widget.Material3.Chip.Assist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/sample_video" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/sample_audio"
+                style="@style/Widget.Material3.Chip.Assist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/sample_audio" />
+        </com.google.android.material.chip.ChipGroup>
+
+        <!-- How the item loads: as its URL says, the default, or as picked for a URL that says nothing. -->
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/formats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/format_auto"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/format_hls"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/format_hls" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/format_file"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/format_file" />
+        </com.google.android.material.chip.ChipGroup>
 
         <Button
             android:id="@+id/play_here"
