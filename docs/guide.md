@@ -30,6 +30,9 @@ app and share it.
 On Android, `Airkast(context)` from `airkast-android` builds a client with Android defaults:
 
 - It names the sender after your app's label. The TV shows this name.
+- It gives the sender an ID that stays the same across launches, derived from the device's
+  `ANDROID_ID` and your app's package, so a Mac or an Apple TV asks its user once whether to allow
+  it. The ID tells a receiver nothing about either, and changes with a factory reset.
 - It fails a connection at once with `AirkastException.NotPermitted` when the app lacks Android
   17's local network permission
   (see [Android 17's local network permission](#android-17s-local-network-permission)).
@@ -57,7 +60,7 @@ import io.github.aivanyuk.airkast.android.logcat
 import kotlin.time.Duration.Companion.seconds
 
 val airkast = Airkast(context) {
-    identity = SenderIdentity(name = "Living room remote")
+    identity = SenderIdentity(name = "Living room remote", deviceId = identity.deviceId)
     requestTimeout = 3.seconds
     logger = Airkast.Logger.logcat()
     credentialStore = MyKeystoreStore(context)
@@ -66,9 +69,10 @@ val airkast = Airkast(context) {
 
 | Property | Default | What it does |
 | --- | --- | --- |
-| `identity` | `SenderIdentity()`; the app's label with `Airkast(context)` | What the sender tells the receiver about itself. A TV shows its `name`. |
+| `identity` | `SenderIdentity()`, with a random `deviceId`; the app's label and an ID kept across launches with `Airkast(context)` | What the sender tells the receiver about itself. A TV shows its `name`. A Mac or an Apple TV asks its user to allow each `deviceId` it has not seen, so keep `identity.deviceId` when you set a new identity, as the example does. `SenderIdentity.deviceIdFrom(seed)` makes one from a seed your app keeps. |
 | `connectTimeout` | 5 seconds | How long opening a connection may take. |
 | `requestTimeout` | 5 seconds | How long the receiver may take to answer a request. |
+| `approvalTimeout` | 1 minute | How long a connect waits for the receiver to take the session. A Mac asks its user whether to allow a sender it has not seen, and answers only then. Past this, the connect fails with `AirkastException.Timeout`. |
 | `loadTimeout` | 10 seconds | How long a `load` waits for the receiver to take the item. |
 | `keepAlive` | `true` | Sends a keepalive request every two seconds, as Apple's senders do. |
 | `ntpTiming` | `true` | Answers the receiver's clock-sync (NTP) requests. The receiver must be able to reach the sender over UDP. A Mac rejects a session without it. An audio stream always answers them. |

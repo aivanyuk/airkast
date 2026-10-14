@@ -29,16 +29,27 @@ caller sees adds its line under "Unreleased".
   volume keys set it, and the speaker is told what plays. `AudioRoute` is the interface in
   `airkast-core` that a player of the app's own implements.
 
+- `Airkast.Builder.approvalTimeout`, a minute by default: how long a connect waits for the
+  receiver to take the session, while a Mac or an Apple TV asks its user to allow the sender.
+- `SenderIdentity.deviceIdFrom(seed)` makes a sender ID that is the same for the same seed.
+
 ### Changed
 
+- `Airkast(context)` keeps the sender's `deviceId` across launches, derived from the device's
+  `ANDROID_ID` and the app's package, where it made a new one each time the app started. A Mac
+  asks its user to allow a sender once, not after every launch.
 - `AirkastPlayer.Connection` has a fifth state, `Streaming`, so a `when` over it needs a branch
   for it.
 - The NTP timing replies read a monotonic clock, to the nanosecond, where they read the wall
   clock to the millisecond.
-
 - `Media.streaming` is replaced by `Media.format`, and `AirkastPlayer.Builder.streaming` is
   removed. A URL ending in a file's extension, such as `.mp4` or `.mp3`, now loads as a file
   rather than as a stream; any other URL loads as HLS, as before.
+
+### Fixed
+
+- The first cast to a Mac after the app started failed with `Timeout` while the Mac asked its
+  user to allow the sender: the base SETUP gave up after `requestTimeout`.
 
 ## 0.4.0 - 2026-10-12
 
