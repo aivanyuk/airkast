@@ -1,8 +1,10 @@
 package io.github.aivanyuk.airkast
 
 import io.github.aivanyuk.airkast.internal.Poko
+import io.github.aivanyuk.airkast.session.DefaultAudioStream
 import io.github.aivanyuk.airkast.session.DefaultVideoSession
 import io.github.aivanyuk.airkast.session.Log
+import io.github.aivanyuk.airkast.session.Opening
 import io.github.aivanyuk.airkast.session.SessionOptions
 import io.github.aivanyuk.airkast.session.report
 import kotlinx.coroutines.CancellationException
@@ -45,6 +47,14 @@ public class Airkast private constructor(
      * stalls SETUP. The LG CX plays either way.
      */
     public val ntpTiming: Boolean = builder.ntpTiming
+
+    /**
+     * How far ahead of a receiver's output an [AudioStream] sends: the time from [AudioStream.play]
+     * to the first sound, and how long a gap on the network can be before the receiver runs dry.
+     * One second by default, between the quarter second receivers take at least and the two
+     * seconds they buffer at most.
+     */
+    public val audioLatency: Duration = builder.audioLatency
 
     /**
      * Picks the socket factory for the connections to a receiver, or null for the platform's
@@ -101,7 +111,26 @@ public class Airkast private constructor(
     public suspend fun connect(
         receiver: Receiver,
         ask: (suspend (Secret) -> String)? = null,
-    ): AirkastSession {
+    ): AirkastSession = open(receiver, ask) { options -> DefaultVideoSession.open(receiver, identity, options) }
+
+    /**
+     * Pairs with [receiver] and opens an [AudioStream] that plays the PCM the app writes, in
+     * [format]: on a speaker or a soundbar, or on a TV or Mac that plays AirPlay audio
+     * ([Receiver.audioCompatibility]). It pairs as [connect] does, and [ask] works the same way.
+     * The receiver's NTP timing requests must reach this device over UDP, whatever [ntpTiming] says.
+     */
+    public suspend fun connectAudio(
+        receiver: Receiver,
+        format: PcmFormat = PcmFormat(),
+        ask: (suspend (Secret) -> String)? = null,
+    ): AudioStream = open(receiver, ask) { options -> DefaultAudioStream.open(receiver, identity, options, format) }
+
+    /** What [connect] and [connectAudio] share: the pairing, the password, and their events. */
+    private suspend fun <T : AutoCloseable> open(
+        receiver: Receiver,
+        ask: (suspend (Secret) -> String)?,
+        open: (SessionOptions) -> T,
+    ): T {
         val log = Log(logger, "connect")
         val start = TimeSource.Monotonic.markNow()
         // The user's typing, left out of how long the connect took.
@@ -123,7 +152,7 @@ public class Airkast private constructor(
             val options = options(receiver, credentials)
             val session =
                 try {
-                    opening { DefaultVideoSession.open(receiver, identity, options) }
+                    opening { open(options) }
                 } catch (e: AirkastException) {
                     if (ask == null || !asksForPassword(e)) throw e
                     log.debug { "the receiver asks for its password when the session starts" }
@@ -134,7 +163,7 @@ public class Airkast private constructor(
                         } finally {
                             asking += mark.elapsedNow()
                         }
-                    opening { DefaultVideoSession.open(receiver, identity, options.withPassword(password)) }.also {
+                    opening { open(options.withPassword(password)) }.also {
                         keep(receiver, credentials, password, it)
                     }
                 }
@@ -169,7 +198,7 @@ public class Airkast private constructor(
         receiver: Receiver,
         credentials: Credentials?,
         password: String,
-        session: AirkastSession,
+        session: AutoCloseable,
     ) {
         if (credentials == null) return
         try {
@@ -199,10 +228,10 @@ public class Airkast private constructor(
         val credentials =
             try {
                 val options = options(receiver, null)
-                opening { DefaultVideoSession.startPairing(receiver, identity, options, secret) }.use { pairing ->
+                opening { Opening.startPairing(receiver, identity, options, secret) }.use { pairing ->
                     log.debug { if (secret == Secret.Pin) "the receiver shows a PIN" else "pairing with a password" }
                     val code = ask()
-                    withContext(Dispatchers.IO) { DefaultVideoSession.finishPairing(pairing, code) }
+                    withContext(Dispatchers.IO) { Opening.finishPairing(pairing, code) }
                 }
             } catch (e: AirkastException) {
                 log.error(e) { "pairing failed" }
@@ -230,6 +259,7 @@ public class Airkast private constructor(
             loadTimeout = loadTimeout,
             keepAlive = keepAlive,
             ntpTiming = ntpTiming,
+            audioLatency = audioLatency,
             socketFactory = factory,
             logger = logger,
             eventListener = eventListener,
@@ -240,8 +270,8 @@ public class Airkast private constructor(
     /**
      * Where the client's debugging lines go: `Airkast { logger = Airkast.Logger.println() }`, or
      * `Airkast.Logger.logcat()` from `airkast-android`. The `tag` says which part wrote a line:
-     * `connect`, `pairing`, `session`, `control` (the requests to the receiver), `events` (what the
-     * receiver sends), `timing`, `player` (`AirkastPlayer`) or `discovery` (`ReceiverDiscovery`).
+     * `connect`, `pairing`, `session`, `audio` (an [AudioStream]), `control` (the requests to the
+     * receiver), `events` (what the receiver sends), `timing`, `player` (`AirkastPlayer`) or `discovery` (`ReceiverDiscovery`).
      * More may join.
      *
      * A line comes on the thread that did the work: the caller's, an I/O thread, or the thread that
@@ -306,7 +336,7 @@ public class Airkast private constructor(
         public val receiver: Receiver
 
         /**
-         * [Airkast.connect] opened a session, [pairing] says how, in [took]. A pairing it ran first
+         * [Airkast.connect] opened a session, or [Airkast.connectAudio] a stream, [pairing] says how, in [took]. A pairing it ran first
          * is left out of [took], as [Event.Paired] reports it, and so is the user typing a password
          * the receiver asked for when the session started.
          */
@@ -318,7 +348,7 @@ public class Airkast private constructor(
         ) : Event
 
         /**
-         * [Airkast.connect] failed with [failure] after [took], a pairing it ran first and the user's
+         * [Airkast.connect] or [Airkast.connectAudio] failed with [failure] after [took], a pairing it ran first and the user's
          * typing left out. A pairing that failed there reports [Event.PairingFailed] first. A connect that was
          * cancelled reports nothing.
          */
@@ -377,7 +407,7 @@ public class Airkast private constructor(
         ) : Event
 
         /**
-         * A session ended, [lasted] after it opened. [failure] is null when the app closed it, and
+         * A session or an [AudioStream] ended, [lasted] after it opened. [failure] is null when the app closed it, and
          * [AirkastException.Disconnected] when the receiver or the network ended it.
          */
         @Poko
@@ -408,6 +438,7 @@ public class Airkast private constructor(
         public var loadTimeout: Duration = 10.seconds
         public var keepAlive: Boolean = true
         public var ntpTiming: Boolean = true
+        public var audioLatency: Duration = 1.seconds
         public var socketFactory: (Receiver) -> SocketFactory? = { null }
         public var credentialStore: CredentialStore = CredentialStore.inMemory()
         public var logger: Logger? = null
@@ -420,6 +451,7 @@ public class Airkast private constructor(
             loadTimeout = airkast.loadTimeout
             keepAlive = airkast.keepAlive
             ntpTiming = airkast.ntpTiming
+            audioLatency = airkast.audioLatency
             socketFactory = airkast.socketFactory
             credentialStore = airkast.credentialStore
             logger = airkast.logger

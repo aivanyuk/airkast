@@ -90,6 +90,21 @@ internal class FakeReceiver(
     val port: Int get() = control.localPort
     val commands = CopyOnWriteArrayList<Map<String, Any?>>()
 
+    /** Every RTSP or HTTP request's method and path, in order, pairing included. */
+    val requests = CopyOnWriteArrayList<String>()
+
+    /** The requests by method, with their headers and bodies, for the audio stream's FLUSH and SET_PARAMETER. */
+    val messages = CopyOnWriteArrayList<HttpMessage>()
+
+    /** The audio stream a type-96 SETUP set up, once one did. */
+    @Volatile
+    var audio: FakeAudio? = null
+        private set
+
+    /** What GET_PARAMETER answers for `volume`, in decibels. */
+    @Volatile
+    var volumeDecibels = -15.0
+
     /** The sender's name from the base SETUP's `X-Apple-Client-Name`, read as UTF-8. */
     @Volatile
     var clientName: String? = null
@@ -135,6 +150,8 @@ internal class FakeReceiver(
         while (true) {
             val request = HttpMessage.read(link.input) ?: return
             val path = request.startLine.split(' ')[1]
+            requests += request.startLine.substringBefore(' ') + if (path.startsWith("/")) " $path" else ""
+            messages += request
             val asked = digestPassword
             val signed = asked != null && nonce != null && signs(request, asked, nonce)
             if (signedIn && !signed) unsigned++
@@ -265,7 +282,25 @@ internal class FakeReceiver(
                         clientName = String(it.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8)
                     }
                     val body = BinaryPlist.decode(request.body) as Map<*, *>
-                    if (body.containsKey("streams")) {
+                    val stream = (body["streams"] as? List<*>)?.firstOrNull() as? Map<*, *>
+                    if (stream?.get("type") == 96L) {
+                        val fake = FakeAudio(stream).also { audio = it }
+                        link.reply(
+                            request,
+                            BinaryPlist.encode(
+                                mapOf(
+                                    "streams" to
+                                        listOf(
+                                            mapOf(
+                                                "type" to 96L,
+                                                "dataPort" to fake.dataPort.toLong(),
+                                                "controlPort" to fake.controlPort.toLong(),
+                                            ),
+                                        ),
+                                ),
+                            ),
+                        )
+                    } else if (body.containsKey("streams")) {
                         link.reply(
                             request,
                             BinaryPlist.encode(
@@ -298,6 +333,10 @@ internal class FakeReceiver(
                 request.startLine.startsWith("RECORD") -> {
                     recorded = true
                     link.reply(request)
+                }
+
+                request.startLine.startsWith("GET_PARAMETER") -> {
+                    link.reply(request, "volume: $volumeDecibels\r\n".toByteArray())
                 }
 
                 path == "/command" -> {
@@ -471,6 +510,7 @@ internal class FakeReceiver(
     }
 
     override fun close() {
+        audio?.close()
         dropConnections()
         control.close()
         events.close()

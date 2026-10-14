@@ -17,8 +17,17 @@ public class Receiver(
     /** The feature bits from `features` (or `ft`): `0xLOW,0xHIGH`. */
     public val features: Long get() = parseFeatures(properties["features"] ?: properties["ft"])
 
-    /** Whether this library can play on the receiver, and if not, why. */
+    /**
+     * Whether this library can play a [Media] URL on the receiver ([Airkast.connect]), and if not,
+     * why. A speaker reads as [Compatibility.NoVideo]: see [audioCompatibility].
+     */
     public val compatibility: Compatibility get() = compatibilityOf(features, statusFlags, properties)
+
+    /**
+     * Whether this library can stream audio the app decodes to the receiver ([Airkast.connectAudio]),
+     * and if not, why: a speaker, or a TV or Mac that plays AirPlay audio.
+     */
+    public val audioCompatibility: Compatibility get() = audioCompatibilityOf(features, statusFlags, properties)
 
     /**
      * Whether airkast can play on it, so a picker lists it: [Compatibility.Supported],
@@ -28,16 +37,26 @@ public class Receiver(
      * [Compatibility.Unknown], not supported.
      */
     public val isSupported: Boolean
-        get() = compatibility == Compatibility.Supported || secret != null
+        get() = compatibility == Compatibility.Supported || secretFor(compatibility) != null
+
+    /**
+     * Whether airkast can stream audio to it, so an audio picker lists it, in the terms of
+     * [isSupported]: [audioCompatibility] is [Compatibility.Supported], [Compatibility.NeedsPin] or
+     * [Compatibility.NeedsPassword].
+     */
+    public val isAudioSupported: Boolean
+        get() = audioCompatibility.let { it == Compatibility.Supported || secretFor(it) != null }
 
     /** What the receiver says it asks for before it pairs, or null for nothing. */
     internal val secret: Secret?
-        get() =
-            when (compatibility) {
-                Compatibility.NeedsPin -> Secret.Pin
-                Compatibility.NeedsPassword -> Secret.Password
-                else -> null
-            }
+        get() = secretFor(compatibility) ?: secretFor(audioCompatibility)
+
+    private fun secretFor(compatibility: Compatibility): Secret? =
+        when (compatibility) {
+            Compatibility.NeedsPin -> Secret.Pin
+            Compatibility.NeedsPassword -> Secret.Password
+            else -> null
+        }
 
     public val model: String? get() = properties["model"]
     public val deviceId: String? get() = properties["deviceid"]
@@ -53,6 +72,7 @@ public class Receiver(
 
         // Feature bits and status flags as pyatv names them (AirPlayFlags, utils.py).
         private const val VIDEO_V1 = 0
+        private const val AUDIO = 9
         private const val SYSTEM_PAIRING = 43
         private const val CORE_UTILS_PAIRING = 48
         private const val VIDEO_V2 = 49
@@ -69,14 +89,31 @@ public class Receiver(
         ): Compatibility {
             fun has(bit: Int) = features and (1L shl bit) != 0L
             return when {
-                properties.isEmpty() -> {
-                    Compatibility.Unknown
-                }
+                properties.isEmpty() -> Compatibility.Unknown
+                !has(VIDEO_V2) -> if (has(VIDEO_V1)) Compatibility.VideoV1Only else Compatibility.NoVideo
+                else -> pairingOf(features, flags, properties)
+            }
+        }
 
-                !has(VIDEO_V2) -> {
-                    if (has(VIDEO_V1)) Compatibility.VideoV1Only else Compatibility.NoVideo
-                }
+        internal fun audioCompatibilityOf(
+            features: Long,
+            flags: Long,
+            properties: Map<String, String>,
+        ): Compatibility =
+            when {
+                properties.isEmpty() -> Compatibility.Unknown
+                features and (1L shl AUDIO) == 0L -> Compatibility.NoAudio
+                else -> pairingOf(features, flags, properties)
+            }
 
+        /** What stands between the sender and a session, once the receiver plays what it is sent. */
+        private fun pairingOf(
+            features: Long,
+            flags: Long,
+            properties: Map<String, String>,
+        ): Compatibility {
+            fun has(bit: Int) = features and (1L shl bit) != 0L
+            return when {
                 properties["act"] == ACCESS_CURRENT_USER -> {
                     Compatibility.AccessRestricted
                 }
@@ -125,7 +162,7 @@ public class Receiver(
  * release, as support grows.
  */
 public enum class Compatibility {
-    /** Speaks AirPlay video v2 and pairs without a code. */
+    /** Plays what airkast sends, a URL or a stream of audio, and pairs without a code. */
     Supported,
 
     /** No TXT record to read, as for a receiver typed in by hand. Connecting is the only test. */
@@ -150,12 +187,18 @@ public enum class Compatibility {
      */
     AccessRestricted,
 
-    /** Speaks AirPlay video v2 but advertises no transient pairing, the only kind this version does. */
+    /** Plays what airkast sends, but advertises no transient pairing, the only kind this version starts with. */
     NoTransientPairing,
 
     /** Takes URLs only over AirPlay video v1 (`POST /play`), which this version does not speak. */
     VideoV1Only,
 
-    /** Plays no video from a URL: a speaker, or a receiver that only mirrors a screen. */
+    /**
+     * Plays no video from a URL: a speaker, or a receiver that only mirrors a screen. A speaker
+     * takes audio the app decodes and streams instead ([Receiver.audioCompatibility]).
+     */
     NoVideo,
+
+    /** Plays no AirPlay audio stream: [Receiver.audioCompatibility] of a receiver that only shows video or a screen. */
+    NoAudio,
 }

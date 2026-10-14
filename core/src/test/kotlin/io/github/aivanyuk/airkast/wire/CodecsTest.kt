@@ -1,9 +1,38 @@
 package io.github.aivanyuk.airkast.wire
 
 import com.google.common.truth.Truth.assertThat
+import io.github.aivanyuk.airkast.crypto.hex
 import org.junit.Test
 
 class CodecsTest {
+    @Test
+    fun alacCarriesPcmUncompressedInAChannelPair() {
+        val pcm = ByteArray(352 * 4)
+        // The first left sample is 0x8001, little-endian.
+        pcm[0] = 0x01
+        pcm[1] = 0x80.toByte()
+        val frame = Alac.frame(pcm, 0, 352)
+        assertThat(frame.size).isEqualTo(1412)
+        // Element 001 (a channel pair), tag 0000, 12 unused bits, no sample count, no shift, not
+        // compressed: 23 bits, then the samples big-endian.
+        assertThat(frame.copyOf(5).hex()).isEqualTo("2000030002")
+        // The end element, 111, after 352 frames of 32 bits, then zero padding.
+        assertThat(frame.copyOfRange(1410, 1412).hex()).isEqualTo("01c0")
+    }
+
+    @Test
+    fun dmapNamesTheTrack() {
+        assertThat(Dmap.track("A", null, "Bé").hex())
+            .isEqualTo("6d6c697400000014" + "6d696e6d0000000141" + "6173616c00000003" + "42c3a9")
+    }
+
+    @Test
+    fun aRetransmitRequestNamesItsPackets() {
+        val request = byteArrayOf(0x80.toByte(), 0xD5.toByte(), 0, 1, 0xFF.toByte(), 0xFE.toByte(), 0, 3)
+        assertThat(Rtp.retransmitRequest(request, 8)).isEqualTo(0xFFFE to 3)
+        assertThat(Rtp.retransmitRequest(Rtp.sync(true, 1, 2, 3), 20)).isNull()
+    }
+
     @Test
     fun tlvSplitsLongValuesAndJoinsThemBack() {
         val publicKey = ByteArray(384) { it.toByte() }

@@ -1,7 +1,10 @@
 public final class io/github/aivanyuk/airkast/Airkast {
 	public final fun connect (Lio/github/aivanyuk/airkast/Receiver;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun connect$default (Lio/github/aivanyuk/airkast/Airkast;Lio/github/aivanyuk/airkast/Receiver;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun connectAudio (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/PcmFormat;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun connectAudio$default (Lio/github/aivanyuk/airkast/Airkast;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/PcmFormat;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun copy (Lkotlin/jvm/functions/Function1;)Lio/github/aivanyuk/airkast/Airkast;
+	public final fun getAudioLatency-UwyO8pc ()J
 	public final fun getConnectTimeout-UwyO8pc ()J
 	public final fun getCredentialStore ()Lio/github/aivanyuk/airkast/CredentialStore;
 	public final fun getEventListener ()Lkotlin/jvm/functions/Function1;
@@ -19,6 +22,7 @@ public final class io/github/aivanyuk/airkast/Airkast {
 public final class io/github/aivanyuk/airkast/Airkast$Builder {
 	public fun <init> ()V
 	public final fun build ()Lio/github/aivanyuk/airkast/Airkast;
+	public final fun getAudioLatency-UwyO8pc ()J
 	public final fun getConnectTimeout-UwyO8pc ()J
 	public final fun getCredentialStore ()Lio/github/aivanyuk/airkast/CredentialStore;
 	public final fun getEventListener ()Lkotlin/jvm/functions/Function1;
@@ -29,6 +33,7 @@ public final class io/github/aivanyuk/airkast/Airkast$Builder {
 	public final fun getNtpTiming ()Z
 	public final fun getRequestTimeout-UwyO8pc ()J
 	public final fun getSocketFactory ()Lkotlin/jvm/functions/Function1;
+	public final fun setAudioLatency-LRDsOJo (J)V
 	public final fun setConnectTimeout-LRDsOJo (J)V
 	public final fun setCredentialStore (Lio/github/aivanyuk/airkast/CredentialStore;)V
 	public final fun setEventListener (Lkotlin/jvm/functions/Function1;)V
@@ -219,10 +224,41 @@ public abstract interface class io/github/aivanyuk/airkast/AirkastSession : java
 	public abstract fun volume (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
+public abstract interface class io/github/aivanyuk/airkast/AudioRoute {
+	public abstract fun attach (Lio/github/aivanyuk/airkast/AudioStream;)V
+}
+
+public abstract interface class io/github/aivanyuk/airkast/AudioStream : java/lang/AutoCloseable {
+	public abstract fun close ()V
+	public abstract fun flush ()V
+	public abstract fun getBuffered-UwyO8pc ()J
+	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
+	public abstract fun getFormat ()Lio/github/aivanyuk/airkast/PcmFormat;
+	public abstract fun getLatency-UwyO8pc ()J
+	public abstract fun getPosition-UwyO8pc ()J
+	public abstract fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public abstract fun isPlaying ()Z
+	public abstract fun offer (Ljava/nio/ByteBuffer;)I
+	public abstract fun pause ()V
+	public abstract fun play ()V
+	public abstract fun setNowPlaying-8Mi8wO0 (Lio/github/aivanyuk/airkast/NowPlaying;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun setNowPlaying-8Mi8wO0$default (Lio/github/aivanyuk/airkast/AudioStream;Lio/github/aivanyuk/airkast/NowPlaying;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public abstract fun setVolume (DLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun volume (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun write ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun write$default (Lio/github/aivanyuk/airkast/AudioStream;[BIILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class io/github/aivanyuk/airkast/AudioStream$DefaultImpls {
+	public static synthetic fun setNowPlaying-8Mi8wO0$default (Lio/github/aivanyuk/airkast/AudioStream;Lio/github/aivanyuk/airkast/NowPlaying;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun write$default (Lio/github/aivanyuk/airkast/AudioStream;[BIILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
 public final class io/github/aivanyuk/airkast/Compatibility : java/lang/Enum {
 	public static final field AccessRestricted Lio/github/aivanyuk/airkast/Compatibility;
 	public static final field NeedsPassword Lio/github/aivanyuk/airkast/Compatibility;
 	public static final field NeedsPin Lio/github/aivanyuk/airkast/Compatibility;
+	public static final field NoAudio Lio/github/aivanyuk/airkast/Compatibility;
 	public static final field NoTransientPairing Lio/github/aivanyuk/airkast/Compatibility;
 	public static final field NoVideo Lio/github/aivanyuk/airkast/Compatibility;
 	public static final field Supported Lio/github/aivanyuk/airkast/Compatibility;
@@ -283,6 +319,37 @@ public final class io/github/aivanyuk/airkast/MediaFormat$Companion {
 	public static synthetic fun of$default (Lio/github/aivanyuk/airkast/MediaFormat$Companion;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/MediaFormat;
 }
 
+public final class io/github/aivanyuk/airkast/NowPlaying {
+	public fun <init> ()V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/time/Duration;[BILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/time/Duration;[BLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAlbum ()Ljava/lang/String;
+	public final fun getArtist ()Ljava/lang/String;
+	public final fun getArtwork ()[B
+	public final fun getDuration-FghU774 ()Lkotlin/time/Duration;
+	public final fun getTitle ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/PcmFormat {
+	public static final field Companion Lio/github/aivanyuk/airkast/PcmFormat$Companion;
+	public fun <init> ()V
+	public fun <init> (II)V
+	public synthetic fun <init> (IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getChannels ()I
+	public final fun getFrameSize ()I
+	public final fun getSampleRate ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/PcmFormat$Companion {
+	public final fun getSAMPLE_RATES ()Ljava/util/Set;
+}
+
 public final class io/github/aivanyuk/airkast/PlaybackInfo {
 	public synthetic fun <init> (Lio/github/aivanyuk/airkast/PlaybackState;DLkotlin/time/Duration;Lkotlin/time/Duration;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun equals (Ljava/lang/Object;)Z
@@ -335,6 +402,7 @@ public final class io/github/aivanyuk/airkast/Receiver {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/Map;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAudioCompatibility ()Lio/github/aivanyuk/airkast/Compatibility;
 	public final fun getCompatibility ()Lio/github/aivanyuk/airkast/Compatibility;
 	public final fun getDeviceId ()Ljava/lang/String;
 	public final fun getFeatures ()J
@@ -345,6 +413,7 @@ public final class io/github/aivanyuk/airkast/Receiver {
 	public final fun getProperties ()Ljava/util/Map;
 	public final fun getSourceVersion ()Ljava/lang/String;
 	public fun hashCode ()I
+	public final fun isAudioSupported ()Z
 	public final fun isSupported ()Z
 	public fun toString ()Ljava/lang/String;
 }
