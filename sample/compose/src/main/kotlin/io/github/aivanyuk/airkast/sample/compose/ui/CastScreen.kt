@@ -44,7 +44,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
@@ -55,7 +54,7 @@ import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
-import io.github.aivanyuk.airkast.android.LocalNetwork
+import io.github.aivanyuk.airkast.android.LocalNetworkPermission
 import io.github.aivanyuk.airkast.android.ReceiverDiscovery
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.Cast
@@ -121,21 +120,23 @@ private class LocalNetworkAccess(
     val request: () -> Unit,
 )
 
-/** Android 17's local network permission, which the app declares and asks for itself. */
+/**
+ * Android 17's local network permission, which the app declares and asks for itself. Collecting the
+ * state reads the grant again each time the screen starts, so it sees a change made in Settings.
+ */
 @Composable
 private fun rememberLocalNetworkAccess(): LocalNetworkAccess {
     val context = LocalContext.current
-    var granted by remember { mutableStateOf(LocalNetwork.isAccessible(context)) }
+    val localNetwork = remember { LocalNetworkPermission(context) }
+    val state by localNetwork.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-            granted = LocalNetwork.isAccessible(context)
+            scope.launch { localNetwork.refresh() }
         }
-    // The user may change it in Settings and come back.
-    LifecycleResumeEffect(Unit) {
-        granted = LocalNetwork.isAccessible(context)
-        onPauseOrDispose { }
+    return LocalNetworkAccess(state != LocalNetworkPermission.State.Denied) {
+        launcher.launch(localNetwork.permission)
     }
-    return LocalNetworkAccess(granted) { launcher.launch(LocalNetwork.PERMISSION) }
 }
 
 @Composable

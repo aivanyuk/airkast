@@ -113,9 +113,10 @@ Follow its progress in `player.connection`, as shown in the next section.
 
 If your app targets SDK 37 (Android 17), the system blocks the local network until the user grants
 `ACCESS_LOCAL_NETWORK`. Declare that permission in your manifest and request it before you start
-discovery. `LocalNetwork.isAccessible(context)` tells you whether you need to ask. Without the
-permission, discovery and connecting fail with `AirkastException.NotPermitted`. Apps that target
-a lower SDK leave the permission out.
+discovery. `LocalNetworkPermission(context).state` tells you whether you need to ask
+([guide](docs/guide.md#android-17s-local-network-permission)). Without the permission, discovery
+and connecting fail with `AirkastException.NotPermitted`. Apps that target a lower SDK leave the
+permission out.
 
 ## Common tasks
 

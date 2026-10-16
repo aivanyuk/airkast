@@ -4,6 +4,15 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## Unreleased
+
+### Added
+
+- `LocalNetworkPermission` in `airkast-android`: Android 17's local network permission as a
+  `StateFlow` for a cast button, `NotNeeded`, `Granted` or `Denied`, with the `permission` to
+  request and `refresh()` to read the grant again after the request's result. Collecting the state
+  reads the grant again first. The app asks, and decides how often.
+
 ## 0.5.0 - 2026-10-14
 
 ### Added
