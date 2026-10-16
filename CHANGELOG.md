@@ -4,6 +4,15 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## Unreleased
+
+### Added
+
+- `Receiver.id`, the key the built-in credential stores keep a receiver under: its `deviceid`, or
+  `host:port` without one. `ReceiverDiscovery.known` keeps every receiver an instance has found,
+  by `id`, after the scan stops, and `ReceiverDiscovery.find(id)` returns one of them, so an app
+  that keeps a receiver's `id` finds the receiver again after its picker stopped the scan.
+
 ## 0.5.0 - 2026-10-14
 
 ### Added
