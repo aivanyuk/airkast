@@ -5,12 +5,15 @@ import io.github.aivanyuk.airkast.Airkast.Logger.Level
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Credentials
+import io.github.aivanyuk.airkast.HlsMaster
 import io.github.aivanyuk.airkast.Media
+import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackInfo
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Rendition
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.Track
@@ -33,6 +36,8 @@ import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
@@ -93,6 +98,10 @@ internal class DefaultVideoSession private constructor(
 
     @Volatile
     private var itemTaken: CompletableDeferred<Unit>? = null
+
+    /** The item [load] sent last, with its renditions once [renditions] has read them. */
+    @Volatile
+    private var loaded: Loaded? = null
 
     /** Whether the rate is 0: set by [pause], [play], [load] and [stop], and by the TV remote's rate changes. */
     @Volatile
@@ -180,6 +189,7 @@ internal class DefaultVideoSession private constructor(
         val taken = CompletableDeferred<Unit>()
         itemId = id
         itemTaken = taken
+        loaded = Loaded(item)
         paused = false
         io {
             command(
@@ -262,6 +272,27 @@ internal class DefaultVideoSession private constructor(
                 forced = option["MediaSelectionOptionsForced"] == true,
             )
         }
+    }
+
+    override suspend fun renditions(): List<Rendition> {
+        val current = loaded ?: return emptyList()
+        if (current.media.format != MediaFormat.Hls) return emptyList()
+        return current.lock.withLock {
+            current.renditions ?: readRenditions(current.media.url).also { current.renditions = it }
+        }
+    }
+
+    private suspend fun readRenditions(url: String): List<Rendition> {
+        val start = TimeSource.Monotonic.markNow()
+        val renditions =
+            try {
+                io { HlsMaster.renditions(MasterPlaylist.read(url, options.requestTimeout)) }
+            } catch (e: AirkastException) {
+                log.error(e) { "master unreadable after ${start.elapsedNow().inWholeMilliseconds} ms" }
+                throw e
+            }
+        log.debug { "master read in ${start.elapsedNow().inWholeMilliseconds} ms: ${renditions.size} renditions" }
+        return renditions
     }
 
     override suspend fun selectTrack(
@@ -465,6 +496,13 @@ internal class DefaultVideoSession private constructor(
     }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
+
+    private class Loaded(
+        val media: Media,
+    ) {
+        val lock = Mutex()
+        var renditions: List<Rendition>? = null
+    }
 
     companion object {
         private const val STREAM_TYPE = 130L

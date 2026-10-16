@@ -108,6 +108,26 @@ public class Track(
 )
 
 /**
+ * One audio or subtitle rendition of an HLS master, with the [id] a receiver knows it by, which
+ * [AirkastSession.selectTrack] takes. [HlsMaster.renditions] says how ids are counted.
+ */
+@Poko
+public class Rendition(
+    public val kind: TrackKind,
+    public val id: Long,
+    /** The `NAME` attribute, such as "English". */
+    public val name: String?,
+    /** The `LANGUAGE` attribute, a language tag such as `en` or `pt-BR`. */
+    public val language: String?,
+    /** Whether `FORCED=YES`: subtitles shown even with subtitles off. */
+    public val forced: Boolean,
+    /** The `CHARACTERISTICS` attribute's values, such as `public.accessibility.describes-video`. */
+    public val characteristics: List<String>,
+    /** The `GROUP-ID` attribute: the first group the rendition appears in. */
+    public val group: String?,
+)
+
+/**
  * Why the receiver changed its state or item, as the receiver names it. A receiver may send a
  * name not listed here, so compare against the constants rather than switch exhaustively.
  */

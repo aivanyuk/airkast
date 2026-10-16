@@ -4,6 +4,15 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## Unreleased
+
+### Added
+
+- `AirkastSession.renditions()` lists every audio and subtitle rendition of the loaded HLS item,
+  with the ids `selectTrack` takes, read from its master playlist, where `tracks()` lists only the
+  selected ones. `HlsMaster.renditions(text)` numbers a master the app has read itself, and
+  `AirkastException.MasterUnreadable` says the session could not read it.
+
 ## 0.5.0 - 2026-10-14
 
 ### Added
