@@ -3,6 +3,11 @@ public final class io/github/aivanyuk/airkast/android/AirkastAndroid {
 	public static synthetic fun Airkast$default (Landroid/content/Context;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/Airkast;
 }
 
+public final class io/github/aivanyuk/airkast/android/EncryptedCredentialStoreKt {
+	public static final fun encrypted (Lio/github/aivanyuk/airkast/CredentialStore$Companion;Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;Lkotlin/jvm/functions/Function0;)Lio/github/aivanyuk/airkast/CredentialStore;
+	public static synthetic fun encrypted$default (Lio/github/aivanyuk/airkast/CredentialStore$Companion;Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/CredentialStore;
+}
+
 public final class io/github/aivanyuk/airkast/android/LocalNetwork {
 	public static final field INSTANCE Lio/github/aivanyuk/airkast/android/LocalNetwork;
 	public static final field PERMISSION Ljava/lang/String;

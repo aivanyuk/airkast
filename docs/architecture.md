@@ -134,8 +134,9 @@ The protocol facts, with the receivers they were seen on, are in
   through the factory it returns for the receiver, so `:android` can refuse a connect without the
   local network permission and bind the session to a network without `:core` knowing Android.
 - **`CredentialStore` is the storage seam.** `:core` keeps pairings in memory or in a file,
-  `:android` puts that file in the no-backup files, and an app with a keystore implements its
-  own.
+  which a `CredentialStore.Sealer` may encrypt. `:android` puts that file in the no-backup files
+  and encrypts it with a key in the Android Keystore, and an app with another place for secrets
+  implements its own store.
 - **Pairing is a step before the session.** How a connection pairs (transient, pair-verify after
   a PIN or password) changes only the secret the session's keys derive from, so it is chosen in
   `DefaultVideoSession.open` and the session after it is the same. A Digest password only adds a
@@ -151,9 +152,10 @@ The protocol facts, with the receivers they were seen on, are in
 ## Threading
 
 - Every public suspend function is main-safe: it moves blocking I/O to `Dispatchers.IO` itself.
-- Building does no I/O. `Airkast(context)` hands `CredentialStore.file` a function that finds the
-  no-backup files, which the store calls on its first use, on `Dispatchers.IO`, since Android
-  creates that directory on the thread that asks for it. It does read the app's label and
+- Building does no I/O. `Airkast(context)` hands `CredentialStore.encrypted` a function that finds
+  the no-backup files, which the store calls on its first use, on `Dispatchers.IO`, since Android
+  creates that directory on the thread that asks for it. The store makes or loads its Keystore
+  key there too. It does read the app's label and
   `ANDROID_ID` as it builds, from system services that hold them in memory.
 - The control connection serves one exchange at a time, so a position poll and a command never
   interleave on the wire.
