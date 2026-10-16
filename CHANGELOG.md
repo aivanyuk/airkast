@@ -4,6 +4,15 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## Unreleased
+
+### Changed
+
+- `AirkastPlayer.connect` asks again for a PIN or password the receiver refused, where it ended
+  the cast with `SecretRejected`. The state stays `Connection.AwaitingSecret`, whose new
+  `rejected` counts the refusals since the connect began, until the receiver takes one or the app
+  calls `disconnect()`. `Event.CastAbandoned` carries `rejected` too.
+
 ## 0.5.0 - 2026-10-14
 
 ### Added
