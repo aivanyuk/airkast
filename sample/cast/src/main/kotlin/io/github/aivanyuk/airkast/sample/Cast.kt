@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -215,4 +216,14 @@ class Cast(
     private companion object {
         const val LOG_LINES = 100
     }
+}
+
+/**
+ * A track's language by name, such as "German", then the stream's own label when it says more: a
+ * master may name its renditions "stream_4", as Shaka's Angel One does.
+ */
+fun trackName(format: Format): String {
+    val language = format.language?.let { Locale.forLanguageTag(it).displayName }?.takeIf { it.isNotEmpty() }
+    val label = format.label?.takeIf { it.isNotEmpty() && !it.equals(language, ignoreCase = true) }
+    return listOfNotNull(language, label).joinToString(" · ").ifEmpty { format.id.orEmpty() }
 }

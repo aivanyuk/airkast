@@ -62,6 +62,7 @@ import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.Cast
 import io.github.aivanyuk.airkast.sample.SampleMedia
 import io.github.aivanyuk.airkast.sample.compose.R
+import io.github.aivanyuk.airkast.sample.trackName
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -461,8 +462,7 @@ private fun EventLog(lines: List<String>) {
 
 @Composable
 private fun describe(group: Tracks.Group): String {
-    val format = group.getTrackFormat(0)
-    val name = format.label ?: format.language ?: format.id.orEmpty()
+    val name = trackName(group.getTrackFormat(0))
     val track =
         stringResource(
             if (group.type ==

@@ -33,6 +33,7 @@ import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.CastService
 import io.github.aivanyuk.airkast.sample.SampleMedia
 import io.github.aivanyuk.airkast.sample.cast
+import io.github.aivanyuk.airkast.sample.trackName
 import io.github.aivanyuk.airkast.sample.views.databinding.ActivityMainBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.DialogSecretBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.ItemReceiverBinding
@@ -284,8 +285,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun describe(group: Tracks.Group): String {
-        val format = group.getTrackFormat(0)
-        val name = format.label ?: format.language ?: format.id.orEmpty()
+        val name = trackName(group.getTrackFormat(0))
         val track =
             getString(
                 if (group.type ==

@@ -852,19 +852,26 @@ internal class SessionPlayer(
         picks: List<Pick>,
     ) {
         try {
-            for (pick in picks) s.selectTrack(pick.kind, pick.id)
+            for (pick in picks) {
+                log.debug { "selecting ${pick.kind.name.lowercase()} ${pick.id ?: "off"}" }
+                s.selectTrack(pick.kind, pick.id)
+            }
             repeat(CONFIRMS) { read ->
                 if (read > 0) delay(pollInterval)
                 val selected = s.tracks()
                 if (receiverTracks !== known) return
                 known.report(selected)
                 changed()
-                if (known.settled) return
+                if (known.settled) {
+                    log.debug { "the receiver reports the selection, read ${read + 1}" }
+                    return
+                }
             }
         } catch (e: AirkastException) {
             log.debug { "a track selection failed: $e" }
         }
         if (receiverTracks !== known) return
+        log.debug { "the receiver did not report the selection" }
         known.giveUp()
         changed()
     }
