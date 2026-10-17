@@ -15,6 +15,8 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.media3.common.C
+import androidx.media3.common.Tracks
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -25,8 +27,6 @@ import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
-import io.github.aivanyuk.airkast.Track
-import io.github.aivanyuk.airkast.TrackKind
 import io.github.aivanyuk.airkast.android.LocalNetwork
 import io.github.aivanyuk.airkast.android.ReceiverDiscovery
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
@@ -35,7 +35,6 @@ import io.github.aivanyuk.airkast.sample.SampleMedia
 import io.github.aivanyuk.airkast.sample.cast
 import io.github.aivanyuk.airkast.sample.views.databinding.ActivityMainBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.DialogSecretBinding
-import io.github.aivanyuk.airkast.sample.views.databinding.DialogTracksBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.ItemReceiverBinding
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -89,7 +88,7 @@ class MainActivity : AppCompatActivity() {
             )
         }
         binding.playHere.setOnClickListener { cast.playHere(url(), format()) }
-        binding.tracks.setOnClickListener { lifecycleScope.launch { cast.attempt { tracks() }?.let(::showTracks) } }
+        binding.tracks.setOnClickListener { showTracks(cast.tracks) }
         binding.info.setOnClickListener {
             lifecycleScope.launch { cast.attempt { "${playbackInfo()}\nvolume ${volume()}" }?.let(::showInfo) }
         }
@@ -257,43 +256,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * The receiver reports the renditions it selected, with ids that follow the HLS master's order,
-     * so "next" is the next id. With none of a kind selected, as on a Mac with subtitles off, it is
-     * the id after the highest one selected, since a master lists audio before subtitles. A subtitle
-     * selection with a null id turns subtitles off.
+     * The item's audio and subtitle tracks, from the player's `Tracks`. A tap selects one through
+     * the player's track selection parameters, which the player sends to the TV.
      */
-    private fun showTracks(selected: List<Track>) {
-        val view = DialogTracksBinding.inflate(layoutInflater)
-        view.selected.text =
-            if (selected.isEmpty()) {
-                getString(R.string.tracks_none)
-            } else {
-                selected.joinToString(
-                    "\n",
-                ) { "${it.kind} ${it.id} ${it.name.orEmpty()} ${it.language.orEmpty()}".trim() }
-            }
+    private fun showTracks(tracks: List<Tracks.Group>) {
         val dialog =
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.tracks_title)
-                .setView(view.root)
                 .setNegativeButton(android.R.string.cancel, null)
-                .show()
-
-        fun next(kind: TrackKind): Long {
-            val current = selected.firstOrNull { it.kind == kind } ?: selected.maxByOrNull { it.id }
-            return current?.id?.plus(1) ?: 0
+        if (tracks.isEmpty()) {
+            dialog.setMessage(R.string.tracks_none)
+        } else {
+            val labels = tracks.map(::describe) + getString(R.string.subtitles_off)
+            dialog.setItems(labels.toTypedArray()) { _, which ->
+                val group = tracks.getOrNull(which)
+                if (group != null) cast.select(group) else cast.subtitlesOff()
+            }
         }
+        dialog.show()
+    }
 
-        fun pick(
-            kind: TrackKind,
-            id: Long?,
-        ) {
-            dialog.dismiss()
-            lifecycleScope.launch { cast.attempt { selectTrack(kind, id) } }
-        }
-        view.nextAudio.setOnClickListener { pick(TrackKind.Audio, next(TrackKind.Audio)) }
-        view.nextSubtitles.setOnClickListener { pick(TrackKind.Subtitles, next(TrackKind.Subtitles)) }
-        view.subtitlesOff.setOnClickListener { pick(TrackKind.Subtitles, null) }
+    private fun describe(group: Tracks.Group): String {
+        val format = group.getTrackFormat(0)
+        val name = format.label ?: format.language ?: format.id.orEmpty()
+        val track =
+            getString(
+                if (group.type ==
+                    C.TRACK_TYPE_AUDIO
+                ) {
+                    R.string.track_audio
+                } else {
+                    R.string.track_subtitles
+                },
+                name,
+            )
+        return if (group.isSelected) getString(R.string.track_selected, track) else track
     }
 
     private fun showInfo(text: String) {

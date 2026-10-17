@@ -3,11 +3,14 @@ package io.github.aivanyuk.airkast.sample
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.OptIn
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import io.github.aivanyuk.airkast.Airkast
@@ -124,6 +127,33 @@ class Cast(
 
     /** Whether the app can cast to [receiver]: a TV that plays the URL, or a speaker. */
     fun canCast(receiver: Receiver): Boolean = receiver.isSupported || receiver.isAudioSupported
+
+    /**
+     * The audio and subtitle tracks of the item playing, as media3 lists them, a group each. On the
+     * TV, the player reads them from the item's HLS master and marks the ones the TV reports.
+     */
+    val tracks: List<Tracks.Group>
+        get() = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO || it.type == C.TRACK_TYPE_TEXT }
+
+    /** Plays [group]'s track, as media3's track dialogs do: an override of its group. */
+    fun select(group: Tracks.Group) {
+        player.trackSelectionParameters =
+            player.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(group.type, false)
+                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+                .build()
+    }
+
+    /** Turns subtitles off, but forced ones. */
+    fun subtitlesOff() {
+        player.trackSelectionParameters =
+            player.trackSelectionParameters
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+    }
 
     /** Plays [url] on the phone, from where the TV was in it when casting. */
     fun playHere(

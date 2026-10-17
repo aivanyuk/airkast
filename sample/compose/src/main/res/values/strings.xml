@@ -57,9 +57,10 @@
     <string name="failed_disconnected">The connection to the TV dropped, or another sender took it over.</string>
     <string name="failed_other">The cast failed: %1$s</string>
 
-    <string name="tracks_title">Selected tracks</string>
-    <string name="tracks_none">nothing reported</string>
-    <string name="next_audio">Next audio track</string>
-    <string name="next_subtitles">Next subtitles</string>
+    <string name="tracks_title">Tracks</string>
+    <string name="tracks_none">The item lists no audio or subtitle tracks.</string>
+    <string name="track_audio">Audio: %1$s</string>
+    <string name="track_subtitles">Subtitles: %1$s</string>
+    <string name="track_selected">%1$s (playing)</string>
     <string name="subtitles_off">Subtitles off</string>
 </resources>

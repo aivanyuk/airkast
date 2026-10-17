@@ -34,7 +34,7 @@ class HandoffTest {
             connector =
                 Connector { receiver, _, _ ->
                     failure?.let { throw it }
-                    FakeSession(receiver).also { sessions += it }
+                    FakeSession(receiver).withRenditions().also { sessions += it }
                 }
         }
     private val tv = Receiver("tv", "192.0.2.1")
@@ -180,6 +180,32 @@ class HandoffTest {
         assertThat(session.closed).isFalse()
         assertThat(player.deviceInfo.playbackType).isEqualTo(DeviceInfo.PLAYBACK_TYPE_LOCAL)
         assertThat(player.currentMediaItem).isEqualTo(item)
+    }
+
+    @Test
+    fun trackParametersSetOnThePhoneCarryToTheReceiverAndBack() {
+        player.trackSelectionParameters =
+            player.trackSelectionParameters
+                .buildUpon()
+                .setPreferredAudioLanguage("ru")
+                .build()
+        assertThat(local.parameters.preferredAudioLanguages).containsExactly("ru")
+        val session = casting()
+        assertThat(session.sent).contains("select Audio 1")
+        assertThat(player.trackSelectionParameters.preferredAudioLanguages).containsExactly("ru")
+        assertThat(player.currentTracks.groups[1].isSelected).isTrue()
+
+        player.trackSelectionParameters =
+            player.trackSelectionParameters
+                .buildUpon()
+                .setPreferredTextLanguage("es")
+                .build()
+        idle()
+        assertThat(session.sent.last()).isEqualTo("select Subtitles 3")
+        player.disconnect()
+        idle()
+        assertThat(local.parameters.preferredAudioLanguages).containsExactly("ru")
+        assertThat(local.parameters.preferredTextLanguages).containsExactly("es")
     }
 
     @Test

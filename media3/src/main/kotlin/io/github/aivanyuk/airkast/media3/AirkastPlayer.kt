@@ -30,7 +30,16 @@ import kotlin.time.Duration.Companion.seconds
  * file. The item's MIME type says which, and without one its URL's extension does
  * ([MediaFormat.of]). A media item set while a session is attached loads at once, as a Cast
  * player's does, and one set before waits for a session. The device volume can be read but not
- * set. What a `Player` has no place for, such as switching tracks, the app takes from [session].
+ * set.
+ *
+ * While an HLS item is on the receiver, `getCurrentTracks` lists its audio and subtitle renditions
+ * as [AirkastSession.renditions] reads them, one group of one format each, whose id is the
+ * rendition's, and marks the ones the receiver reports selected. Video has no group: the receiver
+ * picks the variant itself. `setTrackSelectionParameters` selects among them: an override of a
+ * group, or else the first rendition in one of the preferred audio or text languages. Disabling
+ * the text type, or ignoring the default selection flag for text as media3's controls do, turns
+ * subtitles off. Parameters set before an item is on the receiver apply once it is, and to each
+ * item after. For a receiver-specific rule, [session]'s `selectTrack` is still there.
  *
  * With a [Builder.localPlayer], it plays on the phone too: the app's own player plays until a cast
  * starts and takes the item back when it ends, and a `MediaSession` over this player drives both.
