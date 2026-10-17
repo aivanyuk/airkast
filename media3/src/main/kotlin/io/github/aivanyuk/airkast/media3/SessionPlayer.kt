@@ -12,6 +12,7 @@ import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.aivanyuk.airkast.AirkastException
@@ -24,6 +25,7 @@ import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.RemoteCommand
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event
@@ -40,6 +42,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -60,6 +63,7 @@ internal class SessionPlayer(
     private val awake: KeepAwake?,
     private val pollInterval: Duration,
     private val disconnectOnBack: Boolean,
+    private val followsRemote: Boolean = true,
     private val connector: Connector,
     private val audioRoute: AudioRoute? = null,
     private val streamsAudio: (Receiver) -> Boolean = { false },
@@ -401,7 +405,10 @@ internal class SessionPlayer(
         attachedAt = TimeSource.Monotonic.markNow()
         streamJob =
             scope.launch {
-                val end = stream.events.first { it is ReceiverEvent.Disconnected } as ReceiverEvent.Disconnected
+                val end =
+                    stream.events
+                        .onEach { if (it is ReceiverEvent.RemoteCommand && streaming === stream) follow(it.command) }
+                        .first { it is ReceiverEvent.Disconnected } as ReceiverEvent.Disconnected
                 if (streaming !== stream) return@launch
                 val failure = AirkastException.Disconnected(end.cause)
                 stopStreaming(EndReason.Lost, failure)
@@ -563,6 +570,43 @@ internal class SessionPlayer(
         }
     }
 
+    /**
+     * Plays, pauses or skips as a button on the receiver's remote asks, on the player the app
+     * sees: the local player while it plays to a speaker. media3's button actions prepare an idle
+     * player and replay an ended one, as a media button does.
+     */
+    private fun follow(command: RemoteCommand) {
+        if (!followsRemote) return
+        val player: Player = handoff as? Player ?: this
+        log.debug { "the receiver's remote: $command" }
+        when (command) {
+            RemoteCommand.Play -> {
+                Util.handlePlayButtonAction(player)
+            }
+
+            RemoteCommand.Pause -> {
+                Util.handlePauseButtonAction(player)
+            }
+
+            RemoteCommand.PlayPause -> {
+                Util.handlePlayPauseButtonAction(player)
+            }
+
+            RemoteCommand.Next -> {
+                if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT)) player.seekToNext()
+            }
+
+            RemoteCommand.Previous -> {
+                if (player.isCommandAvailable(
+                        Player.COMMAND_SEEK_TO_PREVIOUS,
+                    )
+                ) {
+                    player.seekToPrevious()
+                }
+            }
+        }
+    }
+
     /** With a local player, the cast that ended gives it the item, and this player is left empty. */
     private fun handBack() {
         val local = handoff ?: return
@@ -700,6 +744,11 @@ internal class SessionPlayer(
 
             is ReceiverEvent.VolumeChanged -> {
                 volume = (event.volume * MAX_VOLUME).roundToInt().coerceIn(0, MAX_VOLUME)
+            }
+
+            is ReceiverEvent.RemoteCommand -> {
+                follow(event.command)
+                return
             }
 
             // The TV leaves its player only once the sender stops.

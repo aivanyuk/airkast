@@ -11,6 +11,7 @@ import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AudioStream
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.RemoteCommand
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event
@@ -191,6 +192,57 @@ class SpeakerTest {
         assertThat(routed.last()).isNull()
         assertThat(sessions.single().loaded?.url).isEqualTo("https://example.com/song.mp3")
         assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
+    }
+
+    @Test
+    fun theSpeakersRemoteDrivesTheLocalPlayer() {
+        val next = MediaItem.fromUri("https://example.com/next.mp3")
+        player.setMediaItems(listOf(item, next))
+        player.prepare()
+        player.play()
+        idle()
+        player.connect(soundbar)
+        idle()
+        val stream = streams.single()
+
+        stream.emit(ReceiverEvent.RemoteCommand(RemoteCommand.PlayPause))
+        idle()
+        assertThat(local.playWhenReady).isFalse()
+        stream.emit(ReceiverEvent.RemoteCommand(RemoteCommand.PlayPause))
+        idle()
+        assertThat(local.playWhenReady).isTrue()
+
+        stream.emit(ReceiverEvent.RemoteCommand(RemoteCommand.Next))
+        idle()
+        assertThat(local.index).isEqualTo(1)
+        stream.emit(ReceiverEvent.RemoteCommand(RemoteCommand.Previous))
+        idle()
+        assertThat(local.index).isEqualTo(0)
+        assertThat(player.connection.value).isInstanceOf(Connection.Streaming::class.java)
+    }
+
+    @Test
+    fun withoutFollowsRemoteTheRemoteIsTheApps() {
+        val ignoring =
+            AirkastPlayer(ApplicationProvider.getApplicationContext(), Airkast()) {
+                localPlayer = local
+                audioRoute = AudioRouteFake()
+                streamsAudio = { true }
+                followsRemote = false
+                audioConnector = AudioConnector { receiver, _, _ -> FakeAudioStream(receiver).also { streams += it } }
+            }
+        try {
+            ignoring.setMediaItem(item)
+            ignoring.prepare()
+            ignoring.play()
+            ignoring.connect(soundbar)
+            idle()
+            streams.single().emit(ReceiverEvent.RemoteCommand(RemoteCommand.PlayPause))
+            idle()
+            assertThat(local.playWhenReady).isTrue()
+        } finally {
+            ignoring.release()
+        }
     }
 
     @Test
