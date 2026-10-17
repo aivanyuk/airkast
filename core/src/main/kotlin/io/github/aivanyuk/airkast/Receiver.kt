@@ -75,14 +75,15 @@ public class Receiver(
 
     /**
      * Which parts of [NowPlaying] the receiver shows, from its metadata feature bits: the track's
-     * name, artist and album (bit 17), artwork (15) and progress (16). A receiver typed in by
-     * hand says nothing, so it gets all three.
+     * name, artist and album (bit 17), artwork (15) and progress (16). A receiver with no
+     * feature bits to read, such as one typed in by hand, gets all three.
      */
     internal val takesTrackInfo: Boolean get() = takes(METADATA_TEXT)
     internal val takesArtwork: Boolean get() = takes(METADATA_ARTWORK)
     internal val takesProgress: Boolean get() = takes(METADATA_PROGRESS)
 
-    private fun takes(bit: Int) = properties.isEmpty() || features and (1L shl bit) != 0L
+    private fun takes(bit: Int) =
+        (properties["features"] ?: properties["ft"]).isNullOrBlank() || features and (1L shl bit) != 0L
 
     private val statusFlags: Long get() = (properties["flags"] ?: properties["sf"])?.let(::parseHex) ?: 0L
 

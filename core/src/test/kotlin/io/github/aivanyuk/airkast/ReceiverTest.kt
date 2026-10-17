@@ -142,8 +142,14 @@ class ReceiverTest {
         assertThat(listOf(textOnly.takesTrackInfo, textOnly.takesArtwork, textOnly.takesProgress))
             .containsExactly(true, false, false)
             .inOrder()
+        val lg = receiver("features" to lgFeatures)
+        assertThat(listOf(lg.takesTrackInfo, lg.takesArtwork, lg.takesProgress)).containsExactly(true, true, true)
         val typedIn = Receiver("tv", "10.0.0.2")
         assertThat(listOf(typedIn.takesTrackInfo, typedIn.takesArtwork, typedIn.takesProgress))
+            .containsExactly(true, true, true)
+        // A record without feature bits says nothing about them either.
+        val noFeatures = receiver("model" to "OLED65CX6LA", "deviceid" to "02:00:00:00:00:01")
+        assertThat(listOf(noFeatures.takesTrackInfo, noFeatures.takesArtwork, noFeatures.takesProgress))
             .containsExactly(true, true, true)
     }
 

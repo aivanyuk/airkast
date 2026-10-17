@@ -150,7 +150,7 @@ with NTP timing; the facts come from owntone's sender, which is GPL, so no code 
 | Retransmit | The receiver asks on the sender's control port (`0x80 0xD5`, first sequence number, count); the sender sends the packets again to `dataPort` |
 | Pause, flush | `FLUSH` with `RTP-Info` naming the next packet; once it is answered, a new timeline starts with a `0x90` sync and a marked packet |
 | Volume | `SET_PARAMETER`, `text/parameters`, `volume: -30.0` to `0.0` dB, `-144.0` for silent; `GET_PARAMETER` reads it |
-| Now playing | `SET_PARAMETER` with `RTP-Info: rtptime=…`: DMAP (`mlit` with `minm`, `asar`, `asal`), the artwork as `image/jpeg` or `image/png`, and `progress: start/now/end` in RTP time. Each goes only to a receiver with its feature bit: 17 for the DMAP, 15 for the artwork, 16 for the progress, as owntone reads them and the openairplay spec lists them. The Samsung sets all three. A receiver typed in by hand and not described gets all three |
+| Now playing | `SET_PARAMETER` with `RTP-Info: rtptime=…`: DMAP (`mlit` with `minm`, `asar`, `asal`), the artwork as `image/jpeg` or `image/png`, and `progress: start/now/end` in RTP time. Each goes only to a receiver with its feature bit: 17 for the DMAP, 15 for the artwork, 16 for the progress, as owntone reads them and the openairplay spec lists them. The Samsung and the LG CX set all three. A receiver with no feature bits to read, such as one typed in by hand and not described, gets all three |
 | Keepalive, end | `POST /feedback` every two seconds; `TEARDOWN` when the app closes the stream |
 
 A failed UDP send drops the packet, which the receiver asks for again; sends that fail for three

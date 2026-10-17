@@ -93,7 +93,8 @@ public interface AudioStream : AutoCloseable {
      * [NowPlaying.duration], it shows the progress too: [elapsed] is how far into the track the
      * frame the receiver plays now is, so the app calls this again after a seek. Only what the
      * receiver's feature bits say it shows goes out: a receiver without the artwork bit gets no
-     * [NowPlaying.artwork]. One typed in by hand, with nothing to read, gets everything.
+     * [NowPlaying.artwork]. One with no feature bits to read, such as one typed in by hand, gets
+     * everything.
      */
     public suspend fun setNowPlaying(
         nowPlaying: NowPlaying,
