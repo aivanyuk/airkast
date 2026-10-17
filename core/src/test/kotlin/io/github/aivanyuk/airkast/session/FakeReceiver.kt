@@ -64,6 +64,8 @@ internal class FakeReceiver(
     digestPassword: String? = null,
     /** What it answers `GET /info` with, as the LG CX does by default, or null to answer 404. */
     private val info: Map<String, Any?>? = LG_INFO,
+    /** Whether `GET /info` adds the TXT record when the sender asks for it, as the LG CX does. */
+    private val sendsTxt: Boolean = true,
 ) : AutoCloseable {
     private val longTermSeed = ByteArray(32).also(RANDOM::nextBytes)
     val receiverId: String = UUID.randomUUID().toString().uppercase()
@@ -356,7 +358,11 @@ internal class FakeReceiver(
 
                 path == "/info" -> {
                     if (info != null) {
-                        link.reply(request, BinaryPlist.encode(info))
+                        val asked =
+                            request.body.isNotEmpty() &&
+                                "txtAirPlay" in (BinaryPlist.decode(request.body) as Map<*, *>)["qualifier"] as List<*>
+                        val answer = if (asked && sendsTxt) info + ("txtAirPlay" to txtRecord(info)) else info
+                        link.reply(request, BinaryPlist.encode(answer))
                     } else {
                         link.write(
                             HttpMessage(
@@ -388,6 +394,24 @@ internal class FakeReceiver(
                 }
             }
         }
+    }
+
+    /** The TXT record [info] says, as the LG CX announces it, `acl=0` included. */
+    private fun txtRecord(info: Map<String, Any?>): ByteArray {
+        val features = info["features"] as Long
+        val entries =
+            listOf(
+                "acl=0",
+                "deviceid=${info["deviceID"]}",
+                "features=0x%X,0x%X".format(features and 0xffffffffL, features ushr 32),
+                "flags=0x%X".format(info["statusFlags"] as Long),
+                "model=${info["model"]}",
+                "srcvers=${info["sourceVersion"]}",
+            )
+        return entries
+            .flatMap { entry ->
+                entry.toByteArray().let { listOf(it.size.toByte()) + it.toList() }
+            }.toByteArray()
     }
 
     private fun stall(key: String) {

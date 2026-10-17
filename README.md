@@ -310,7 +310,9 @@ real receiver. No code is copied from either. How a sender streams audio to an A
 comes from [owntone](https://github.com/owntone/owntone-server) (GPL-2.0), as facts only: no
 code is taken from it. The openairplay
 [AirPlay specification](https://github.com/openairplay/airplay-spec) gives facts too, such as
-the metadata feature bits and `GET /info`; it has no licence, so nothing is copied from it. The
+the metadata feature bits and `GET /info`, and so do Emanuele Cozzi's
+[AirPlay 2 notes](https://emanuelecozzi.net/docs/airplay2); neither states a licence, so nothing
+is copied from them. The
 Curve25519 field arithmetic follows
 [TweetNaCl](https://tweetnacl.cr.yp.to/) (public domain).
 

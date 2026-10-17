@@ -155,9 +155,10 @@ public class Airkast private constructor(
      * and what the answer holds replaces properties of the same name.
      *
      * The receiver answers before pairing, so this asks for no PIN or password. The LG CX, the
-     * Samsung HW-Q990B and a Mac send their feature bits and status flags, not their whole TXT
-     * record: a receiver that restricts who may cast without saying so in its status flags, such
-     * as a Mac set to "Current User", may read as [Compatibility.Supported] and fail to connect.
+     * Samsung HW-Q990B and a Mac answer with their whole TXT record. A receiver that sends only
+     * its feature bits and status flags leaves out `pw` and `act`: one that restricts who may
+     * cast without saying so in its status flags may then read as [Compatibility.Supported] and
+     * fail to connect.
      *
      * Throws [AirkastException.Unreachable] when nothing answers at the address,
      * [AirkastException.Rejected] when the receiver refuses the request, and
