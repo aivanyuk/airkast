@@ -6,6 +6,13 @@ caller sees adds its line under "Unreleased".
 
 ## Unreleased
 
+### Added
+
+- `LocalNetworkPermission` in `airkast-android`: Android 17's local network permission as a
+  `StateFlow` for a cast button, `NotNeeded`, `Granted` or `Denied`, with the `permission` to
+  request and `refresh()` to read the grant again when the screen starts and after the request's
+  result. The app asks, and decides how often.
+
 ### Changed
 
 - `AirkastPlayer.connect` asks again for a PIN or password the receiver refused, where it ended
