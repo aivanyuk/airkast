@@ -149,15 +149,16 @@ if (receiver.isAudioSupported && !receiver.isSupported) {
 `describe` throws an `AirkastException` when the receiver does not answer. A receiver that answers
 without its TXT record gets its feature bits, status flags, model and device ID, but no access
 setting, so one that lets in only its owner's devices may read as `Supported` and still refuse the
-connect. `connect` and `connectAudio` describe a receiver typed in by hand
-themselves, so one that asks for a PIN or password gets the right prompt. If the receiver answers
+connect. `connect` and `connectAudio` describe a receiver typed in by hand themselves, so one
+that asks for a PIN or password gets the right prompt. If the receiver answers
 `GET /info` with an error, they go on with the receiver as it was given.
 
 ### Remember a receiver
 
 `Receiver.id` identifies a receiver: its `deviceid` from the network announcement, or
-`"host:port"` when it has none, as for a receiver typed in by hand. With a `deviceid`, the ID
-stays the same when the receiver is renamed or gets a new address. The built-in credential stores
+`"host:port"` when it has none, as for a receiver typed in by hand. `Airkast.describe` gives such
+a receiver its `deviceid`, so it has the ID discovery gives it. With a `deviceid`, the ID stays the
+same when the receiver is renamed or gets a new address. The built-in credential stores
 keep pairings under it. Use it to key a picker's rows, or to save the receiver the user last
 picked.
 

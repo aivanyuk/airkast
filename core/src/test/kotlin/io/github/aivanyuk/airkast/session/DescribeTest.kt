@@ -32,6 +32,9 @@ class DescribeTest {
                 assertThat(described.compatibility).isEqualTo(Compatibility.Supported)
                 assertThat(described.model).isEqualTo("OLED65CX6LA")
                 assertThat(described.deviceId).isEqualTo("02:00:00:00:00:01")
+                // The ID discovery would give it, where the address typed in was its ID before.
+                assertThat(typedIn.id).isEqualTo("127.0.0.1:${fake.port}")
+                assertThat(described.id).isEqualTo("02:00:00:00:00:01")
                 assertThat(described.sourceVersion).isEqualTo("377.25.06")
                 // The TXT record itself, which it sends when asked.
                 assertThat(described.properties).containsEntry("acl", "0")
