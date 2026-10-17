@@ -193,17 +193,21 @@ class CastActivity : AppCompatActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        lifecycleScope.launch { localNetwork.refresh() }
+    }
 }
 ```
 
 - Building a `LocalNetworkPermission` reads the grant, which the system answers from memory, so
-  you can build it on the main thread. `refresh()` reads the grant again, off the caller's thread.
-- Call `refresh()` with the request's result. The system's dialog pauses the activity without
-  stopping it, so nothing else reads the grant again.
-- Collecting `state` reads the grant again before the first value, so a collection that starts
-  with the screen, through `repeatOnLifecycle` or Compose's `collectAsStateWithLifecycle()`, sees a
-  change the user made in Settings. If you read `state.value` without collecting it, call
-  `refresh()` from `onStart`.
+  you can build it on the main thread. After that, `state` changes only when you call `refresh()`,
+  which reads the grant again, off the caller's thread.
+- Call `refresh()` when the screen starts, in `onStart` or Compose's `LifecycleStartEffect`. The
+  user may have changed the permission in Settings while the app was in the background.
+- Call `refresh()` with the request's result too. The system's dialog pauses the activity without
+  stopping it, so `onStart` does not run again.
 - `LocalNetworkPermission` only reports the grant. `ReceiverDiscovery` and `Airkast(context)` read
   it themselves each time they start, and fail with `NotPermitted` without it.
 

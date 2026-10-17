@@ -2,10 +2,9 @@ package io.github.aivanyuk.airkast.android
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
-import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 
 /**
@@ -29,15 +28,14 @@ public class LocalNetworkPermission(
     public val permission: String = LocalNetwork.PERMISSION
 
     /**
-     * The grant as last read. Collecting it reads the grant again first, so a collector that starts
-     * with the screen, as `collectAsStateWithLifecycle` and `repeatOnLifecycle` do, sees a change
-     * the user made in Settings.
+     * The grant as last read, when this was built or at the last [refresh]. It changes only on a
+     * [refresh], so a change the user makes in Settings shows after the next one.
      */
-    public val state: StateFlow<State> = Refreshing()
+    public val state: StateFlow<State> = current.asStateFlow()
 
     /**
-     * Reads the grant again, off the caller's thread. Call it with the result of the request, and
-     * where the app reads [state]'s value without collecting it, from `onStart`.
+     * Reads the grant again, off the caller's thread. Call it when the screen starts, in `onStart`,
+     * and with the result of the request.
      */
     public suspend fun refresh() {
         current.value = withContext(Dispatchers.IO) { read() }
@@ -49,16 +47,6 @@ public class LocalNetworkPermission(
             LocalNetwork.isAccessible(context) -> State.Granted
             else -> State.Denied
         }
-
-    // Implementing StateFlow takes this opt-in, since kotlinx-coroutines may add members to it. The
-    // delegate answers everything but collect.
-    @OptIn(ExperimentalForInheritanceCoroutinesApi::class)
-    private inner class Refreshing : StateFlow<State> by current {
-        override suspend fun collect(collector: FlowCollector<State>): Nothing {
-            refresh()
-            current.collect(collector)
-        }
-    }
 
     /** What [state] says. */
     public enum class State {

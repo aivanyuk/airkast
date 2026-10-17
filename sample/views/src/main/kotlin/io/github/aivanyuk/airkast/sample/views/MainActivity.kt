@@ -103,7 +103,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { cast.player.connection.collect(::showState) }
-                // Collecting reads the grant again on every start, since the user may change it in Settings.
                 launch { localNetwork.state.collectLatest(::scan) }
                 launch { cast.log.collect { binding.log.text = it.joinToString("\n") } }
             }
@@ -112,6 +111,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        // The user may change it in Settings and come back.
+        lifecycleScope.launch { localNetwork.refresh() }
         // Connecting a controller starts CastService, whose MediaSession puts up the notification.
         val token = SessionToken(this, ComponentName(this, CastService::class.java))
         val future = MediaController.Builder(this, token).buildAsync()

@@ -4,8 +4,10 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.android.LocalNetworkPermission.State
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -56,12 +58,18 @@ class LocalNetworkPermissionTest {
 
     @Test
     @Config(sdk = [37])
-    fun collectingReadsTheGrantAgain() =
+    fun aCollectorSeesTheGrantAfterARefresh() =
         runBlocking {
             app.applicationInfo.targetSdkVersion = 37
             val permission = LocalNetworkPermission(app)
+            val seen = mutableListOf<State>()
+            val collecting = launch(Dispatchers.Unconfined) { permission.state.collect { seen += it } }
+
             shadowOf(app).grantPermissions(LocalNetwork.PERMISSION)
-            assertThat(permission.state.first()).isEqualTo(State.Granted)
-            assertThat(permission.state.value).isEqualTo(State.Granted)
+            assertThat(seen).containsExactly(State.Denied)
+            permission.refresh()
+            yield()
+            assertThat(seen).containsExactly(State.Denied, State.Granted).inOrder()
+            collecting.cancel()
         }
 }

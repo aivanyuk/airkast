@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
@@ -120,10 +121,7 @@ private class LocalNetworkAccess(
     val request: () -> Unit,
 )
 
-/**
- * Android 17's local network permission, which the app declares and asks for itself. Collecting the
- * state reads the grant again each time the screen starts, so it sees a change made in Settings.
- */
+/** Android 17's local network permission, which the app declares and asks for itself. */
 @Composable
 private fun rememberLocalNetworkAccess(): LocalNetworkAccess {
     val context = LocalContext.current
@@ -134,6 +132,11 @@ private fun rememberLocalNetworkAccess(): LocalNetworkAccess {
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
             scope.launch { localNetwork.refresh() }
         }
+    // The user may change it in Settings and come back.
+    LifecycleStartEffect(localNetwork) {
+        scope.launch { localNetwork.refresh() }
+        onStopOrDispose { }
+    }
     return LocalNetworkAccess(state != LocalNetworkPermission.State.Denied) {
         launcher.launch(localNetwork.permission)
     }
