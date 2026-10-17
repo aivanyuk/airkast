@@ -9,7 +9,6 @@ import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.CredentialStore
 import io.github.aivanyuk.airkast.SenderIdentity
-import java.io.File
 
 /**
  * An [Airkast] with Android's defaults, which [block] may change:
@@ -22,9 +21,10 @@ import java.io.File
  *   the local network, and binds the session's connections to the network that holds the receiver
  *   ([LocalNetwork.socketFactory]).
  * - [Airkast.credentialStore] keeps pairings in the app's no-backup files, so a receiver asks for
- *   its PIN or password once, and no backup carries the private keys to another device. The
- *   store finds that directory, which Android creates when asked for it, on its first use and off
- *   the caller's thread.
+ *   its PIN or password once, and no backup carries the private keys to another device. Each is
+ *   sealed with a key in the Android Keystore ([CredentialStore.Companion.encrypted]), and the
+ *   store logs to the client's [Airkast.logger]. It finds that directory, which Android creates
+ *   when asked for it, and the key on its first use and off the caller's thread.
  *
  * Building one touches no disk and no network, so it may run on the main thread, in
  * `Application.onCreate` or a dependency graph. It asks the package manager for the app's label
@@ -42,7 +42,7 @@ public fun Airkast(
             if (!LocalNetwork.isAccessible(app)) throw notPermitted()
             LocalNetwork.socketFactory(app, receiver.host)
         }
-        credentialStore = CredentialStore.file { File(app.noBackupFilesDir, CREDENTIALS_FILE) }
+        credentialStore = CredentialStore.encrypted(app, loggerAsSet())
         block()
     }
 }
@@ -60,6 +60,27 @@ private fun Context.deviceId(): String {
 
 private fun Context.label(): String =
     applicationInfo.loadLabel(packageManager).toString().ifBlank { SenderIdentity().name }
+
+/**
+ * Hands each line to this builder's [Airkast.Builder.logger] as it is when the line comes, so a
+ * default set before the app's block logs where the block says.
+ */
+private fun Airkast.Builder.loggerAsSet(): Airkast.Logger {
+    val builder = this
+    return object : Airkast.Logger {
+        override val minLevel: Airkast.Logger.Level
+            get() = builder.logger?.minLevel ?: Airkast.Logger.Level.Error
+
+        override fun log(
+            level: Airkast.Logger.Level,
+            tag: String,
+            message: String,
+            error: Throwable?,
+        ) {
+            builder.logger?.log(level, tag, message, error)
+        }
+    }
+}
 
 internal const val CREDENTIALS_FILE = "airkast-credentials"
 

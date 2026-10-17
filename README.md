@@ -232,8 +232,8 @@ that lives as long as the process, such as your `Application`.
 
 `Airkast(context)` sets Android defaults: it names the sender after your app's label, gives it an
 ID that stays the same across launches, checks the local network permission, binds connections to
-the receiver's Wi-Fi, and keeps pairings in the app's no-backup files. Every default is a builder
-property you can change:
+the receiver's Wi-Fi, and keeps pairings in the app's no-backup files, encrypted with a key in the
+Android Keystore. Every default is a builder property you can change:
 
 ```kotlin
 import io.github.aivanyuk.airkast.Airkast

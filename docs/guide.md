@@ -40,7 +40,8 @@ On Android, `Airkast(context)` from `airkast-android` builds a client with Andro
   Without that binding, a connection can go over mobile data when the Wi-Fi has no internet
   access, or into a VPN, and time out.
 - It keeps pairings in a file in the app's no-backup files, so a backup never copies a private
-  key to another device.
+  key to another device. Each pairing in the file is encrypted with a key kept in the Android
+  Keystore (see [Store pairings yourself](#store-pairings-yourself)).
 
 On a desktop JVM, `Airkast { ... }` from `airkast-core` builds a client with the same properties.
 It keeps pairings in memory unless you set `credentialStore`.
@@ -54,6 +55,7 @@ Set options in the builder block:
 
 ```kotlin
 import io.github.aivanyuk.airkast.Airkast
+import io.github.aivanyuk.airkast.CredentialStore
 import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.android.Airkast
 import io.github.aivanyuk.airkast.android.logcat
@@ -63,7 +65,8 @@ val airkast = Airkast(context) {
     identity = SenderIdentity(name = "Living room remote", deviceId = identity.deviceId)
     requestTimeout = 3.seconds
     logger = Airkast.Logger.logcat()
-    credentialStore = MyKeystoreStore(context)
+    // Forget pairings when the process ends, for an app that must not keep them.
+    credentialStore = CredentialStore.inMemory()
 }
 ```
 
@@ -78,7 +81,7 @@ val airkast = Airkast(context) {
 | `ntpTiming` | `true` | Answers the receiver's clock-sync (NTP) requests. The receiver must be able to reach the sender over UDP. A Mac rejects a session without it. An audio stream always answers them. |
 | `audioLatency` | 1 second | How far ahead of the receiver's output an `AudioStream` sends: the time from `play()` to the first sound, and how long a gap on the network can last. |
 | `socketFactory` | none; with `Airkast(context)`, the permission check and network binding above | Picks the socket factory for each receiver. Setting your own replaces both Android behaviours. |
-| `credentialStore` | `CredentialStore.inMemory()`; a file in the no-backup files with `Airkast(context)` | Where pairings are kept (see [Pairing](#pairing)). |
+| `credentialStore` | `CredentialStore.inMemory()`; `CredentialStore.encrypted(context)`, a file in the no-backup files, with `Airkast(context)` | Where pairings are kept (see [Pairing](#pairing)). |
 | `logger` | none | Takes debugging lines (see [Logs and statistics](#logs-and-statistics)). |
 | `eventListener` | none | Takes typed events for statistics (see [Logs and statistics](#logs-and-statistics)). |
 
@@ -203,16 +206,36 @@ keeps the password with the credentials and answers for the user, so the user ty
 
 ### Store pairings yourself
 
-`CredentialStore` is an interface with `get`, `put` and `remove`. The library provides two stores:
+A credential includes a private key, and the password for a receiver that uses one.
+`CredentialStore` is an interface with `get`, `put` and `remove`. The library provides three
+stores:
 
 - `CredentialStore.inMemory()` keeps pairings while the store exists. The receiver asks again in
-  the next process.
-- `CredentialStore.file(file)` keeps them in a file that only its owner can read.
-  `Airkast(context)` uses this, in the no-backup files.
+  the next process. `Airkast { ... }` uses this.
+- `CredentialStore.file(file)` keeps them in a file that only its owner can read, in the clear.
+- `CredentialStore.encrypted(context)` from `airkast-android` keeps them in a file too, each one
+  encrypted with AES-256-GCM under a key kept in the Android Keystore. `Airkast(context)` uses
+  this, in the no-backup files, and logs through the client's `logger`.
 
-A credential includes a private key, and the password for a receiver that uses one. An app with a
-secure store, such as the Android Keystore, can implement `CredentialStore` over it.
-`Credentials.encoded` and `Credentials.decode` convert credentials to and from a string.
+The encrypted store makes its key, under the alias `airkast-pairings`, the first time it is used.
+The key needs no screen lock, so a cast from the background can read a pairing. The store never
+fails a connect:
+
+- A pairing it can no longer decrypt, as after a factory reset or a Keystore wipe, reads as none,
+  and the receiver asks for its PIN or password again.
+- A pairing it cannot encrypt stays in memory until the process ends.
+- When the Keystore cannot make or load the key, every new pairing stays in memory until the
+  process ends.
+
+Each of these logs a line at `Warn`, under the tag `credentials`. A pairing kept in the clear, as
+`Airkast(context)` kept it up to 0.5.0, still reads: the first read encrypts it and rewrites the
+file, so the receiver does not ask again.
+
+To keep pairings somewhere else, implement `CredentialStore`. `Credentials.encoded` and
+`Credentials.decode` convert credentials to and from a string. To keep the file but encrypt it
+with your own key, pass a `CredentialStore.Sealer` to `CredentialStore.file(sealer) { file }`: its
+`seal` and `open` turn bytes into sealed bytes and back, and an `IOException` from either says
+there is no key.
 
 ## The media3 player
 

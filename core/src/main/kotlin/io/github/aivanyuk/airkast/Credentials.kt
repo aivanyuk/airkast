@@ -49,17 +49,17 @@ public class Credentials internal constructor(
             val password = fields.getOrNull(4)?.takeIf { it.isNotEmpty() }?.let { String(it, Charsets.UTF_8) }
             return Credentials(fields[0], fields[1], fields[2], fields[3], password)
         }
+    }
+}
 
-        private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it) }
+internal fun ByteArray.hex(): String = joinToString("") { "%02x".format(it) }
 
-        private fun String.unhex(): ByteArray? {
-            if (length % 2 != 0) return null
-            return ByteArray(length / 2) {
-                val high = Character.digit(this[2 * it], 16)
-                val low = Character.digit(this[2 * it + 1], 16)
-                if (high < 0 || low < 0) return null
-                ((high shl 4) or low).toByte()
-            }
-        }
+internal fun String.unhex(): ByteArray? {
+    if (length % 2 != 0) return null
+    return ByteArray(length / 2) {
+        val high = Character.digit(this[2 * it], 16)
+        val low = Character.digit(this[2 * it + 1], 16)
+        if (high < 0 || low < 0) return null
+        ((high shl 4) or low).toByte()
     }
 }

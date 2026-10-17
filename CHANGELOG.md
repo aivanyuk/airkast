@@ -4,6 +4,23 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## Unreleased
+
+### Added
+
+- `CredentialStore.encrypted(context)` in `airkast-android` keeps pairings in a file with each
+  one encrypted with AES-256-GCM under a key in the Android Keystore. A pairing it can no longer
+  decrypt reads as none, so the receiver asks again, and one it cannot encrypt stays in memory for
+  the process; neither fails a connect.
+- `CredentialStore.file(sealer, logger) { file }` encrypts the file with a
+  `CredentialStore.Sealer` of the app's own.
+
+### Changed
+
+- `Airkast(context)` keeps pairings with `CredentialStore.encrypted`, where it kept them in the
+  clear, in the same no-backup file. A pairing made with 0.5.0 still reads, and the first read
+  encrypts it.
+
 ## 0.5.0 - 2026-10-14
 
 ### Added
