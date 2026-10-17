@@ -35,8 +35,9 @@ public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer$
 }
 
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection$AwaitingSecret : io/github/aivanyuk/airkast/media3/AirkastPlayer$Connection {
-	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;)V
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;I)V
 	public final fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public final fun getRejected ()I
 	public final fun getSecret ()Lio/github/aivanyuk/airkast/Secret;
 	public fun toString ()Ljava/lang/String;
 }
@@ -75,9 +76,10 @@ public abstract interface class io/github/aivanyuk/airkast/media3/AirkastPlayer$
 }
 
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Event$CastAbandoned : io/github/aivanyuk/airkast/media3/AirkastPlayer$Event {
-	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;)V
+	public fun <init> (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/Secret;I)V
 	public final fun getAtSecret ()Lio/github/aivanyuk/airkast/Secret;
 	public fun getReceiver ()Lio/github/aivanyuk/airkast/Receiver;
+	public final fun getRejected ()I
 	public fun toString ()Ljava/lang/String;
 }
 

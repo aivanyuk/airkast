@@ -11,6 +11,7 @@ import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AudioStream
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event
 import org.junit.After
@@ -32,6 +33,7 @@ class SpeakerTest {
     private val routed = mutableListOf<AudioStream?>()
     private val events = mutableListOf<Event>()
     private var failure: AirkastException? = null
+    private var password: String? = null
     private val local = FakeLocalPlayer()
     private var streamsTo: (Receiver) -> Boolean = { it.name == "soundbar" }
     private val player =
@@ -42,7 +44,11 @@ class SpeakerTest {
             eventListener = { events += it }
             connector = Connector { receiver, _, _ -> FakeSession(receiver).also { sessions += it } }
             audioConnector =
-                AudioConnector { receiver, _, _ ->
+                AudioConnector { receiver, _, ask ->
+                    val wanted = password
+                    if (wanted != null && ask(Secret.Password) != wanted) {
+                        throw AirkastException.SecretRejected(Secret.Password)
+                    }
                     failure?.let { throw it }
                     FakeAudioStream(receiver).also { streams += it }
                 }
@@ -157,6 +163,21 @@ class SpeakerTest {
         assertThat((player.connection.value as Connection.Idle).failure).isSameInstanceAs(failure)
         assertThat(events.single()).isInstanceOf(Event.CastFailed::class.java)
         assertThat(player.isPlaying).isTrue()
+    }
+
+    @Test
+    fun aSpeakerThatRefusesItsPasswordAsksAgain() {
+        playingHere(at = 0)
+        password = "hunter2"
+        player.connect(soundbar)
+        idle()
+        player.enterSecret("hunter1")
+        idle()
+        assertThat((player.connection.value as Connection.AwaitingSecret).rejected).isEqualTo(1)
+        player.enterSecret("hunter2")
+        idle()
+        assertThat(player.connection.value).isInstanceOf(Connection.Streaming::class.java)
+        assertThat(events.single()).isInstanceOf(Event.CastStarted::class.java)
     }
 
     @Test

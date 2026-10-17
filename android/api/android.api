@@ -24,6 +24,8 @@ public final class io/github/aivanyuk/airkast/android/LogcatKt {
 public final class io/github/aivanyuk/airkast/android/ReceiverDiscovery {
 	public fun <init> (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;)V
 	public synthetic fun <init> (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun find (Ljava/lang/String;)Lio/github/aivanyuk/airkast/Receiver;
+	public final fun getKnown ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getReceivers ()Lkotlinx/coroutines/flow/Flow;
 }
 

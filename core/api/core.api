@@ -175,6 +175,12 @@ public final class io/github/aivanyuk/airkast/AirkastException$DiscoveryFailed :
 	public final fun getCode ()I
 }
 
+public final class io/github/aivanyuk/airkast/AirkastException$MasterUnreadable : io/github/aivanyuk/airkast/AirkastException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getStatus ()Ljava/lang/Integer;
+}
+
 public final class io/github/aivanyuk/airkast/AirkastException$NotPermitted : io/github/aivanyuk/airkast/AirkastException {
 	public fun <init> (Ljava/lang/String;)V
 }
@@ -220,6 +226,7 @@ public abstract interface class io/github/aivanyuk/airkast/AirkastSession : java
 	public abstract fun pause (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun play (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun playbackInfo (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun renditions (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun seek-6kh-FjM (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun selectTrack (Lio/github/aivanyuk/airkast/TrackKind;Ljava/lang/Long;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -302,6 +309,11 @@ public final class io/github/aivanyuk/airkast/Credentials {
 
 public final class io/github/aivanyuk/airkast/Credentials$Companion {
 	public final fun decode (Ljava/lang/String;)Lio/github/aivanyuk/airkast/Credentials;
+}
+
+public final class io/github/aivanyuk/airkast/HlsMaster {
+	public static final field INSTANCE Lio/github/aivanyuk/airkast/HlsMaster;
+	public final fun renditions (Ljava/lang/String;)Ljava/util/List;
 }
 
 public final class io/github/aivanyuk/airkast/Media {
@@ -417,6 +429,7 @@ public final class io/github/aivanyuk/airkast/Receiver {
 	public final fun getDeviceId ()Ljava/lang/String;
 	public final fun getFeatures ()J
 	public final fun getHost ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
 	public final fun getModel ()Ljava/lang/String;
 	public final fun getName ()Ljava/lang/String;
 	public final fun getPort ()I
@@ -504,6 +517,20 @@ public final class io/github/aivanyuk/airkast/ReceiverEvent$VolumeChanged : io/g
 	public fun <init> (D)V
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getVolume ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/Rendition {
+	public fun <init> (Lio/github/aivanyuk/airkast/TrackKind;JLjava/lang/String;Ljava/lang/String;ZLjava/util/List;Ljava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCharacteristics ()Ljava/util/List;
+	public final fun getForced ()Z
+	public final fun getGroup ()Ljava/lang/String;
+	public final fun getId ()J
+	public final fun getKind ()Lio/github/aivanyuk/airkast/TrackKind;
+	public final fun getLanguage ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

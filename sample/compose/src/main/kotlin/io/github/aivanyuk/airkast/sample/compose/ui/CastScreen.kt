@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
@@ -160,12 +162,14 @@ private sealed interface Discovery {
 
 /** Scans while this is composed, started, and [enabled]: the flow scans while it is collected. */
 @Composable
-private fun rememberDiscovery(enabled: Boolean): Discovery {
-    val context = LocalContext.current
+private fun rememberDiscovery(
+    receivers: ReceiverDiscovery,
+    enabled: Boolean,
+): Discovery {
     val discovery =
-        remember(enabled) {
+        remember(receivers, enabled) {
             if (enabled) {
-                ReceiverDiscovery(context)
+                receivers
                     .receivers
                     .map<List<Receiver>, Discovery> { Discovery.Found(it) }
                     .catch { e -> if (e is AirkastException) emit(Discovery.Failed(e)) else throw e }
@@ -182,33 +186,35 @@ private fun Receivers(
     enabled: Boolean,
     onPick: (Receiver) -> Unit,
 ) {
-    val discovery = rememberDiscovery(enabled)
+    val discovery = rememberDiscovery(cast.discovery, enabled)
     Column {
         Text(stringResource(R.string.receivers_title), style = MaterialTheme.typography.titleMedium)
         when (discovery) {
             is Discovery.Found -> {
                 for (receiver in discovery.receivers) {
-                    val usable = cast.canCast(receiver)
-                    ListItem(
-                        headlineContent = { Text(receiver.name) },
-                        supportingContent = {
-                            Text(
-                                stringResource(
-                                    R.string.receiver_detail,
-                                    receiver.model ?: receiver.host,
-                                    if (cast.streamsAudio(receiver)) {
-                                        stringResource(R.string.compat_speaker)
-                                    } else {
-                                        describe(receiver.compatibility)
-                                    },
-                                ),
-                            )
-                        },
-                        modifier =
-                            Modifier
-                                .clickable(enabled = usable) { onPick(receiver) }
-                                .alpha(if (usable) 1f else 0.5f),
-                    )
+                    key(receiver.id) {
+                        val usable = cast.canCast(receiver)
+                        ListItem(
+                            headlineContent = { Text(receiver.name) },
+                            supportingContent = {
+                                Text(
+                                    stringResource(
+                                        R.string.receiver_detail,
+                                        receiver.model ?: receiver.host,
+                                        if (cast.streamsAudio(receiver)) {
+                                            stringResource(R.string.compat_speaker)
+                                        } else {
+                                            describe(receiver.compatibility)
+                                        },
+                                    ),
+                                )
+                            },
+                            modifier =
+                                Modifier
+                                    .clickable(enabled = usable) { onPick(receiver) }
+                                    .alpha(if (usable) 1f else 0.5f),
+                        )
+                    }
                 }
                 if (enabled) Text(stringResource(R.string.searching), style = MaterialTheme.typography.bodySmall)
             }
@@ -307,6 +313,7 @@ private fun CastStatus(
                 SecretDialog(
                     state.receiver,
                     state.secret,
+                    state.rejected,
                     onEnter = cast.player::enterSecret,
                     onDismiss = cast.player::disconnect,
                 )
@@ -363,6 +370,7 @@ private fun CastStatus(
 private fun SecretDialog(
     receiver: Receiver,
     secret: Secret,
+    rejected: Int,
     onEnter: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -372,15 +380,28 @@ private fun SecretDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (pin) R.string.pin_title else R.string.password_title, receiver.name)) },
         text = {
-            OutlinedTextField(
-                value = code,
-                onValueChange = { code = if (pin) it.filter(Char::isDigit) else it },
-                label = { Text(stringResource(if (pin) R.string.pin_hint else R.string.password_hint)) },
-                singleLine = true,
-                visualTransformation = if (pin) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions =
-                    KeyboardOptions(keyboardType = if (pin) KeyboardType.NumberPassword else KeyboardType.Password),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // The player asks again after a refusal; a PIN receiver shows a new code.
+                if (rejected > 0) {
+                    Text(
+                        pluralStringResource(
+                            if (pin) R.plurals.pin_rejected else R.plurals.password_rejected,
+                            rejected,
+                            rejected,
+                        ),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = if (pin) it.filter(Char::isDigit) else it },
+                    label = { Text(stringResource(if (pin) R.string.pin_hint else R.string.password_hint)) },
+                    singleLine = true,
+                    visualTransformation = if (pin) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions =
+                        KeyboardOptions(keyboardType = if (pin) KeyboardType.NumberPassword else KeyboardType.Password),
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = { onEnter(code) }, enabled = code.isNotEmpty()) { Text(stringResource(R.string.pair)) }

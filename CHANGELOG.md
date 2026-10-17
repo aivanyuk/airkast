@@ -14,12 +14,26 @@ caller sees adds its line under "Unreleased".
   the process; neither fails a connect.
 - `CredentialStore.file(sealer, logger) { file }` encrypts the file with a
   `CredentialStore.Sealer` of the app's own.
+- `Receiver.id`, the key the built-in credential stores keep a receiver under: its `deviceid`, or
+  `host:port` without one. `ReceiverDiscovery.known` keeps every receiver an instance has found,
+  by `id`, after the scan stops, and `ReceiverDiscovery.find(id)` returns one of them, so an app
+  that keeps a receiver's `id` finds the receiver again after its picker stopped the scan.
+- `AirkastSession.renditions()` lists every audio and subtitle rendition of the loaded HLS item,
+  with the ids `selectTrack` takes, read from its master playlist, where `tracks()` lists only the
+  selected ones. `HlsMaster.renditions(text)` numbers a master the app has read itself, and
+  `AirkastException.MasterUnreadable` says the session could not read it.
 
 ### Changed
 
 - `Airkast(context)` keeps pairings with `CredentialStore.encrypted`, where it kept them in the
   clear, in the same no-backup file. A pairing made with 0.5.0 still reads, and the first read
   encrypts it.
+- `AirkastPlayer.connect` asks again for a PIN or password the receiver refused, where it ended
+  the cast with `SecretRejected`. The state stays `Connection.AwaitingSecret`, whose new
+  `rejected` counts the refusals since the connect began, until the receiver takes one or the app
+  calls `disconnect()`. `Event.CastAbandoned` carries `rejected` too.
+- A PIN or password the receiver refuses is logged at `Debug`, without a stack trace, where it was
+  an `Error` from both `Airkast.pair` and `Airkast.connect`.
 
 ## 0.5.0 - 2026-10-14
 
