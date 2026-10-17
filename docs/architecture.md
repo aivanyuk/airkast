@@ -74,19 +74,23 @@ Everything outside the root package is `internal`. A lower layer never imports a
 
 `Airkast.connect` opens a session in these steps:
 
-1. **Pair.** It opens the control connection and pairs. With credentials for the receiver in the
+1. **Describe, for a receiver typed in by hand.** A receiver with no TXT record is asked
+   `GET /info` first, on a connection of its own, so the steps below know what discovery would
+   have said. Credentials are looked up under the described receiver, then under the one typed
+   in, since a pairing made before is filed under its host and port.
+2. **Pair.** It opens the control connection and pairs. With credentials for the receiver in the
    client's `CredentialStore`, it proves the pairing that `Airkast.pair` made with a PIN or
    password (pair-verify). Without them, a receiver that advertises a PIN or password pairs first,
    if the caller gave a prompt function. Any other receiver pairs transiently.
-2. **Encrypt.** The control connection's keys derive from the pairing's shared secret.
-3. **Set up the stream.** `DefaultVideoSession` sends the base SETUP, opens the event channel,
+3. **Encrypt.** The control connection's keys derive from the pairing's shared secret.
+4. **Set up the stream.** `DefaultVideoSession` sends the base SETUP, opens the event channel,
    and sends RECORD and a SETUP for the type-130 stream.
-4. **Answer a Digest challenge, if any.** A receiver may answer the base SETUP with an HTTP Digest
+5. **Answer a Digest challenge, if any.** A receiver may answer the base SETUP with an HTTP Digest
    challenge, as a Mac with a password does. The password kept with the credentials answers it,
    and then signs every request on the control connection. With no password kept, or a wrong one,
    the open fails, and a connect with a prompt opens again with the password the user types, and
    keeps it.
-5. **Play.** From there it drives playback with `POST /command`. The receiver answers every
+6. **Play.** From there it drives playback with `POST /command`. The receiver answers every
    command with 200, and sends the result over the event channel. A request carries a
    `messageID`, and its result comes back on the event channel with the same ID.
 

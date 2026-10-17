@@ -246,6 +246,27 @@ class AudioStreamTest {
         }
 
     @Test
+    fun sendsOnlyTheMetadataTheReceiverShows(): Unit =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                // AirPlay audio (bit 9) and track info (17), without artwork (15) or progress (16).
+                val receiver = Receiver("fake", "127.0.0.1", fake.port, mapOf("features" to "0x20200"))
+                airkast.connectAudio(receiver).use { stream ->
+                    stream.setNowPlaying(
+                        NowPlaying(
+                            "Song",
+                            "Artist",
+                            duration = 3.seconds,
+                            artwork = byteArrayOf(0xFF.toByte(), 0xD8.toByte()),
+                        ),
+                    )
+                    val sent = fake.messages.filter { it.startLine.startsWith("SET_PARAMETER") }
+                    assertThat(sent.map { it.header("Content-Type") }).containsExactly("application/x-dmap-tagged")
+                }
+            }
+        }
+
+    @Test
     fun aWriteWaitsForRoomAndOfferTakesWhatFits() =
         runBlocking {
             FakeReceiver().use { fake ->

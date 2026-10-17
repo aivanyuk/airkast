@@ -130,6 +130,30 @@ class Cast(
         player.connect(receiver, pairWith)
     }
 
+    /**
+     * Plays [url] on the receiver at [host], typed in by hand, as [start] does. Such a receiver
+     * has no TXT record, so `describe` asks it what it is first: a speaker then streams the
+     * phone's audio rather than being sent a URL. One that does not answer is cast to as typed in.
+     */
+    fun startAt(
+        name: String,
+        host: String,
+        url: String,
+        format: MediaFormat? = null,
+    ) {
+        scope.launch {
+            val typedIn = Receiver(name, host)
+            val receiver =
+                try {
+                    airkast.describe(typedIn)
+                } catch (e: AirkastException) {
+                    note("describe: ${e.message}")
+                    typedIn
+                }
+            start(receiver, url, format)
+        }
+    }
+
     /** Whether the cast to [receiver] streams the phone's audio: a speaker, which plays no URL. */
     fun streamsAudio(receiver: Receiver): Boolean = !receiver.isSupported && receiver.isAudioSupported
 

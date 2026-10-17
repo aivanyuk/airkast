@@ -48,7 +48,8 @@ class ConnectorTest {
         setUp: (Receiver) -> Unit,
     ): String =
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
-            val receiver = Receiver("tv", "127.0.0.1", server.localPort)
+            // Found by discovery, so the connect asks for no GET /info before it pairs.
+            val receiver = Receiver("tv", "127.0.0.1", server.localPort, mapOf("features" to "0x7F8AD0,0x38BCB46"))
             setUp(receiver)
             val path = CompletableFuture<String>()
             thread(isDaemon = true) {

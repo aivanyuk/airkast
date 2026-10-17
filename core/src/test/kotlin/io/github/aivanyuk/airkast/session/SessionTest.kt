@@ -265,7 +265,8 @@ class SessionTest {
     @Test
     fun aReceiverThatHangsUpWhilePairingDisconnects() {
         ServerSocket(0).use { server ->
-            thread(isDaemon = true) { runCatching { server.accept().close() } }
+            // It hangs up on GET /info too, which the connect goes on from.
+            thread(isDaemon = true) { runCatching { while (true) server.accept().close() } }
             val error =
                 runCatching {
                     runBlocking { airkast.connect(Receiver("rude", "127.0.0.1", server.localPort)) }

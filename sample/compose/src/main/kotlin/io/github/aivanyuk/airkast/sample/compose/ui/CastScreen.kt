@@ -96,8 +96,7 @@ fun CastScreen(
     ) {
         if (!access.granted) PermissionCard(onGrant = access.request)
         Receivers(cast, enabled = access.granted, onPick = { cast.start(it, url, format) })
-        // A receiver typed in by hand has no TXT record, so its compatibility is Unknown.
-        AddressEntry(onConnect = { host -> cast.start(Receiver(typedIn, host), url, format) })
+        AddressEntry(onConnect = { host -> cast.startAt(typedIn, host, url, format) })
         OutlinedTextField(
             value = url,
             onValueChange = { url = it },
