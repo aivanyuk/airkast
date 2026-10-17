@@ -13,8 +13,8 @@ import java.util.concurrent.ConcurrentHashMap
  * the receiver's password after pairing with one, so an app with a place for secrets implements
  * this over it. Calls come from any thread.
  *
- * A receiver found by discovery is best known by its [Receiver.deviceId], which stays when its
- * address changes. One typed in by hand has only its host and port.
+ * The built-in stores keep a receiver's credentials under its [Receiver.id]: its `deviceid`, which
+ * stays when its address changes, or for one typed in by hand, its host and port.
  */
 public interface CredentialStore {
     public suspend fun get(receiver: Receiver): Credentials?
@@ -50,23 +50,20 @@ public interface CredentialStore {
     }
 }
 
-/** The key the built-in stores file a receiver under: its `deviceid`, or its host and port. */
-internal val Receiver.storeKey: String get() = deviceId ?: "$host:$port"
-
 private class MemoryCredentialStore : CredentialStore {
     private val entries = ConcurrentHashMap<String, Credentials>()
 
-    override suspend fun get(receiver: Receiver): Credentials? = entries[receiver.storeKey]
+    override suspend fun get(receiver: Receiver): Credentials? = entries[receiver.id]
 
     override suspend fun put(
         receiver: Receiver,
         credentials: Credentials,
     ) {
-        entries[receiver.storeKey] = credentials
+        entries[receiver.id] = credentials
     }
 
     override suspend fun remove(receiver: Receiver) {
-        entries.remove(receiver.storeKey)
+        entries.remove(receiver.id)
     }
 }
 
@@ -88,16 +85,16 @@ private class FileCredentialStore(
     }
 
     override suspend fun get(receiver: Receiver): Credentials? =
-        withContext(Dispatchers.IO) { entries()[receiver.storeKey]?.let(Credentials::decode) }
+        withContext(Dispatchers.IO) { entries()[receiver.id]?.let(Credentials::decode) }
 
     override suspend fun put(
         receiver: Receiver,
         credentials: Credentials,
-    ) = withContext(Dispatchers.IO) { update { it[receiver.storeKey] = credentials.encoded } }
+    ) = withContext(Dispatchers.IO) { update { it[receiver.id] = credentials.encoded } }
 
     override suspend fun remove(receiver: Receiver) =
         withContext(Dispatchers.IO) {
-            update { it.remove(receiver.storeKey) }
+            update { it.remove(receiver.id) }
         }
 
     private fun entries(): Map<String, String> = synchronized(lock) { cache ?: read().also { cache = it } }

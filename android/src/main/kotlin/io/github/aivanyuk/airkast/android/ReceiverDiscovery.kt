@@ -10,13 +10,20 @@ import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Receiver
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.update
 import java.util.ArrayDeque
 
 /**
  * Finds receivers on the local network through `NsdManager`. Collect [receivers] while a picker
- * may show them; collection scans, and cancelling stops the scan. [logger] takes the scan's lines
- * under the tag `discovery`, as an [Airkast.logger] does.
+ * may show them; collection scans, and cancelling stops the scan. [known] keeps every receiver a
+ * scan found after it stops, so [find] turns a [Receiver.id] the app kept back into a [Receiver].
+ * [logger] takes the scan's lines under the tag `discovery`, as an [Airkast.logger] does.
+ *
+ * Build one and share it, as the client is: a second instance starts with nothing [known].
  */
 public class ReceiverDiscovery(
     context: Context,
@@ -24,6 +31,15 @@ public class ReceiverDiscovery(
 ) {
     private val context = context.applicationContext
     private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
+    private val seen = MutableStateFlow<List<Receiver>>(emptyList())
+
+    /**
+     * Every receiver this instance has found, one per [Receiver.id] with its latest record, sorted
+     * by name. It outlasts the scan, and a receiver that goes away stays in it, so it says where a
+     * receiver was last seen, not whether it is there now: [receivers] says that, and a connect
+     * tells.
+     */
+    public val known: StateFlow<List<Receiver>> = seen.asStateFlow()
 
     /**
      * Every receiver that answers, sorted by name, including ones airkast cannot play on: filter
@@ -40,6 +56,7 @@ public class ReceiverDiscovery(
             val resolving =
                 Resolver(nsd, ::log) { receiver ->
                     log(Level.Debug) { "resolved ${receiver.name}: ${receiver.model} ${receiver.compatibility}" }
+                    remember(receiver)
                     synchronized(found) {
                         found[receiver.name] = receiver
                         trySend(found.values.sortedBy { it.name.lowercase() })
@@ -88,6 +105,12 @@ public class ReceiverDiscovery(
                 resolving.close()
             }
         }
+
+    /** The receiver in [known] with this [Receiver.id], or null if no scan of this instance found it. */
+    public fun find(id: String): Receiver? = seen.value.firstOrNull { it.id == id }
+
+    private fun remember(receiver: Receiver) =
+        seen.update { known -> (known.filter { it.id != receiver.id } + receiver).sortedBy { it.name.lowercase() } }
 
     /**
      * Writes a line to [logger], if it takes [level]. A logger that throws loses the line, never the

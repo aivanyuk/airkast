@@ -61,6 +61,14 @@ public class Receiver(
     public val model: String? get() = properties["model"]
     public val deviceId: String? get() = properties["deviceid"]
 
+    /**
+     * What to keep the receiver under, as the built-in [CredentialStore]s and `ReceiverDiscovery`
+     * do: [deviceId], or `host:port` without one. With a `deviceid` in the TXT record it stays the
+     * same when the receiver is renamed or moves to another address; without one, as for a
+     * receiver typed in by hand, it is the address.
+     */
+    public val id: String get() = deviceId ?: "$host:$port"
+
     /** The receiver's AirPlay version, `srcvers`. Compatibility reports quote it. */
     public val sourceVersion: String? get() = properties["srcvers"]
 
