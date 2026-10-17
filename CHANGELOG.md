@@ -50,8 +50,8 @@ caller sees adds its line under "Unreleased".
 - A PIN or password the receiver refuses is logged at `Debug`, without a stack trace, where it was
   an `Error` from both `Airkast.pair` and `Airkast.connect`.
 - `AudioStream.setNowPlaying` sends only the parts the receiver's metadata feature bits say it
-  shows: track info, artwork and progress. A receiver typed in by hand and not described still
-  gets all three.
+  shows: track info, artwork and progress. A receiver with no feature bits to read, such as one
+  typed in by hand and not described, still gets all three.
 - `Airkast.Builder.socketFactory` also runs before `describe`, so a connect to a receiver typed in
   by hand asks it twice.
 
