@@ -173,8 +173,78 @@ so airkast checks first: discovery and connections through `Airkast(context)` fa
    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
    ```
 
-2. Before you start discovery, check `LocalNetwork.isAccessible(context)`. If it returns `false`,
-   request `LocalNetwork.PERMISSION` with the activity result API.
+2. Follow `LocalNetworkPermission(context).state` from `airkast-android`. When it is `Denied`,
+   request the class's `permission` with the activity result API before you start discovery.
+
+`state` is a `StateFlow` of three values:
+
+| `State` | Meaning |
+| --- | --- |
+| `NotNeeded` | The device runs Android 16 or earlier, or the app targets SDK 36 or lower. The local network is open. |
+| `Granted` | The user granted the permission. |
+| `Denied` | The user has not granted it: the app has not asked yet, or the user refused. Discovery and connecting fail with `NotPermitted`. |
+
+This activity asks when the user taps its cast button, and opens the receiver picker once the
+local network is open. `castButton` and `showPicker` stand for your app's own view and picker:
+
+```kotlin
+import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import io.github.aivanyuk.airkast.android.LocalNetworkPermission
+import io.github.aivanyuk.airkast.android.LocalNetworkPermission.State
+import kotlinx.coroutines.launch
+
+class CastActivity : AppCompatActivity() {
+    private val localNetwork by lazy { LocalNetworkPermission(this) }
+    private val request =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            lifecycleScope.launch {
+                localNetwork.refresh()
+                if (granted) showPicker()
+            }
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // ...
+        castButton.setOnClickListener {
+            if (localNetwork.state.value == State.Denied) {
+                request.launch(localNetwork.permission)
+            } else {
+                showPicker()
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                localNetwork.state.collect { state -> castButton.isActivated = state != State.Denied }
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        lifecycleScope.launch { localNetwork.refresh() }
+    }
+}
+```
+
+- Building a `LocalNetworkPermission` reads the grant, which the system answers from memory, so
+  you can build it on the main thread. After that, `state` changes only when you call `refresh()`,
+  which reads the grant again, off the caller's thread.
+- Call `refresh()` when the screen starts, in `onStart` or Compose's `LifecycleStartEffect`. The
+  user may have changed the permission in Settings while the app was in the background.
+- Call `refresh()` with the request's result too. The system's dialog pauses the activity without
+  stopping it, so `onStart` does not run again.
+- `LocalNetworkPermission` only reports the grant. `ReceiverDiscovery` and `Airkast(context)` read
+  it themselves each time they start, and fail with `NotPermitted` without it.
+
+How often to ask is your app's decision. A reasonable policy is to ask on the first tap of the cast
+button, not when the app starts, and to stop asking after the user refuses. After a refusal, the
+way back is the app's page in the system settings.
 
 The permission is in the nearby devices group, so a user who has granted Bluetooth's nearby
 devices permission is not asked again.

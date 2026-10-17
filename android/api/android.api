@@ -16,6 +16,22 @@ public final class io/github/aivanyuk/airkast/android/LocalNetwork {
 	public final fun socketFactory (Landroid/content/Context;Ljava/lang/String;)Ljavax/net/SocketFactory;
 }
 
+public final class io/github/aivanyuk/airkast/android/LocalNetworkPermission {
+	public fun <init> (Landroid/content/Context;)V
+	public final fun getPermission ()Ljava/lang/String;
+	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun refresh (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/aivanyuk/airkast/android/LocalNetworkPermission$State : java/lang/Enum {
+	public static final field Denied Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
+	public static final field Granted Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
+	public static final field NotNeeded Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
+	public static fun values ()[Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
+}
+
 public final class io/github/aivanyuk/airkast/android/LogcatKt {
 	public static final fun logcat (Lio/github/aivanyuk/airkast/Airkast$Logger$Companion;Lio/github/aivanyuk/airkast/Airkast$Logger$Level;)Lio/github/aivanyuk/airkast/Airkast$Logger;
 	public static synthetic fun logcat$default (Lio/github/aivanyuk/airkast/Airkast$Logger$Companion;Lio/github/aivanyuk/airkast/Airkast$Logger$Level;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/Airkast$Logger;
