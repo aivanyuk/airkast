@@ -55,6 +55,7 @@ Set options in the builder block:
 
 ```kotlin
 import io.github.aivanyuk.airkast.Airkast
+import io.github.aivanyuk.airkast.CredentialStore
 import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.android.Airkast
 import io.github.aivanyuk.airkast.android.logcat
@@ -64,7 +65,8 @@ val airkast = Airkast(context) {
     identity = SenderIdentity(name = "Living room remote", deviceId = identity.deviceId)
     requestTimeout = 3.seconds
     logger = Airkast.Logger.logcat()
-    credentialStore = MyKeystoreStore(context)
+    // Forget pairings when the process ends, for an app that must not keep them.
+    credentialStore = CredentialStore.inMemory()
 }
 ```
 
