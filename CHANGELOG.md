@@ -13,6 +13,15 @@ caller sees adds its line under "Unreleased".
   request and `refresh()` to read the grant again when the screen starts and after the request's
   result. The app asks, and decides how often.
 
+### Changed
+
+- `AirkastPlayer.connect` asks again for a PIN or password the receiver refused, where it ended
+  the cast with `SecretRejected`. The state stays `Connection.AwaitingSecret`, whose new
+  `rejected` counts the refusals since the connect began, until the receiver takes one or the app
+  calls `disconnect()`. `Event.CastAbandoned` carries `rejected` too.
+- A PIN or password the receiver refuses is logged at `Debug`, without a stack trace, where it was
+  an `Error` from both `Airkast.pair` and `Airkast.connect`.
+
 ## 0.5.0 - 2026-10-14
 
 ### Added

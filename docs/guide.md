@@ -253,7 +253,9 @@ answers. Cancelling it gives up the connection. `AirkastPlayer` does the same th
 
 What can go wrong:
 
-- A wrong PIN or password throws `AirkastException.SecretRejected`. Connect again to start over.
+- A wrong PIN or password throws `AirkastException.SecretRejected`. Connect again to start over:
+  a receiver that pairs with a PIN shows a new one. `AirkastPlayer` does this itself and asks
+  again (see [Connection states](#connection-states)).
 - A receiver that needs a PIN or password, connected to without a prompt function, fails with
   `AirkastException.PairingFailed`.
 - A receiver that has forgotten the sender refuses its credentials. The connection fails with
@@ -298,9 +300,14 @@ with any `Player`.
 | --- | --- |
 | `Idle` | No session. `failure` says why the last cast ended, unless it ended through `disconnect()`. |
 | `Connecting` | Connecting to `receiver`. |
-| `AwaitingSecret` | `receiver` asks for a `secret`, the PIN on its screen or its password. Pass what the user typed to `enterSecret`, or call `disconnect()`. |
+| `AwaitingSecret` | `receiver` asks for a `secret`, the PIN on its screen or its password. Pass what the user typed to `enterSecret`, or call `disconnect()`. `rejected` counts the secrets the receiver refused since this connect began. |
 | `Connected` | Playing on `session`. |
 | `Streaming` | The local player plays, and its audio goes to `stream`'s receiver: a cast to a speaker (see [Play on a speaker](#play-on-a-speaker)). |
+
+When the receiver refuses a PIN or password, the player connects again at once and the state stays
+`AwaitingSecret`, with `rejected` one higher, so the prompt can stay up and say the last one was
+wrong. A receiver that pairs with a PIN shows a new code. There is no limit on tries: the cast
+ends only when the user gives up, with `disconnect()`, or the connect fails for another reason.
 
 ### What the player does for you
 
@@ -585,7 +592,8 @@ the tag `airkast`, or `Airkast.Logger.println()` on a desktop JVM. A lambda work
 **`eventListener`** on the client takes `Airkast.Event`s: `Connected` (with how it paired),
 `ConnectFailed`, `Paired`, `PairingFailed`, `CredentialsDropped`, `Loaded`, `LoadFailed` and
 `SessionEnded`. Most carry how long the step took, timed by the client. The player's
-`eventListener` takes `AirkastPlayer.Event`s: `CastStarted`, `CastFailed`, `CastAbandoned`, and
+`eventListener` takes `AirkastPlayer.Event`s: `CastStarted`, `CastFailed`, `CastAbandoned`, which
+carries the secret the user was asked for and how many the receiver refused before, and
 `CastEnded`, which carries the reason and how long the cast lasted.
 
 Both hooks are called synchronously, on the thread where the event happened. Do slow work, such

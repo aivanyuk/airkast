@@ -62,6 +62,7 @@ class ConnectTest {
         val awaiting = player.connection.value as Connection.AwaitingSecret
         assertThat(awaiting.receiver).isEqualTo(tv)
         assertThat(awaiting.secret).isEqualTo(Secret.Pin)
+        assertThat(awaiting.rejected).isEqualTo(0)
         player.enterSecret("2468")
         idle()
         assertThat(connector.typed).isEqualTo("2468")
@@ -78,6 +79,86 @@ class ConnectTest {
         idle()
         assertThat(connector.typed).isEqualTo("hunter2")
         assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
+    }
+
+    @Test
+    fun aRefusedPinLeavesThePromptUpAndTheNextOneConnects() {
+        connector.asksFor = Secret.Pin
+        connector.accepts = "2468"
+        player.connect(tv)
+        idle()
+        player.enterSecret("1357")
+        idle()
+        val again = player.connection.value as Connection.AwaitingSecret
+        assertThat(again.secret).isEqualTo(Secret.Pin)
+        assertThat(again.rejected).isEqualTo(1)
+        assertThat(heard).isEmpty()
+
+        player.enterSecret("2468")
+        idle()
+        assertThat(connector.typed).isEqualTo("2468")
+        assertThat(connector.asked).hasSize(2)
+        assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
+
+        player.connect(Receiver("bedroom", "192.0.2.2"))
+        idle()
+        assertThat((player.connection.value as Connection.AwaitingSecret).rejected).isEqualTo(0)
+    }
+
+    @Test
+    fun aSecretTypedBeforeTheReceiverAsksAgainReachesIt() {
+        connector.asksFor = Secret.Pin
+        connector.accepts = "2468"
+        player.connect(tv)
+        idle()
+        val hold = CompletableDeferred<Unit>().also { connector.hold = it }
+        player.enterSecret("1357")
+        idle()
+        assertThat((player.connection.value as Connection.AwaitingSecret).rejected).isEqualTo(1)
+        player.enterSecret("2468")
+        hold.complete(Unit)
+        idle()
+        assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
+    }
+
+    @Test
+    fun disconnectWhileAskingAgainIsAnAbandonedCastWithItsRefusals() {
+        connector.asksFor = Secret.Pin
+        connector.accepts = "2468"
+        player.connect(tv)
+        idle()
+        player.enterSecret("1357")
+        idle()
+        player.disconnect()
+        idle()
+        val abandoned = heard.single() as Event.CastAbandoned
+        assertThat(abandoned.atSecret).isEqualTo(Secret.Pin)
+        assertThat(abandoned.rejected).isEqualTo(1)
+        val idle = player.connection.value as Connection.Idle
+        assertThat(idle.failure).isNull()
+        assertThat(player.playerError).isNull()
+    }
+
+    @Test
+    fun aPairingFailureOtherThanARefusalEndsTheCast() {
+        connector.asksFor = Secret.Pin
+        connector.failure = AirkastException.PairingFailed("The receiver is busy")
+        player.connect(tv)
+        idle()
+        player.enterSecret("2468")
+        idle()
+        assertThat((player.connection.value as Connection.Idle).failure).isSameInstanceAs(connector.failure)
+        assertThat(heard.single()).isInstanceOf(Event.CastFailed::class.java)
+        assertThat(connector.asked).hasSize(1)
+    }
+
+    @Test
+    fun aRefusalWithoutAPromptEndsTheCast() {
+        connector.failure = AirkastException.SecretRejected(Secret.Password)
+        player.connect(tv)
+        idle()
+        assertThat((player.connection.value as Connection.Idle).failure).isSameInstanceAs(connector.failure)
+        assertThat(connector.asked).hasSize(1)
     }
 
     @Test
@@ -299,6 +380,7 @@ class ConnectTest {
         val abandoned = heard.single() as Event.CastAbandoned
         assertThat(abandoned.receiver).isEqualTo(tv)
         assertThat(abandoned.atSecret).isEqualTo(Secret.Pin)
+        assertThat(abandoned.rejected).isEqualTo(0)
     }
 
     @Test
@@ -350,6 +432,9 @@ class ConnectTest {
         val asked = mutableListOf<Pair<Receiver, Secret?>>()
         var failure: AirkastException? = null
         var asksFor: Secret? = null
+
+        /** The one secret the receiver takes, or null to take any. */
+        var accepts: String? = null
         var typed: String? = null
         var hold: CompletableDeferred<Unit>? = null
 
@@ -360,7 +445,10 @@ class ConnectTest {
         ): AirkastSession {
             asked += receiver to pairWith
             hold?.await()
-            (pairWith ?: asksFor)?.let { typed = ask(it) }
+            (pairWith ?: asksFor)?.let { secret ->
+                typed = ask(secret)
+                if (accepts != null && typed != accepts) throw AirkastException.SecretRejected(secret)
+            }
             failure?.let { throw it }
             return FakeSession(receiver).also { sessions += it }
         }
