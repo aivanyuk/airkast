@@ -12,6 +12,19 @@ caller sees adds its line under "Unreleased".
   `host:port` without one. `ReceiverDiscovery.known` keeps every receiver an instance has found,
   by `id`, after the scan stops, and `ReceiverDiscovery.find(id)` returns one of them, so an app
   that keeps a receiver's `id` finds the receiver again after its picker stopped the scan.
+- `AirkastSession.renditions()` lists every audio and subtitle rendition of the loaded HLS item,
+  with the ids `selectTrack` takes, read from its master playlist, where `tracks()` lists only the
+  selected ones. `HlsMaster.renditions(text)` numbers a master the app has read itself, and
+  `AirkastException.MasterUnreadable` says the session could not read it.
+
+### Changed
+
+- `AirkastPlayer.connect` asks again for a PIN or password the receiver refused, where it ended
+  the cast with `SecretRejected`. The state stays `Connection.AwaitingSecret`, whose new
+  `rejected` counts the refusals since the connect began, until the receiver takes one or the app
+  calls `disconnect()`. `Event.CastAbandoned` carries `rejected` too.
+- A PIN or password the receiver refuses is logged at `Debug`, without a stack trace, where it was
+  an `Error` from both `Airkast.pair` and `Airkast.connect`.
 
 ## 0.5.0 - 2026-10-14
 

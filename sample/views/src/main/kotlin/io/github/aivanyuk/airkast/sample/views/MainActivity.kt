@@ -220,7 +220,7 @@ class MainActivity : AppCompatActivity() {
         binding.tracks.isVisible = state is Connection.Connected
         binding.info.isVisible = state is Connection.Connected
         if (state is Connection.AwaitingSecret) {
-            if (secretDialog == null) secretDialog = showSecret(state.receiver, state.secret)
+            if (secretDialog == null) secretDialog = showSecret(state.receiver, state.secret, state.rejected)
         } else {
             secretDialog?.dismiss()
             secretDialog = null
@@ -236,6 +236,7 @@ class MainActivity : AppCompatActivity() {
     private fun showSecret(
         receiver: Receiver,
         secret: Secret,
+        rejected: Int,
     ): AlertDialog {
         val view = DialogSecretBinding.inflate(layoutInflater)
         val pin = secret == Secret.Pin
@@ -245,7 +246,13 @@ class MainActivity : AppCompatActivity() {
         }
         return MaterialAlertDialogBuilder(this)
             .setTitle(getString(if (pin) R.string.pin_title else R.string.password_title, receiver.name))
-            .setView(view.root)
+            .apply {
+                // The player asks again after a refusal; a PIN receiver shows a new code.
+                if (rejected > 0) {
+                    val refused = if (pin) R.plurals.pin_rejected else R.plurals.password_rejected
+                    setMessage(resources.getQuantityString(refused, rejected, rejected))
+                }
+            }.setView(view.root)
             .setPositiveButton(R.string.pair) { _, _ ->
                 val code = view.code.text.toString()
                 // A password may start or end with a space; a PIN is digits.

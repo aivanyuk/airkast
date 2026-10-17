@@ -71,6 +71,19 @@ public sealed class AirkastException(
     ) : AirkastException("The receiver connection closed", cause)
 
     /**
+     * The HLS master playlist could not be read from the phone, so [AirkastSession.renditions] has
+     * nothing to list: its server answered with another status than 200, or not in time, or sent
+     * more than a master holds, or something that is not a playlist. The receiver fetches the URL
+     * itself, so it may still play one the phone cannot read.
+     */
+    public class MasterUnreadable(
+        message: String,
+        /** The status the server answered with, when it answered with another than 200. */
+        public val status: Int? = null,
+        cause: Throwable? = null,
+    ) : AirkastException(message, cause)
+
+    /**
      * The platform does not let this app reach the local network. On Android 17, an app that
      * targets SDK 37 needs `ACCESS_LOCAL_NETWORK` granted first (docs/compatibility.md).
      */

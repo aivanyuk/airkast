@@ -191,7 +191,12 @@ public class Airkast private constructor(
                 eventListener.report(Event.CredentialsDropped(receiver), log)
             }
             val took = start.elapsedNow() - asking
-            log.error(e) { "connect failed after ${took.inWholeMilliseconds} ms" }
+            // A wrong PIN or password is the user's typo, which the app asks again for.
+            if (e is AirkastException.SecretRejected) {
+                log.debug { "connect failed after ${took.inWholeMilliseconds} ms: ${e.message}" }
+            } else {
+                log.error(e) { "connect failed after ${took.inWholeMilliseconds} ms" }
+            }
             eventListener.report(Event.ConnectFailed(receiver, e, took), log)
             throw e
         }
@@ -246,7 +251,11 @@ public class Airkast private constructor(
                     withContext(Dispatchers.IO) { Opening.finishPairing(pairing, code) }
                 }
             } catch (e: AirkastException) {
-                log.error(e) { "pairing failed" }
+                if (e is AirkastException.SecretRejected) {
+                    log.debug { "pairing failed: ${e.message}" }
+                } else {
+                    log.error(e) { "pairing failed" }
+                }
                 eventListener.report(Event.PairingFailed(receiver, e), log)
                 throw e
             }
