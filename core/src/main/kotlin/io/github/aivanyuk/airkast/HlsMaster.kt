@@ -12,9 +12,9 @@ public object HlsMaster {
      * the same type, language and name, counts once.
      *
      * These are the ids the LG CX reported on Apple's bipbop stream and a kino.pub hls4 master, and
-     * a Mac on Apple's `bipbop_adv_example_hevc`, the one of them with a repeated rendition
-     * (docs/compatibility.md). A playlist without `EXT-X-MEDIA` tags, such as a media playlist,
-     * has none.
+     * the LG CX and a Mac on Apple's `bipbop_adv_example_hevc`, which repeats its audio rendition
+     * in three groups (docs/compatibility.md). A playlist without `EXT-X-MEDIA` tags, such as a
+     * media playlist, has none.
      */
     public fun renditions(master: String): List<Rendition> {
         val seen = HashSet<Triple<String, String?, String?>>()

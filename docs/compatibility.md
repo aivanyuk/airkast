@@ -54,6 +54,7 @@ Terms used on this page:
 | Samsung HW-Q990B (soundbar) | as above | 2026-10-14, before 0.5.0 | Xiaomi 2201117TY, Android 13, the sample app | By hand, through `AirkastPlayer` with an `ExoPlayer` over `AirkastAudioSink`: found by `ReceiverDiscovery` and listed as a speaker, connected in 1.2 s, ExoPlayer's test MP3 (`Jazz_In_Paris.mp3`) played on the soundbar, pause and play from the notification, the phone's volume keys changed the soundbar's volume, and Disconnect brought the audio back to the phone |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06, not read again | 2026-10-14, before 0.5.0 | Xiaomi 2201117TY, Android 13, the sample app | After the shared connect code moved and the timing clock changed to the monotonic one: played through `AirkastPlayer` from the sample app, by hand |
 | MacBook Pro (MacBookPro18,1) | 960.13.25 from the connect log | 2026-10-14, before 0.5.0 | Xiaomi 2201117TY, Android 13, the sample app | `NeedsPassword`, paired before. By hand, through `AirkastPlayer` after the shared connect code moved: an MP4 file, an MP3 file and the music sample played as URLs. The first cast after the app started failed with `Timeout` at the base SETUP: the Mac asked "Allow … to AirPlay?", since `Airkast(context)` sends a new random `deviceID` each time the app starts, and held SETUP past the 5 s `requestTimeout` until it was answered. The next cast went in at once |
+| LG OLED CX (webOS) | 04.64.00 as on 2026-10-08, not read again; 377.25.06 | 2026-10-17, at ac8a795 | desktop JVM 21 (WSL) | `Supported`. Apple's `bipbop_adv_example_hevc` master loaded as `streaming` at 30 s. `renditions()` listed audio 0 English (group `a1`; the same rendition listed in `a1`, `a2` and `a3`, counted once), subtitles 1 English (`cc`, closed captions) and subtitles 2 English (`sub1`). The LG reported audio 0 and subtitles 1 selected at the start, the stream's defaults, with the captions on screen. `selectTrack(Subtitles, 2)` was reported as subtitles 2, `selectTrack(Subtitles, 1)` as 1 again, and `selectTrack(Subtitles, null)` left audio 0 alone. The LG counts a rendition repeated across audio groups once, as the Mac does. On screen the two English tracks were not told apart by eye; the reported selections are the evidence |
 
 ### How `Receiver.compatibility` decides
 
@@ -188,8 +189,9 @@ What the LG CX does, as seen on the wire.
   it switches them live (audio with a rebuffer), only for an item loaded with
   `mediaType: streaming`. A `file` item answers an empty list and ignores the selection, whatever
   the payload. Ids follow the master's `EXT-X-MEDIA` order: on Apple's bipbop stream audio 0–1
-  then subtitles 2–9, on a kino.pub hls4 master subtitles 0–8 then audio 9–17. Turning subtitles
-  off keeps the forced one.
+  then subtitles 2–9, on a kino.pub hls4 master subtitles 0–8 then audio 9–17. A rendition
+  repeated in another group counts once, as on the Mac: on `bipbop_adv_example_hevc` audio 0,
+  closed captions 1, subtitles 2. Turning subtitles off keeps the forced one.
 - With `mediaType: streaming`, a pause reads as `loading` with rate 0 for as long as it lasts,
   as an event and on a poll. `file` reports it as `paused`, and reports no buffered or seekable ranges.
   airkast reports `Paused` for `loading` while the rate is 0, so a caller sees the same in both.

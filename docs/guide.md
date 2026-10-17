@@ -455,10 +455,9 @@ count:
 on a master that lists subtitles first, the first audio rendition's id is the number of subtitle
 renditions before it. Closed captions count as subtitles. A rendition repeated in another group,
 with the same type, language and name, as a stream with an AAC and an AC-3 audio group has,
-counts once. This matches the ids the LG CX and a Mac reported on the streams in
-[compatibility](compatibility.md#lg-cx-webos-046400). A repeated rendition was seen on the Mac
-only; the LG has not been checked on one yet. `HlsMaster.renditions(text)` numbers a master the
-app has read itself in the same way.
+counts once. This matches the ids the LG CX and a Mac reported, on masters with one audio group
+and with several ([compatibility](compatibility.md#lg-cx-webos-046400)).
+`HlsMaster.renditions(text)` numbers a master the app has read itself in the same way.
 
 The session reads the master over HTTP once per `load`, on the phone's default network, and
 waits `requestTimeout` for it. The receiver fetches the same URL from its own address, so a URL that
