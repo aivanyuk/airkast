@@ -36,6 +36,7 @@ import java.security.SecureRandom
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.time.Duration
@@ -79,6 +80,9 @@ internal class DefaultAudioStream private constructor(
     private val requests = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
     private val space = Channel<Unit>(Channel.CONFLATED)
     private val closed = AtomicBoolean(false)
+
+    /** Why the stream ended, set once and before [closed], so a call that finds it closed reads it. */
+    private val endReason = AtomicReference<DisconnectReason?>(null)
     private val mutableEvents = MutableSharedFlow<ReceiverEvent>(extraBufferCapacity = 64)
 
     @Volatile
@@ -562,8 +566,9 @@ internal class DefaultAudioStream private constructor(
         cause: Throwable?,
         byApp: Boolean,
     ) {
-        if (!closed.compareAndSet(false, true)) return
         val reason = if (byApp) DisconnectReason.ClosedByApp else Opening.disconnectReason(cause)
+        if (!endReason.compareAndSet(null, reason)) return
+        closed.set(true)
         lock.withLock {
             playing = false
             wake.signalAll()
@@ -614,7 +619,7 @@ internal class DefaultAudioStream private constructor(
 
     /** What a call on the ended stream throws, [cause] and all, with the reason it ended for. */
     private fun ended(cause: Throwable?) =
-        AirkastException.Disconnected(cause, disconnected?.reason ?: DisconnectReason.Unknown)
+        AirkastException.Disconnected(cause, endReason.get() ?: DisconnectReason.Unknown)
 
     private fun closeSockets() {
         runCatching { data?.close() }

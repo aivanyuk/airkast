@@ -514,9 +514,12 @@ internal class FakeReceiver(
         runCatching { controlLink?.close() }
     }
 
-    /** Closes the control connection only, as a receiver that hangs up between two requests. */
+    /**
+     * Hangs up the control connection's sending side only, as a receiver that closes between two
+     * requests. Closing the socket outright may send a reset rather than a clean end.
+     */
     fun dropControl() {
-        runCatching { controlLink?.close() }
+        runCatching { controlSocket?.shutdownOutput() }
     }
 
     /** Resets both connections, as a receiver whose network fails does, rather than closing them. */

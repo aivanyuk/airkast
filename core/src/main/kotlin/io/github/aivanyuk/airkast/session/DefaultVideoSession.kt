@@ -50,6 +50,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -90,6 +91,9 @@ internal class DefaultVideoSession private constructor(
     private val pending = ConcurrentHashMap<Long, CompletableDeferred<Map<String, Any?>>>()
     private val nextMessageId = AtomicLong(1)
     private val closed = AtomicBoolean(false)
+
+    /** Why the session ended, set once and before [closed], so a call that finds it closed reads it. */
+    private val endReason = AtomicReference<DisconnectReason?>(null)
     private var eventChannel: EventChannel? = null
     private var streamId = 0L
     private val rtspUri = "rtsp://${control.localAddress.hostAddress}/${SecureRandom().nextInt() and Int.MAX_VALUE}"
@@ -479,8 +483,9 @@ internal class DefaultVideoSession private constructor(
         cause: Throwable?,
         byApp: Boolean = false,
     ): AirkastException.Disconnected {
-        if (!closed.compareAndSet(false, true)) return ended(cause)
         val reason = if (byApp) DisconnectReason.ClosedByApp else Opening.disconnectReason(cause)
+        if (!endReason.compareAndSet(null, reason)) return ended(cause)
+        closed.set(true)
         val error = AirkastException.Disconnected(cause, reason)
         pending.values.forEach { it.completeExceptionally(error) }
         itemTaken?.completeExceptionally(error)
@@ -516,7 +521,7 @@ internal class DefaultVideoSession private constructor(
 
     /** What a call on the ended session throws, [cause] and all, with the reason it ended for. */
     private fun ended(cause: Throwable?) =
-        AirkastException.Disconnected(cause, disconnected?.reason ?: DisconnectReason.Unknown)
+        AirkastException.Disconnected(cause, endReason.get() ?: DisconnectReason.Unknown)
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
