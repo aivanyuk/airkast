@@ -59,6 +59,7 @@ Terms used on this page:
 | LG OLED CX (webOS), Samsung HW-Q990B, MacBook Pro (MacBookPro18,1) | as above, not read again | 2026-10-17, at 4cfedec | Xiaomi 2201117TY, Android 13, the sample app | One `ReceiverDiscovery` shared by the app: each receiver listed once, and again once when the picker was opened a second time. Cast to the LG and played. The `deviceid` was not checked across an address change |
 | LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 66014b8 | Xiaomi 2201117TY, Android 13, the sample app | Paired with a PIN by the build before, which kept the pairing in the clear. Installed over it, `CredentialStore.encrypted` sealed it on the first connect under a new Android Keystore key (the file then held hex only), and the LG verified the pairing without asking: connected in 783 ms, against 474 ms before, the key made once. After the app was stopped and started again, the sealed pairing opened and verified, connected in 712 ms. Not checked: Android 6 (API 23), a factory reset, a backup restored to another phone |
 | LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 0908cc6 with the sample's subtitle button | Xiaomi 2201117TY, Android 13, the sample app | `Supported`. By hand, through `AirkastPlayer` and its media3 `Tracks`, on Shaka's Angel One master (six audio renditions in one group, four subtitle ones): the sample's track dialog and `PlayerView`'s audio menu and subtitle button listed them, and picking German and French audio, two subtitle languages and subtitles off switched the TV. The LG reported each selection on the first `tracks()` read after it, about 0.1 s later; audio rebuffered for a second or two. Ids followed the master: audio 0 to 5, subtitles 6 to 9 |
+| LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 03a4361 | Xiaomi 2201117TY, Android 13, the sample app; a desktop JVM 21 (WSL) as the second sender | How a session ends, through `AirkastPlayer`, each by hand. Another sender took the TV: the LG closed the first sender's event channel cleanly at once, `ClosedByReceiver`. Turned off with the remote: closed cleanly at once, `ClosedByReceiver`. Power plug pulled: no close; the next `/command` had no answer in 5 s and the request after it found the LG still silent, so the session ended about 12 s after the last event, `ConnectionFailed` (`Still no answer to an earlier request`, a read timeout). BACK on the remote: the player stopped and closed the session, `ClosedByApp`. The sample showed "The TV ended the cast, or another sender took it over" after the takeover |
 
 ### How `Receiver.compatibility` decides
 
@@ -184,6 +185,9 @@ What the LG CX does, as seen on the wire.
 - Set to ask for a PIN in its AirPlay settings, it reads as `NeedsPin` (status flag `0x8`), shows
   a PIN for `/pair-pin-start`, pairs with it, and lets the sender in with pair-verify after.
 - Without RECORD after the event channel opens, it plays but sends no events.
+- Another sender taking it over, or the remote turning it off, closes the first sender's
+  connections cleanly at once. A power cut closes nothing: the sender hears silence, and the
+  session ends at the next request after one goes unanswered (`ConnectionFailed`).
 - It plays with or without NTP timing. With `timingProtocol: NTP` its SETUP answer adds a
   `timingPort`. No timing request was seen, but the one run with NTP (2026-10-10, the live test)
   was from WSL, where Windows' firewall would have dropped them.

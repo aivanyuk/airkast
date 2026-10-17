@@ -494,10 +494,21 @@ internal class DefaultVideoSession private constructor(
         scope.cancel()
         val lasted = opened?.elapsedNow() ?: return error
         val failure = if (byApp) null else error
-        if (failure == null) {
-            log.info { "closed after ${lasted.inWholeMilliseconds} ms" }
-        } else {
-            log.error(cause) { "ended after ${lasted.inWholeMilliseconds} ms: $reason" }
+        when {
+            failure == null -> {
+                log.info { "closed after ${lasted.inWholeMilliseconds} ms" }
+            }
+
+            // Another sender took it, or it was turned off: nothing failed.
+            reason == DisconnectReason.ClosedByReceiver -> {
+                log.info {
+                    "the receiver closed it after ${lasted.inWholeMilliseconds} ms"
+                }
+            }
+
+            else -> {
+                log.error(cause) { "ended after ${lasted.inWholeMilliseconds} ms: $reason" }
+            }
         }
         options.eventListener.report(Airkast.Event.SessionEnded(receiver, lasted, failure), log)
         return error

@@ -42,7 +42,8 @@ caller sees adds its line under "Unreleased".
 - `AirkastPlayer` sets no player error when the receiver hangs up, as when another sender takes
   it, so a notification does not say playback failed; a failed connection still sets
   `ERROR_CODE_IO_NETWORK_CONNECTION_FAILED`. The constructors of `ReceiverEvent.Disconnected` and
-  `AirkastException.Disconnected` take the reason.
+  `AirkastException.Disconnected` take the reason, and a session the receiver closes logs at
+  `Info`, not `Error`.
 - `Airkast(context)` keeps pairings with `CredentialStore.encrypted`, where it kept them in the
   clear, in the same no-backup file. A pairing made with 0.5.0 still reads, and the first read
   encrypts it.

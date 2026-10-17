@@ -593,10 +593,21 @@ internal class DefaultAudioStream private constructor(
         }
         val lasted = opened?.elapsedNow() ?: return
         val failure = if (byApp) null else AirkastException.Disconnected(cause, reason)
-        if (failure == null) {
-            log.info { "closed after ${lasted.inWholeMilliseconds} ms" }
-        } else {
-            log.error(cause) { "ended after ${lasted.inWholeMilliseconds} ms: $reason" }
+        when {
+            failure == null -> {
+                log.info { "closed after ${lasted.inWholeMilliseconds} ms" }
+            }
+
+            // Another sender took it, or it was turned off: nothing failed.
+            reason == DisconnectReason.ClosedByReceiver -> {
+                log.info {
+                    "the receiver closed it after ${lasted.inWholeMilliseconds} ms"
+                }
+            }
+
+            else -> {
+                log.error(cause) { "ended after ${lasted.inWholeMilliseconds} ms: $reason" }
+            }
         }
         options.eventListener.report(Airkast.Event.SessionEnded(receiver, lasted, failure), log)
     }
