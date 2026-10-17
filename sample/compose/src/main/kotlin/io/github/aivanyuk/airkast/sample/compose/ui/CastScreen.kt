@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -165,12 +166,14 @@ private sealed interface Discovery {
 
 /** Scans while this is composed, started, and [enabled]: the flow scans while it is collected. */
 @Composable
-private fun rememberDiscovery(enabled: Boolean): Discovery {
-    val context = LocalContext.current
+private fun rememberDiscovery(
+    receivers: ReceiverDiscovery,
+    enabled: Boolean,
+): Discovery {
     val discovery =
-        remember(enabled) {
+        remember(receivers, enabled) {
             if (enabled) {
-                ReceiverDiscovery(context)
+                receivers
                     .receivers
                     .map<List<Receiver>, Discovery> { Discovery.Found(it) }
                     .catch { e -> if (e is AirkastException) emit(Discovery.Failed(e)) else throw e }
@@ -187,33 +190,35 @@ private fun Receivers(
     enabled: Boolean,
     onPick: (Receiver) -> Unit,
 ) {
-    val discovery = rememberDiscovery(enabled)
+    val discovery = rememberDiscovery(cast.discovery, enabled)
     Column {
         Text(stringResource(R.string.receivers_title), style = MaterialTheme.typography.titleMedium)
         when (discovery) {
             is Discovery.Found -> {
                 for (receiver in discovery.receivers) {
-                    val usable = cast.canCast(receiver)
-                    ListItem(
-                        headlineContent = { Text(receiver.name) },
-                        supportingContent = {
-                            Text(
-                                stringResource(
-                                    R.string.receiver_detail,
-                                    receiver.model ?: receiver.host,
-                                    if (cast.streamsAudio(receiver)) {
-                                        stringResource(R.string.compat_speaker)
-                                    } else {
-                                        describe(receiver.compatibility)
-                                    },
-                                ),
-                            )
-                        },
-                        modifier =
-                            Modifier
-                                .clickable(enabled = usable) { onPick(receiver) }
-                                .alpha(if (usable) 1f else 0.5f),
-                    )
+                    key(receiver.id) {
+                        val usable = cast.canCast(receiver)
+                        ListItem(
+                            headlineContent = { Text(receiver.name) },
+                            supportingContent = {
+                                Text(
+                                    stringResource(
+                                        R.string.receiver_detail,
+                                        receiver.model ?: receiver.host,
+                                        if (cast.streamsAudio(receiver)) {
+                                            stringResource(R.string.compat_speaker)
+                                        } else {
+                                            describe(receiver.compatibility)
+                                        },
+                                    ),
+                                )
+                            },
+                            modifier =
+                                Modifier
+                                    .clickable(enabled = usable) { onPick(receiver) }
+                                    .alpha(if (usable) 1f else 0.5f),
+                        )
+                    }
                 }
                 if (enabled) Text(stringResource(R.string.searching), style = MaterialTheme.typography.bodySmall)
             }

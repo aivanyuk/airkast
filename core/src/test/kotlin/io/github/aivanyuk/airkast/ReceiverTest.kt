@@ -94,6 +94,15 @@ class ReceiverTest {
     }
 
     @Test
+    fun theIdIsTheDeviceIdOrElseTheAddress() {
+        assertThat(receiver("deviceid" to "AA:BB:CC:DD:EE:FF").id).isEqualTo("AA:BB:CC:DD:EE:FF")
+        assertThat(Receiver("renamed", "10.0.0.3", 7100, mapOf("deviceid" to "AA:BB:CC:DD:EE:FF")).id)
+            .isEqualTo("AA:BB:CC:DD:EE:FF")
+        assertThat(Receiver("tv", "10.0.0.2").id).isEqualTo("10.0.0.2:7000")
+        assertThat(Receiver("tv", "10.0.0.2", 7100).id).isEqualTo("10.0.0.2:7100")
+    }
+
+    @Test
     fun valuesCompareByContent() {
         val tv = Receiver("tv", "10.0.0.2", properties = mapOf("features" to lgFeatures))
         assertThat(tv).isEqualTo(Receiver("tv", "10.0.0.2", properties = mapOf("features" to lgFeatures)))

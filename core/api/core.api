@@ -422,6 +422,7 @@ public final class io/github/aivanyuk/airkast/Receiver {
 	public final fun getDeviceId ()Ljava/lang/String;
 	public final fun getFeatures ()J
 	public final fun getHost ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
 	public final fun getModel ()Ljava/lang/String;
 	public final fun getName ()Ljava/lang/String;
 	public final fun getPort ()I

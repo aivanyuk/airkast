@@ -93,10 +93,15 @@ val patient = airkast.copy { loadTimeout = 30.seconds }
 
 On Android, `ReceiverDiscovery(context).receivers` is a `Flow` of every receiver on the local
 network, sorted by name. Collecting the flow scans the network, and cancelling the collection
-stops the scan. Collect it while a picker is on screen:
+stops the scan. Build one `ReceiverDiscovery` for the app and share it, as you do the client, and
+collect `receivers` while a picker is on screen:
 
 ```kotlin
-ReceiverDiscovery(context).receivers.collect { receivers ->
+// Once, for example in your Application class.
+val discovery = ReceiverDiscovery(context)
+
+// While the picker is on screen.
+discovery.receivers.collect { receivers ->
     showPicker(receivers.filter { it.isSupported })
 }
 ```
@@ -127,6 +132,29 @@ case is decided.
 
 To connect to a receiver that discovery cannot see, such as from an emulator or a desktop JVM,
 build it from its address: `Receiver("TV", "192.168.1.20")`. Its compatibility is `Unknown`.
+
+### Remember a receiver
+
+`Receiver.id` identifies a receiver: its `deviceid` from the network announcement, or
+`"host:port"` when it has none, as for a receiver typed in by hand. With a `deviceid`, the ID
+stays the same when the receiver is renamed or gets a new address. The built-in credential stores
+keep pairings under it. Use it to key a picker's rows, or to save the receiver the user last
+picked.
+
+Stop the scan when the picker closes: `NsdManager` sends multicast queries for as long as it
+runs. The discovery still remembers what it found. `discovery.known` is a `StateFlow` of every
+receiver this instance has found, one per ID with its latest address and record, sorted by name,
+and `discovery.find(id)` returns one of them:
+
+```kotlin
+val receiver = discovery.find(savedId) ?: return // No scan has found it in this process.
+player.connect(receiver)
+```
+
+A receiver stays in `known` after it leaves the network, so `known` says where a receiver was
+last seen, not whether it is there now. `receivers` says that, and a connection to a receiver that
+has gone fails. `known` lives in memory: a new process, or a second `ReceiverDiscovery`, starts
+with nothing known until it scans, which is why the app shares one.
 
 ### Android 17's local network permission
 

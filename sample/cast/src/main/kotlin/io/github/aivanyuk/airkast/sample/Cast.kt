@@ -17,6 +17,7 @@ import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.android.Airkast
+import io.github.aivanyuk.airkast.android.ReceiverDiscovery
 import io.github.aivanyuk.airkast.android.logcat
 import io.github.aivanyuk.airkast.exoplayer.AirkastAudioSink
 import io.github.aivanyuk.airkast.media3.AirkastPlayer
@@ -52,6 +53,12 @@ class Cast(
      * in the app's no-backup files. This only adds a logger: `adb logcat -s airkast`.
      */
     val airkast = Airkast(context) { logger = Airkast.Logger.logcat() }
+
+    /**
+     * The app's one discovery, shared as the client is. Its `known` keeps the receivers a scan
+     * found after the picker that scanned closes, and `find` returns one by its `Receiver.id`.
+     */
+    val discovery = ReceiverDiscovery(context, Airkast.Logger.logcat())
 
     /** The ExoPlayer's audio output, which a cast to a speaker moves there. */
     private val sink = AirkastAudioSink(context)
