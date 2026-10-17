@@ -57,10 +57,10 @@ airkast is on Maven Central:
 
 ```kotlin
 dependencies {
-    implementation("io.github.aivanyuk:airkast-android:0.5.0")
-    implementation("io.github.aivanyuk:airkast-media3:0.5.0")
+    implementation("io.github.aivanyuk:airkast-android:0.6.0")
+    implementation("io.github.aivanyuk:airkast-media3:0.6.0")
     // For speakers, with ExoPlayer:
-    implementation("io.github.aivanyuk:airkast-exoplayer:0.5.0")
+    implementation("io.github.aivanyuk:airkast-exoplayer:0.6.0")
 }
 ```
 
