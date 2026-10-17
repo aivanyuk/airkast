@@ -13,6 +13,7 @@ import io.github.aivanyuk.airkast.Credentials
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.SenderIdentity
 import kotlinx.coroutines.runBlocking
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -22,6 +23,9 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class AirkastAndroidTest {
+    @get:Rule
+    val keyStore = FakeAndroidKeyStore()
+
     private val app = ApplicationProvider.getApplicationContext<Application>()
     private val tv = Receiver("tv", "192.168.50.241", properties = mapOf("deviceid" to "AA:BB:CC:DD:EE:FF"))
     private val credentials = Credentials.decode("${"11".repeat(32)}:${"22".repeat(32)}:4142:4344")!!

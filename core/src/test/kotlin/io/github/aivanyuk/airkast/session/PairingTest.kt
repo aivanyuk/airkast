@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
+import io.github.aivanyuk.airkast.CredentialStore
 import io.github.aivanyuk.airkast.Credentials
 import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.Receiver
@@ -11,6 +12,7 @@ import io.github.aivanyuk.airkast.Secret
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import java.io.File
 import kotlin.time.Duration.Companion.seconds
 
 class PairingTest {
@@ -234,6 +236,31 @@ class PairingTest {
                 assertThat(error).isInstanceOf(AirkastException.PairingFailed::class.java)
                 assertThat(error).hasMessageThat().contains("not the one")
                 assertThat(airkast.credentialStore.get(receiver)).isNull()
+            }
+        }
+
+    @Test
+    fun aPairingThatCannotBeSealedStillConnects() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                val sealer =
+                    object : CredentialStore.Sealer {
+                        override fun seal(value: ByteArray): ByteArray = throw IllegalStateException("cannot seal")
+
+                        override fun open(sealed: ByteArray): ByteArray = throw IllegalStateException("cannot open")
+                    }
+                val file = File.createTempFile("pairings", null).also { it.deleteOnExit() }
+                val sealed = airkast.copy { credentialStore = CredentialStore.file(sealer) { file } }
+                val receiver = asksForAPin(fake)
+                val asked = mutableListOf<Secret>()
+                val ask: suspend (Secret) -> String = { secret ->
+                    asked += secret
+                    fake.pin
+                }
+                sealed.connect(receiver, ask).close()
+                sealed.connect(receiver, ask).close()
+                assertThat(asked).containsExactly(Secret.Pin)
+                assertThat(fake.verified).isTrue()
             }
         }
 

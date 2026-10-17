@@ -77,7 +77,8 @@ public class Airkast private constructor(
 
     /**
      * Where [pair] keeps the credentials a PIN or password leaves, and [connect] finds them. In
-     * memory by default; `Airkast(context)` keeps them in the app's files.
+     * memory by default; `Airkast(context)` keeps them in the app's files, sealed with a key in
+     * the Android Keystore.
      */
     public val credentialStore: CredentialStore = builder.credentialStore
 
@@ -293,7 +294,8 @@ public class Airkast private constructor(
      * Where the client's debugging lines go: `Airkast { logger = Airkast.Logger.println() }`, or
      * `Airkast.Logger.logcat()` from `airkast-android`. The `tag` says which part wrote a line:
      * `connect`, `pairing`, `session`, `audio` (an [AudioStream]), `control` (the requests to the
-     * receiver), `events` (what the receiver sends), `timing`, `player` (`AirkastPlayer`) or `discovery` (`ReceiverDiscovery`).
+     * receiver), `events` (what the receiver sends), `timing`, `credentials` (a sealed
+     * [CredentialStore]), `player` (`AirkastPlayer`) or `discovery` (`ReceiverDiscovery`).
      * More may join.
      *
      * A line comes on the thread that did the work: the caller's, an I/O thread, or the thread that
