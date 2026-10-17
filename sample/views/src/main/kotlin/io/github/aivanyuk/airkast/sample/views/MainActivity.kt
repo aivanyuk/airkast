@@ -24,6 +24,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
@@ -77,15 +78,12 @@ class MainActivity : AppCompatActivity() {
 
         binding.grant.setOnClickListener { permission.launch(localNetwork.permission) }
         binding.host.doAfterTextChanged { binding.connect.isEnabled = !it.isNullOrBlank() }
-        // A receiver typed in by hand has no TXT record, so its compatibility is Unknown.
         binding.connect.setOnClickListener {
-            cast.start(
-                Receiver(
-                    getString(R.string.typed_in),
-                    binding.host.text
-                        .toString()
-                        .trim(),
-                ),
+            cast.startAt(
+                getString(R.string.typed_in),
+                binding.host.text
+                    .toString()
+                    .trim(),
                 url(),
                 format(),
             )
@@ -352,7 +350,13 @@ class MainActivity : AppCompatActivity() {
             }
 
             is AirkastException.Disconnected -> {
-                getString(R.string.failed_disconnected)
+                getString(
+                    if (failure.reason == DisconnectReason.ClosedByReceiver) {
+                        R.string.failed_closed_by_receiver
+                    } else {
+                        R.string.failed_disconnected
+                    },
+                )
             }
 
             is AirkastException.DiscoveryFailed -> {

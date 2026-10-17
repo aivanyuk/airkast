@@ -62,7 +62,8 @@
     <string name="failed_pairing">The TV refused to pair.</string>
     <string name="failed_pin">The TV did not take the PIN.</string>
     <string name="failed_password">The TV did not take the password.</string>
-    <string name="failed_disconnected">The connection to the TV dropped, or another sender took it over.</string>
+    <string name="failed_disconnected">The connection to the TV dropped. Play to connect again.</string>
+    <string name="failed_closed_by_receiver">The TV ended the cast, or another sender took it over.</string>
     <string name="failed_other">The cast failed: %1$s</string>
 
     <string name="tracks_title">Tracks</string>

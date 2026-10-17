@@ -103,6 +103,57 @@ class ReceiverTest {
     }
 
     @Test
+    fun infoReadsAsTheTxtRecordWould() {
+        // GET /info as the LG CX (377.25.06), the Samsung HW-Q990B (366.0) and a Mac (960.13.25)
+        // set to "Require password" answered it on 2026-10-17, without txtAirPlay.
+        fun described(vararg info: Pair<String, Any?>) =
+            Receiver("typed in", "10.0.0.2", properties = Receiver.propertiesFromInfo(mapOf(*info)))
+
+        val lg = described("features" to 0x38BCB46007F8AD0L, "statusFlags" to 580L, "model" to "OLED65CX6LA")
+        assertThat(lg.properties).containsAtLeast("features", "0x7F8AD0,0x38BCB46", "flags", "0x244")
+        assertThat(lg.compatibility).isEqualTo(Compatibility.Supported)
+        assertThat(lg.model).isEqualTo("OLED65CX6LA")
+
+        val soundbar = described("features" to 0x1C340445F8A00L, "statusFlags" to 4L, "sourceVersion" to "366.0")
+        assertThat(soundbar.compatibility).isEqualTo(Compatibility.NoVideo)
+        assertThat(soundbar.audioCompatibility).isEqualTo(Compatibility.Supported)
+        assertThat(soundbar.sourceVersion).isEqualTo("366.0")
+
+        val mac = described("features" to 0x38174FDE4A7FCFD5L, "statusFlags" to 132L, "deviceID" to "02:00:00:00:00:02")
+        assertThat(mac.compatibility).isEqualTo(Compatibility.NeedsPassword)
+        assertThat(mac.deviceId).isEqualTo("02:00:00:00:00:02")
+    }
+
+    @Test
+    fun infoWithTheTxtRecordReadsAsThatRecord() {
+        // The spec's Apple TV 4K sample carries its record, as length-prefixed strings.
+        val record = listOf("act=2", "features=0x4A7FFFF7,0x4155FDE", "flags=0x10644").map { it.toByteArray() }
+        val txt = record.flatMap { listOf(it.size.toByte()) + it.toList() }.toByteArray()
+        val properties = Receiver.propertiesFromInfo(mapOf("txtAirPlay" to txt, "features" to 0L))
+        assertThat(properties).containsExactly("act", "2", "features", "0x4A7FFFF7,0x4155FDE", "flags", "0x10644")
+    }
+
+    @Test
+    fun theMetadataBitsSayWhatNowPlayingSends() {
+        val soundbar = receiver("features" to "0x445F8A00,0x1C340")
+        assertThat(listOf(soundbar.takesTrackInfo, soundbar.takesArtwork, soundbar.takesProgress))
+            .containsExactly(true, true, true)
+        val textOnly = receiver("features" to "0x20200")
+        assertThat(listOf(textOnly.takesTrackInfo, textOnly.takesArtwork, textOnly.takesProgress))
+            .containsExactly(true, false, false)
+            .inOrder()
+        val lg = receiver("features" to lgFeatures)
+        assertThat(listOf(lg.takesTrackInfo, lg.takesArtwork, lg.takesProgress)).containsExactly(true, true, true)
+        val typedIn = Receiver("tv", "10.0.0.2")
+        assertThat(listOf(typedIn.takesTrackInfo, typedIn.takesArtwork, typedIn.takesProgress))
+            .containsExactly(true, true, true)
+        // A record without feature bits says nothing about them either.
+        val noFeatures = receiver("model" to "OLED65CX6LA", "deviceid" to "02:00:00:00:00:01")
+        assertThat(listOf(noFeatures.takesTrackInfo, noFeatures.takesArtwork, noFeatures.takesProgress))
+            .containsExactly(true, true, true)
+    }
+
+    @Test
     fun valuesCompareByContent() {
         val tv = Receiver("tv", "10.0.0.2", properties = mapOf("features" to lgFeatures))
         assertThat(tv).isEqualTo(Receiver("tv", "10.0.0.2", properties = mapOf("features" to lgFeatures)))

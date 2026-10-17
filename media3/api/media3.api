@@ -15,6 +15,7 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public final fun getDisconnectOnBack ()Z
 	public final fun getDisconnectOnInterrupt ()Z
 	public final fun getEventListener ()Lkotlin/jvm/functions/Function1;
+	public final fun getFollowsRemote ()Z
 	public final fun getKeepAwake ()Z
 	public final fun getLocalPlayer ()Landroidx/media3/common/Player;
 	public final fun getLogger ()Lio/github/aivanyuk/airkast/Airkast$Logger;
@@ -25,6 +26,7 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public final fun setDisconnectOnBack (Z)V
 	public final fun setDisconnectOnInterrupt (Z)V
 	public final fun setEventListener (Lkotlin/jvm/functions/Function1;)V
+	public final fun setFollowsRemote (Z)V
 	public final fun setKeepAwake (Z)V
 	public final fun setLocalPlayer (Landroidx/media3/common/Player;)V
 	public final fun setLogger (Lio/github/aivanyuk/airkast/Airkast$Logger;)V

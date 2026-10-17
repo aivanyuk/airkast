@@ -117,7 +117,7 @@ can, and if not, why:
 | `Supported` | Plays without a PIN or password. | yes |
 | `NeedsPin` | Asks for the PIN shown on its screen the first time. | yes |
 | `NeedsPassword` | Asks for the password set on it the first time. | yes |
-| `Unknown` | Typed in by hand, so there is nothing to read. Connecting is the only test. | no |
+| `Unknown` | Typed in by hand, so there is nothing to read until `Airkast.describe` asks it. | no |
 | `AccessRestricted` | Lets in only its owner's Apple devices, such as a Mac at its default, "Current User". | no |
 | `NoTransientPairing` | Does not offer the pairing airkast starts with. | no |
 | `VideoV1Only` | Accepts URLs only over AirPlay video v1, which airkast does not speak. | no |
@@ -134,13 +134,31 @@ branch. [compatibility.md](compatibility.md#how-receivercompatibility-decides) e
 case is decided.
 
 To connect to a receiver that discovery cannot see, such as from an emulator or a desktop JVM,
-build it from its address: `Receiver("TV", "192.168.1.20")`. Its compatibility is `Unknown`.
+build it from its address: `Receiver("TV", "192.168.1.20")`. Its compatibility is `Unknown`,
+since it has no TXT record. `Airkast.describe` asks the receiver what it is, with `GET /info`,
+which receivers answer before pairing, and returns it with the TXT record the receiver sends back,
+as discovery would have found it:
+
+```kotlin
+val receiver = airkast.describe(Receiver("Soundbar", "192.168.1.30", 36617))
+if (receiver.isAudioSupported && !receiver.isSupported) {
+    // A speaker: stream the app's audio with connectAudio.
+}
+```
+
+`describe` throws an `AirkastException` when the receiver does not answer. A receiver that answers
+without its TXT record gets its feature bits, status flags, model and device ID, but no access
+setting, so one that lets in only its owner's devices may read as `Supported` and still refuse the
+connect. `connect` and `connectAudio` describe a receiver typed in by hand themselves, so one
+that asks for a PIN or password gets the right prompt. If the receiver answers
+`GET /info` with an error, they go on with the receiver as it was given.
 
 ### Remember a receiver
 
 `Receiver.id` identifies a receiver: its `deviceid` from the network announcement, or
-`"host:port"` when it has none, as for a receiver typed in by hand. With a `deviceid`, the ID
-stays the same when the receiver is renamed or gets a new address. The built-in credential stores
+`"host:port"` when it has none, as for a receiver typed in by hand. `Airkast.describe` gives such
+a receiver its `deviceid`, so it has the ID discovery gives it. With a `deviceid`, the ID stays the
+same when the receiver is renamed or gets a new address. The built-in credential stores
 keep pairings under it. Use it to key a picker's rows, or to save the receiver the user last
 picked.
 
@@ -349,7 +367,7 @@ with any `Player`.
 
 | State | Meaning |
 | --- | --- |
-| `Idle` | No session. `failure` says why the last cast ended, unless it ended through `disconnect()`. |
+| `Idle` | No session. `failure` says why the last cast ended, unless it ended through `disconnect()`. A session that ended by itself leaves `AirkastException.Disconnected`, whose `reason` says how (see [Using a session directly](#using-a-session-directly)). |
 | `Connecting` | Connecting to `receiver`. |
 | `AwaitingSecret` | `receiver` asks for a `secret`, the PIN on its screen or its password. Pass what the user typed to `enterSecret`, or call `disconnect()`. `rejected` counts the secrets the receiver refused since this connect began. |
 | `Connected` | Playing on `session`. |
@@ -374,8 +392,18 @@ ends only when the user gives up, with `disconnect()`, or the connect fails for 
   and by default the player ends a cast it opened as BACK does, with `EndReason.Interrupted`. With
   `disconnectOnInterrupt = false`, the player goes idle and keeps the session, and the app reads
   the event from the session.
+- **Follows the receiver's remote.** Play/pause, next and previous on a speaker's remote, such as
+  the Samsung HW-Q990B's, drive the player as a media button would: during a cast to a speaker
+  they reach the local player, so next and previous move through its playlist. With
+  `followsRemote = false`, the app hears them as `ReceiverEvent.RemoteCommand` and decides.
 - **Reconnects on `prepare()`.** After a failure, or a session that ended by itself, `prepare()`
   connects to the same receiver again. A notification's play button calls `prepare()`.
+- **Notices a receiver that went away.** A receiver silent past `requestTimeout` ends the session
+  at the next request, with `ConnectionFailed`, and the player's position poll each second and
+  the session's keepalive every two seconds make that request come soon. An app needs no liveness
+  check of its own. A session that failed so sets the player error
+  `ERROR_CODE_IO_NETWORK_CONNECTION_FAILED`; a receiver that hung up, such as for another sender,
+  ends the cast with no player error, so a notification does not say playback failed.
 - **Keeps the phone awake.** The player holds a partial wake lock and a Wi-Fi lock while an item
   loads, plays or is paused on the receiver. Without them, the phone sleeps with its screen off,
   the session's keepalive stops, and the receiver may drop the sender. `airkast-media3` declares
@@ -441,6 +469,7 @@ val player = AirkastPlayer(context, airkast) {
 | `streamsAudio` | a speaker: `!it.isSupported && it.isAudioSupported` | Which receivers `connect` streams the local player's audio to, rather than handing them the item's URL. Applies only with an `audioRoute`. |
 | `disconnectOnBack` | `true` | Whether BACK on the TV's remote ends a cast the player opened. |
 | `disconnectOnInterrupt` | `true` | Whether the TV switching away from the item, to another input or app, ends a cast the player opened. |
+| `followsRemote` | `true` | Whether play/pause, next and previous on the receiver's remote drive the player. |
 | `keepAwake` | `true` | Whether to hold the wake lock and Wi-Fi lock described above. |
 | `positionPollInterval` | 1 second | How often the player asks the receiver for its position. |
 | `looper` | the current thread's looper, or the main looper | The player's application looper. |
@@ -602,9 +631,23 @@ session.load(Media(url, format = MediaFormat.of(url, mimeType = "video/mp4")))
 ```
 
 `session.events` emits what the receiver reports: state changes, the end of an item, a new item,
-rate changes, time jumps, volume changes, and BACK on the TV's remote. The flow ends with
+rate changes, time jumps, volume changes, BACK on the TV's remote, and the playback buttons a
+receiver leaves to the sender (`ReceiverEvent.RemoteCommand`). The flow ends with
 `ReceiverEvent.Disconnected`, and then completes. `session.state` is a `StateFlow` with the latest
 playback state.
+
+`Disconnected.reason` says how the session ended, and every call on an ended session throws
+`AirkastException.Disconnected` with the same `reason`:
+
+| `DisconnectReason` | What happened | What a UI shows |
+| --- | --- | --- |
+| `ClosedByReceiver` | The receiver closed the connection: another sender took it over, or it left its player and hung up. | The cast ended. |
+| `ConnectionFailed` | The connection was reset, or the receiver went silent past `requestTimeout`, as when it loses power or the Wi-Fi drops. | The connection was lost, with a retry. |
+| `ClosedByApp` | The app called `close()`. | Nothing. |
+| `Unknown` | It ended in a way none of the others describes. | The connection was lost. |
+
+`cause` holds what the connection failed with, for logs. New reasons may join in a minor release,
+so a `when` over them keeps an `else` branch.
 
 Pressing BACK on the TV's remote sends `ReceiverEvent.Back`. The TV stays in its player until the
 sender calls `stop()`.
@@ -677,9 +720,14 @@ stream.close()
   full; `offer` takes what fits and returns at once, for a player whose output must not block.
 - **Control.** `play`, `pause` and `flush` return at once and tell the receiver in the background.
   `setVolume` and `volume` run from 0 to 1. `setNowPlaying` tells a receiver with a screen what
-  plays, and how far into the track it is.
+  plays, and how far into the track it is. It sends only what the receiver's feature bits say it
+  shows: the title, artist and album, the artwork, and the progress each have a bit of their own.
+- **The remote.** A speaker sends the play/pause, next and previous buttons of its remote to the
+  sender, as `ReceiverEvent.RemoteCommand` on `events`, and its volume keys as
+  `ReceiverEvent.VolumeChanged`. The speaker acts on none of them itself: the app plays, pauses
+  or skips, or `AirkastPlayer` does.
 - **The end.** `events` ends with `ReceiverEvent.Disconnected`, after which `write` and `offer`
-  throw `AirkastException.Disconnected`. `close()` ends playback and lets the receiver go back to
+  throw `AirkastException.Disconnected`, each with a `reason` as a session's has. `close()` ends playback and lets the receiver go back to
   its own input.
 
 The stream uses the receiver's UDP ports and its own, and the receiver must reach the sender over
@@ -755,7 +803,7 @@ the player's looper.
 | `SecretRejected` | The user typed a wrong PIN or password. |
 | `Rejected` | The receiver answered a request with an error status. |
 | `Timeout` | The receiver did not answer in time. The session stays open, and ends only if the receiver is still silent at the next request. |
-| `Disconnected` | The connection is gone: it closed, another sender took over the receiver, or the network failed. |
+| `Disconnected` | The connection is gone. `reason` says how: `ClosedByReceiver` when the receiver hung up, as for another sender, `ConnectionFailed` when the network failed or the receiver went silent, `ClosedByApp` after `close()`. |
 | `UnexpectedReply` | The receiver answered with something airkast cannot read. |
 | `MasterUnreadable` | `renditions()` could not read the HLS master: its server answered with another status than 200 (`status` holds it), did not send it within `requestTimeout`, sent more than 1 MB, or sent something that is not a playlist. |
 | `DiscoveryFailed` | Scanning for receivers could not start. `code` is the platform's error. |

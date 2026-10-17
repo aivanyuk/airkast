@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
@@ -111,7 +112,7 @@ class HandoffTest {
     fun aDroppedCastGivesTheItemBackAndSaysWhy() {
         val session = casting()
         session.emit(ReceiverEvent.TimeJumped(300.seconds))
-        session.emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
+        session.emit(ReceiverEvent.Disconnected(IOException("Connection reset"), DisconnectReason.ConnectionFailed))
         idle()
         assertThat((player.connection.value as Connection.Idle).failure)
             .isInstanceOf(AirkastException.Disconnected::class.java)

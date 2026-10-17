@@ -2,12 +2,14 @@ package io.github.aivanyuk.airkast.session
 
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Credentials
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.crypto.Hkdf
 import io.github.aivanyuk.airkast.wire.BinaryPlist
 import io.github.aivanyuk.airkast.wire.HttpMessage
+import java.io.EOFException
 import java.io.IOException
 import java.net.ConnectException
 import java.net.InetSocketAddress
@@ -19,6 +21,7 @@ import java.net.Socket
  */
 internal object Opening {
     private const val UNAUTHORIZED = 401
+    private val INFO_QUALIFIER = BinaryPlist.encode(mapOf("qualifier" to listOf("txtAirPlay")))
 
     /**
      * Opens the control connection to [receiver] and pairs on it: pair-verify with the options'
@@ -46,6 +49,32 @@ internal object Opening {
             throw e
         }
     }
+
+    /**
+     * Asks [receiver] what it is with `GET /info`, which the LG CX, the Samsung HW-Q990B and a Mac
+     * answer before pairing, and returns the answer as TXT record properties
+     * ([Receiver.propertiesFromInfo]). The body asks for the record itself, as Apple's senders do
+     * by Emanuele Cozzi's notes: without it, those three leave `txtAirPlay` out.
+     */
+    fun info(
+        receiver: Receiver,
+        identity: SenderIdentity,
+        options: SessionOptions,
+    ): Map<String, String> =
+        try {
+            control(receiver, identity, options).use { control ->
+                val reply =
+                    control
+                        .exchange("GET", "/info", body = INFO_QUALIFIER, contentType = ControlConnection.BPLIST)
+                        .requireSuccess("GET /info")
+                if (!BinaryPlist.isPlist(reply.body)) {
+                    throw AirkastException.UnexpectedReply(IOException("GET /info answered no plist"))
+                }
+                Receiver.propertiesFromInfo(plist(reply))
+            }
+        } catch (e: Exception) {
+            throw failure(e)
+        }
 
     /**
      * Starts pairing with [receiver] for [secret], showing a PIN if it is one, over the connection
@@ -205,9 +234,23 @@ internal object Opening {
         when (e) {
             is AirkastException -> e
             is LateReply -> AirkastException.Timeout(e.message.orEmpty())
-            is IOException -> AirkastException.Disconnected(e)
+            is IOException -> AirkastException.Disconnected(e, disconnectReason(e))
             else -> AirkastException.UnexpectedReply(e)
         }
+
+    /**
+     * Why a connection ended by itself, from what it failed with. An end of stream, which the
+     * event channel reads as no cause, is the receiver hanging up; any other I/O failure, a reset
+     * or a receiver silent past a timeout, is the connection failing.
+     */
+    fun disconnectReason(cause: Throwable?): DisconnectReason {
+        val chain = generateSequence(cause) { it.cause }
+        return when {
+            cause == null || chain.any { it is EOFException } -> DisconnectReason.ClosedByReceiver
+            chain.any { it is IOException } -> DisconnectReason.ConnectionFailed
+            else -> DisconnectReason.Unknown
+        }
+    }
 
     /** A connected socket, or [AirkastException.Unreachable]. */
     private fun connect(

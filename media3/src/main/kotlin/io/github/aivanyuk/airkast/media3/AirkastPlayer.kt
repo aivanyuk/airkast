@@ -106,8 +106,8 @@ public interface AirkastPlayer : Player {
         /**
          * No session. [failure] says why the last cast to [receiver] ended, when it did not end
          * through [disconnect]: the connect failed, or the session ended with
-         * [AirkastException.Disconnected] (the network failed, the TV closed it, or another
-         * sender took it).
+         * [AirkastException.Disconnected], whose `reason` says whether the receiver closed it, as
+         * when another sender takes it, or the network failed.
          */
         public class Idle(
             public val receiver: Receiver?,
@@ -293,6 +293,16 @@ public interface AirkastPlayer : Player {
         public var disconnectOnInterrupt: Boolean = true
 
         /**
+         * Whether the playback buttons on the receiver's remote drive this player, as a media
+         * button does: play/pause, next and previous on a speaker's remote, such as the Samsung
+         * HW-Q990B's, during a cast to it, and on a TV's during a session. Next and previous act
+         * only when the player offers them, so on a speaker they move the [localPlayer] through
+         * its playlist. With false, the app hears them as [ReceiverEvent.RemoteCommand] on the
+         * session's or the stream's events, and decides.
+         */
+        public var followsRemote: Boolean = true
+
+        /**
          * The player that plays while no cast does, such as the app's `ExoPlayer`, or null to play
          * only on receivers. With one, the [AirkastPlayer] forwards to it until a session attaches,
          * then stops it and plays its current item on the receiver from the position it reached.
@@ -339,6 +349,7 @@ public interface AirkastPlayer : Player {
                     pollInterval = positionPollInterval,
                     disconnectOnBack = disconnectOnBack,
                     disconnectOnInterrupt = disconnectOnInterrupt,
+                    followsRemote = followsRemote,
                     connector = connector,
                     audioRoute = audioRoute,
                     streamsAudio = streamsAudio,

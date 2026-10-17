@@ -9,9 +9,11 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.RemoteCommand
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -155,6 +157,21 @@ class AirkastPlayerTest {
     }
 
     @Test
+    fun aPlayPauseButtonTheReceiverLeavesToTheSenderPausesAndPlaysIt() {
+        playing()
+        fake.emit(ReceiverEvent.RemoteCommand(RemoteCommand.PlayPause))
+        idle()
+        assertThat(player.playWhenReady).isFalse()
+        fake.emit(ReceiverEvent.RemoteCommand(RemoteCommand.Play))
+        idle()
+        assertThat(player.playWhenReady).isTrue()
+        // One item, so next has nothing to move to.
+        fake.emit(ReceiverEvent.RemoteCommand(RemoteCommand.Next))
+        idle()
+        assertThat(fake.sent).containsExactly("load", "pause", "play").inOrder()
+    }
+
+    @Test
     fun thePollKeepsThePositionAndDuration() {
         playing()
         fake.info = fake.info.copy(position = 100.seconds)
@@ -201,7 +218,7 @@ class AirkastPlayerTest {
     @Test
     fun aFailedConnectionIsAnError() {
         playing()
-        fake.emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
+        fake.emit(ReceiverEvent.Disconnected(IOException("Connection reset"), DisconnectReason.ConnectionFailed))
         idle()
         assertThat(player.playbackState).isEqualTo(Player.STATE_IDLE)
         assertThat(player.playerError?.errorCode).isEqualTo(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
@@ -263,7 +280,7 @@ class AirkastPlayerTest {
     fun aNewSessionPicksUpWhereTheLostOneLeftOff() {
         playing()
         fake.emit(ReceiverEvent.TimeJumped(300.seconds))
-        fake.emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
+        fake.emit(ReceiverEvent.Disconnected(IOException("Connection reset"), DisconnectReason.ConnectionFailed))
         idle()
         val next = FakeSession()
         player.session = next

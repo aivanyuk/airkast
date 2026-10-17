@@ -12,18 +12,21 @@ import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.AudioRoute
 import io.github.aivanyuk.airkast.AudioStream
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.RemoteCommand
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Event
@@ -40,6 +43,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -61,6 +65,7 @@ internal class SessionPlayer(
     private val pollInterval: Duration,
     private val disconnectOnBack: Boolean,
     private val disconnectOnInterrupt: Boolean = true,
+    private val followsRemote: Boolean = true,
     private val connector: Connector,
     private val audioRoute: AudioRoute? = null,
     private val streamsAudio: (Receiver) -> Boolean = { false },
@@ -402,9 +407,12 @@ internal class SessionPlayer(
         attachedAt = TimeSource.Monotonic.markNow()
         streamJob =
             scope.launch {
-                val end = stream.events.first { it is ReceiverEvent.Disconnected } as ReceiverEvent.Disconnected
+                val end =
+                    stream.events
+                        .onEach { if (it is ReceiverEvent.RemoteCommand && streaming === stream) follow(it.command) }
+                        .first { it is ReceiverEvent.Disconnected } as ReceiverEvent.Disconnected
                 if (streaming !== stream) return@launch
-                val failure = AirkastException.Disconnected(end.cause)
+                val failure = AirkastException.Disconnected(end.cause, end.reason)
                 stopStreaming(EndReason.Lost, failure)
                 mutableConnection.value = Connection.Idle(receiver, failure)
                 changed()
@@ -564,6 +572,43 @@ internal class SessionPlayer(
         }
     }
 
+    /**
+     * Plays, pauses or skips as a button on the receiver's remote asks, on the player the app
+     * sees: the local player while it plays to a speaker. media3's button actions prepare an idle
+     * player and replay an ended one, as a media button does.
+     */
+    private fun follow(command: RemoteCommand) {
+        if (!followsRemote) return
+        val player: Player = handoff as? Player ?: this
+        log.debug { "the receiver's remote: $command" }
+        when (command) {
+            RemoteCommand.Play -> {
+                Util.handlePlayButtonAction(player)
+            }
+
+            RemoteCommand.Pause -> {
+                Util.handlePauseButtonAction(player)
+            }
+
+            RemoteCommand.PlayPause -> {
+                Util.handlePlayPauseButtonAction(player)
+            }
+
+            RemoteCommand.Next -> {
+                if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT)) player.seekToNext()
+            }
+
+            RemoteCommand.Previous -> {
+                if (player.isCommandAvailable(
+                        Player.COMMAND_SEEK_TO_PREVIOUS,
+                    )
+                ) {
+                    player.seekToPrevious()
+                }
+            }
+        }
+    }
+
     /** With a local player, the cast that ended gives it the item, and this player is left empty. */
     private fun handBack() {
         val local = handoff ?: return
@@ -708,6 +753,11 @@ internal class SessionPlayer(
                 volume = (event.volume * MAX_VOLUME).roundToInt().coerceIn(0, MAX_VOLUME)
             }
 
+            is ReceiverEvent.RemoteCommand -> {
+                follow(event.command)
+                return
+            }
+
             // The TV leaves its player only once the sender stops.
             is ReceiverEvent.Back -> {
                 if (s === owned && disconnectOnBack) endCast(EndReason.Back)
@@ -716,16 +766,23 @@ internal class SessionPlayer(
 
             is ReceiverEvent.Disconnected -> {
                 if (s === owned) owned = null
-                val failure = AirkastException.Disconnected(event.cause)
+                val failure = AirkastException.Disconnected(event.cause, event.reason)
                 ended(s, EndReason.Lost, failure)
                 detach()
+                // A receiver that hung up, for another sender say, ended the cast; nothing failed.
                 error =
-                    event.cause?.let {
-                        PlaybackException(
-                            "The connection to the receiver failed",
-                            it,
-                            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-                        )
+                    when (event.reason) {
+                        DisconnectReason.ClosedByReceiver, DisconnectReason.ClosedByApp -> {
+                            null
+                        }
+
+                        else -> {
+                            PlaybackException(
+                                "The connection to the receiver failed",
+                                event.cause,
+                                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                            )
+                        }
                     }
                 mutableConnection.value = Connection.Idle(s.receiver, failure)
                 handBack()

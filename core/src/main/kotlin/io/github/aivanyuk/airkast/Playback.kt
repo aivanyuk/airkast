@@ -184,6 +184,16 @@ public sealed interface ReceiverEvent {
      */
     public data object Back : ReceiverEvent
 
+    /**
+     * A playback button on the receiver's remote, or on the receiver itself, that it leaves to the
+     * sender: play/pause, next or previous on a speaker's remote. `AirkastPlayer` acts on it
+     * unless its `followsRemote` is off; an app that drives a session or stream itself decides.
+     */
+    @Poko
+    public class RemoteCommand(
+        public val command: io.github.aivanyuk.airkast.RemoteCommand,
+    ) : ReceiverEvent
+
     /** The TV's remote changed its volume. [volume] runs from 0 to 1. */
     @Poko
     public class VolumeChanged(
@@ -196,8 +206,51 @@ public sealed interface ReceiverEvent {
         public val payload: Map<String, Any?>,
     ) : ReceiverEvent
 
+    /**
+     * The session or stream ended, for [reason]: the last event, after which the flow completes.
+     * [cause] is what the connection failed with, for logs, or null.
+     */
     @Poko
     public class Disconnected(
         public val cause: Throwable?,
+        public val reason: DisconnectReason,
     ) : ReceiverEvent
+}
+
+/**
+ * Why a session or stream ended, as the connection showed it. New reasons may join in a minor
+ * release, so a `when` over them keeps an `else` branch.
+ */
+public enum class DisconnectReason {
+    /**
+     * The receiver closed the connection: another sender took it over, or it left its player and
+     * hung up. The cast ended; nothing failed.
+     */
+    ClosedByReceiver,
+
+    /**
+     * The connection failed: it was reset, or the receiver went silent, as it does when it loses
+     * power or the Wi-Fi drops. Connecting again may work.
+     */
+    ConnectionFailed,
+
+    /** The app closed it. */
+    ClosedByApp,
+
+    /** It ended in a way none of the others describes. */
+    Unknown,
+}
+
+/**
+ * The playback button a [ReceiverEvent.RemoteCommand] names. New buttons may join in a minor
+ * release, so a `when` over them keeps an `else` branch.
+ */
+public enum class RemoteCommand {
+    Play,
+    Pause,
+
+    /** One button that plays when paused and pauses when playing. */
+    PlayPause,
+    Next,
+    Previous,
 }

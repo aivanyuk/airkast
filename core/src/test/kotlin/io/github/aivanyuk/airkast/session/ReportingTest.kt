@@ -6,6 +6,7 @@ import io.github.aivanyuk.airkast.Airkast.Event
 import io.github.aivanyuk.airkast.Airkast.Logger.Level
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.Receiver
 import kotlinx.coroutines.delay
@@ -58,7 +59,10 @@ class ReportingTest {
                 assertThat(events.map { it::class })
                     .containsExactly(Event.Connected::class, Event.Loaded::class, Event.SessionEnded::class)
                     .inOrder()
-                assertThat(events.map { it.receiver }.distinct()).containsExactly(receiver)
+                // Typed in by hand, so every event names it as GET /info described it.
+                val described = events.map { it.receiver }.distinct().single()
+                assertThat(described.host to described.port).isEqualTo(receiver.host to receiver.port)
+                assertThat(described.model).isEqualTo("OLED65CX6LA")
                 val connected = events[0] as Event.Connected
                 assertThat(connected.pairing).isEqualTo(Event.Pairing.Transient)
                 assertThat(connected.took).isGreaterThan(Duration.ZERO)
@@ -80,14 +84,29 @@ class ReportingTest {
         }
 
     @Test
-    fun aSessionTheReceiverDropsEndsWithItsFailure() =
+    fun aSessionTheReceiverClosesEndsWithItsReasonAndNoError() =
         runBlocking {
             FakeReceiver().use { fake ->
                 airkast().connect(Receiver("fake", "127.0.0.1", fake.port))
                 fake.dropConnections()
                 withTimeout(2_000) { while (events.none { it is Event.SessionEnded }) delay(10) }
                 val ended = events.filterIsInstance<Event.SessionEnded>().single()
-                assertThat(ended.failure).isInstanceOf(AirkastException.Disconnected::class.java)
+                val failure = ended.failure as AirkastException.Disconnected
+                assertThat(failure.reason).isEqualTo(DisconnectReason.ClosedByReceiver)
+                assertThat(lines.none { it.level == Level.Error && it.tag == "session" }).isTrue()
+            }
+        }
+
+    @Test
+    fun aSessionWhoseConnectionFailsEndsWithAnError() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                airkast().connect(Receiver("fake", "127.0.0.1", fake.port))
+                fake.resetConnections()
+                withTimeout(2_000) { while (events.none { it is Event.SessionEnded }) delay(10) }
+                val ended = events.filterIsInstance<Event.SessionEnded>().single()
+                val failure = ended.failure as AirkastException.Disconnected
+                assertThat(failure.reason).isEqualTo(DisconnectReason.ConnectionFailed)
                 assertThat(lines.any { it.level == Level.Error && it.tag == "session" }).isTrue()
             }
         }

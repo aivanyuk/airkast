@@ -11,6 +11,10 @@ caller sees adds its line under "Unreleased".
 - `AirkastPlayer.Builder.disconnectOnInterrupt`, true by default: when the TV switches away from
   the item, to another input or app, the player ends a cast it opened as BACK does, with the new
   `EndReason.Interrupted`, where it went idle and kept the session.
+- `DisconnectReason` says how a session or stream ended: `ClosedByReceiver` when the receiver
+  hung up, as for another sender, `ConnectionFailed` when the connection was reset or the
+  receiver went silent, `ClosedByApp`, or `Unknown`. `ReceiverEvent.Disconnected` and
+  `AirkastException.Disconnected` carry it as `reason`.
 - `CredentialStore.encrypted(context)` in `airkast-android` keeps pairings in a file with each
   one encrypted with AES-256-GCM under a key in the Android Keystore. A pairing it can no longer
   decrypt reads as none, so the receiver asks again, and one it cannot encrypt stays in memory for
@@ -35,9 +39,23 @@ caller sees adds its line under "Unreleased".
   Parameters set before the item is on the receiver apply once it is, and with a local player they
   move to the receiver and back with the item. A media3 track dialog, or an app's own one written
   against `Player`, switches the TV's tracks.
+- `ReceiverEvent.RemoteCommand` with a `RemoteCommand` (`Play`, `Pause`, `PlayPause`, `Next`,
+  `Previous`): the playback buttons a receiver's remote leaves to the sender, such as a
+  speaker's, which came as `ReceiverEvent.Other`. `AirkastPlayer` follows them, as a media button,
+  unless `AirkastPlayer.Builder.followsRemote` is off.
+- `Airkast.describe(receiver)` asks a receiver typed in by hand what it is, with `GET /info`,
+  and returns it with its feature bits, status flags, model and device ID, so its
+  `compatibility` and `audioCompatibility` are known before connecting. `connect` and
+  `connectAudio` do this themselves for a receiver without a TXT record, so one that asks for a
+  PIN or password pairs on its first connect.
 
 ### Changed
 
+- `AirkastPlayer` sets no player error when the receiver hangs up, as when another sender takes
+  it, so a notification does not say playback failed; a failed connection still sets
+  `ERROR_CODE_IO_NETWORK_CONNECTION_FAILED`. The constructors of `ReceiverEvent.Disconnected` and
+  `AirkastException.Disconnected` take the reason, and a session the receiver closes logs at
+  `Info`, not `Error`.
 - `Airkast(context)` keeps pairings with `CredentialStore.encrypted`, where it kept them in the
   clear, in the same no-backup file. A pairing made with 0.5.0 still reads, and the first read
   encrypts it.
@@ -47,6 +65,11 @@ caller sees adds its line under "Unreleased".
   calls `disconnect()`. `Event.CastAbandoned` carries `rejected` too.
 - A PIN or password the receiver refuses is logged at `Debug`, without a stack trace, where it was
   an `Error` from both `Airkast.pair` and `Airkast.connect`.
+- `AudioStream.setNowPlaying` sends only the parts the receiver's metadata feature bits say it
+  shows: track info, artwork and progress. A receiver with no feature bits to read, such as one
+  typed in by hand and not described, still gets all three.
+- `Airkast.Builder.socketFactory` also runs before `describe`, so a connect to a receiver typed in
+  by hand asks it twice.
 
 ## 0.5.0 - 2026-10-14
 

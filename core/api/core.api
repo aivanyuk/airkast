@@ -4,6 +4,7 @@ public final class io/github/aivanyuk/airkast/Airkast {
 	public final fun connectAudio (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/PcmFormat;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun connectAudio$default (Lio/github/aivanyuk/airkast/Airkast;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/PcmFormat;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun copy (Lkotlin/jvm/functions/Function1;)Lio/github/aivanyuk/airkast/Airkast;
+	public final fun describe (Lio/github/aivanyuk/airkast/Receiver;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getApprovalTimeout-UwyO8pc ()J
 	public final fun getAudioLatency-UwyO8pc ()J
 	public final fun getConnectTimeout-UwyO8pc ()J
@@ -167,7 +168,8 @@ public abstract class io/github/aivanyuk/airkast/AirkastException : java/lang/Ex
 }
 
 public final class io/github/aivanyuk/airkast/AirkastException$Disconnected : io/github/aivanyuk/airkast/AirkastException {
-	public fun <init> (Ljava/lang/Throwable;)V
+	public fun <init> (Ljava/lang/Throwable;Lio/github/aivanyuk/airkast/DisconnectReason;)V
+	public final fun getReason ()Lio/github/aivanyuk/airkast/DisconnectReason;
 }
 
 public final class io/github/aivanyuk/airkast/AirkastException$DiscoveryFailed : io/github/aivanyuk/airkast/AirkastException {
@@ -309,6 +311,16 @@ public final class io/github/aivanyuk/airkast/Credentials {
 
 public final class io/github/aivanyuk/airkast/Credentials$Companion {
 	public final fun decode (Ljava/lang/String;)Lio/github/aivanyuk/airkast/Credentials;
+}
+
+public final class io/github/aivanyuk/airkast/DisconnectReason : java/lang/Enum {
+	public static final field ClosedByApp Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static final field ClosedByReceiver Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static final field ConnectionFailed Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static final field Unknown Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static fun values ()[Lio/github/aivanyuk/airkast/DisconnectReason;
 }
 
 public final class io/github/aivanyuk/airkast/HlsMaster {
@@ -455,9 +467,10 @@ public final class io/github/aivanyuk/airkast/ReceiverEvent$Back : io/github/aiv
 }
 
 public final class io/github/aivanyuk/airkast/ReceiverEvent$Disconnected : io/github/aivanyuk/airkast/ReceiverEvent {
-	public fun <init> (Ljava/lang/Throwable;)V
+	public fun <init> (Ljava/lang/Throwable;Lio/github/aivanyuk/airkast/DisconnectReason;)V
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getCause ()Ljava/lang/Throwable;
+	public final fun getReason ()Lio/github/aivanyuk/airkast/DisconnectReason;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -496,6 +509,14 @@ public final class io/github/aivanyuk/airkast/ReceiverEvent$RateChanged : io/git
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/aivanyuk/airkast/ReceiverEvent$RemoteCommand : io/github/aivanyuk/airkast/ReceiverEvent {
+	public fun <init> (Lio/github/aivanyuk/airkast/RemoteCommand;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCommand ()Lio/github/aivanyuk/airkast/RemoteCommand;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/aivanyuk/airkast/ReceiverEvent$StateChanged : io/github/aivanyuk/airkast/ReceiverEvent {
 	public synthetic fun <init> (Lio/github/aivanyuk/airkast/PlaybackState;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun equals (Ljava/lang/Object;)Z
@@ -519,6 +540,17 @@ public final class io/github/aivanyuk/airkast/ReceiverEvent$VolumeChanged : io/g
 	public final fun getVolume ()D
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/RemoteCommand : java/lang/Enum {
+	public static final field Next Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static final field Pause Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static final field Play Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static final field PlayPause Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static final field Previous Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static fun values ()[Lio/github/aivanyuk/airkast/RemoteCommand;
 }
 
 public final class io/github/aivanyuk/airkast/Rendition {

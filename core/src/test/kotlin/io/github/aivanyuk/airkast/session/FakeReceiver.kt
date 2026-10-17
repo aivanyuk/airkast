@@ -16,6 +16,7 @@ import io.github.aivanyuk.airkast.wire.Tlv8
 import java.math.BigInteger
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.Socket
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
@@ -27,6 +28,17 @@ import kotlin.time.Duration.Companion.seconds
 
 private val RANDOM = SecureRandom()
 private val DIGEST_FIELD = Regex("""(\w+)="([^"]*)"""")
+
+/** The keys the LG CX (377.25.06) answers `GET /info` with that airkast reads, its device id made up. */
+internal val LG_INFO: Map<String, Any?> =
+    mapOf(
+        "deviceID" to "02:00:00:00:00:01",
+        "features" to 0x38BCB46007F8AD0L,
+        "statusFlags" to 0x244L,
+        "model" to "OLED65CX6LA",
+        "manufacturer" to "LG Electronics",
+        "sourceVersion" to "377.25.06",
+    )
 
 /**
  * A receiver on loopback that pairs transiently, with a PIN or with a password, accepts the session
@@ -51,6 +63,10 @@ internal class FakeReceiver(
     val password: String? = null,
     /** The password it asks for with a Digest challenge when the session starts, as a Mac does. */
     digestPassword: String? = null,
+    /** What it answers `GET /info` with, as the LG CX does by default, or null to answer 404. */
+    private val info: Map<String, Any?>? = LG_INFO,
+    /** Whether `GET /info` adds the TXT record when the sender asks for it, as the LG CX does. */
+    private val sendsTxt: Boolean = true,
 ) : AutoCloseable {
     private val longTermSeed = ByteArray(32).also(RANDOM::nextBytes)
     val receiverId: String = UUID.randomUUID().toString().uppercase()
@@ -116,6 +132,8 @@ internal class FakeReceiver(
 
     @Volatile
     private var eventLink: Link? = null
+    private var eventSocket: Socket? = null
+    private var controlSocket: Socket? = null
 
     @Volatile
     private var controlLink: Link? = null
@@ -134,7 +152,7 @@ internal class FakeReceiver(
     private fun serve() {
         // A pairing with a PIN takes one connection, and the session after it another.
         while (true) {
-            val link = Link(control.accept()).also { controlLink = it }
+            val link = Link(control.accept().also { controlSocket = it }).also { controlLink = it }
             runCatching { serve(link) }
             runCatching { link.close() }
         }
@@ -313,7 +331,7 @@ internal class FakeReceiver(
                         val key = sessionKey
                         thread(isDaemon = true) {
                             eventLink =
-                                Link(events.accept()).apply {
+                                Link(events.accept().also { eventSocket = it }).apply {
                                     encrypt(
                                         Hkdf.sha512(key, "Events-Salt", "Events-Write-Encryption-Key"),
                                         Hkdf.sha512(key, "Events-Salt", "Events-Read-Encryption-Key"),
@@ -341,6 +359,23 @@ internal class FakeReceiver(
                     link.reply(request, "volume: $volumeDecibels\r\n".toByteArray())
                 }
 
+                path == "/info" -> {
+                    if (info != null) {
+                        val asked =
+                            request.body.isNotEmpty() &&
+                                "txtAirPlay" in (BinaryPlist.decode(request.body) as Map<*, *>)["qualifier"] as List<*>
+                        val answer = if (asked && sendsTxt) info + ("txtAirPlay" to txtRecord(info)) else info
+                        link.reply(request, BinaryPlist.encode(answer))
+                    } else {
+                        link.write(
+                            HttpMessage(
+                                "${request.requestProtocol} 404 Not Found",
+                                listOf("CSeq" to request.header("CSeq").orEmpty()),
+                            ).encode(),
+                        )
+                    }
+                }
+
                 path == "/command" -> {
                     val outer = BinaryPlist.decode(request.body) as Map<*, *>
 
@@ -362,6 +397,24 @@ internal class FakeReceiver(
                 }
             }
         }
+    }
+
+    /** The TXT record [info] says, as the LG CX announces it, `acl=0` included. */
+    private fun txtRecord(info: Map<String, Any?>): ByteArray {
+        val features = info["features"] as Long
+        val entries =
+            listOf(
+                "acl=0",
+                "deviceid=${info["deviceID"]}",
+                "features=0x%X,0x%X".format(features and 0xffffffffL, features ushr 32),
+                "flags=0x%X".format(info["statusFlags"] as Long),
+                "model=${info["model"]}",
+                "srcvers=${info["sourceVersion"]}",
+            )
+        return entries
+            .flatMap { entry ->
+                entry.toByteArray().let { listOf(it.size.toByte()) + it.toList() }
+            }.toByteArray()
     }
 
     private fun stall(key: String) {
@@ -509,6 +562,24 @@ internal class FakeReceiver(
     fun dropConnections() {
         runCatching { eventLink?.close() }
         runCatching { controlLink?.close() }
+    }
+
+    /**
+     * Hangs up the control connection's sending side only, as a receiver that closes between two
+     * requests. Closing the socket outright may send a reset rather than a clean end.
+     */
+    fun dropControl() {
+        runCatching { controlSocket?.shutdownOutput() }
+    }
+
+    /** Resets both connections, as a receiver whose network fails does, rather than closing them. */
+    fun resetConnections() {
+        listOfNotNull(eventSocket, controlSocket).forEach { socket ->
+            runCatching {
+                socket.setSoLinger(true, 0)
+                socket.close()
+            }
+        }
     }
 
     override fun close() {

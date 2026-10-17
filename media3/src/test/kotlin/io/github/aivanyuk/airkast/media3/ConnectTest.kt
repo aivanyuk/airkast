@@ -9,6 +9,7 @@ import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
@@ -344,7 +345,7 @@ class ConnectTest {
     fun aDroppedCastIsIdleWithItsCauseAndPrepareReconnects() {
         val first = casting()
         first.emit(ReceiverEvent.TimeJumped(300.seconds))
-        first.emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
+        first.emit(ReceiverEvent.Disconnected(IOException("Connection reset"), DisconnectReason.ConnectionFailed))
         idle()
         val idle = player.connection.value as Connection.Idle
         assertThat(idle.receiver).isEqualTo(tv)
@@ -357,6 +358,26 @@ class ConnectTest {
         assertThat(second).isNotSameInstanceAs(first)
         assertThat(second.loaded?.startAt).isAtLeast(300.seconds)
         assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
+    }
+
+    @Test
+    fun aFailedConnectionIsAPlayerError() {
+        casting().emit(ReceiverEvent.Disconnected(IOException("Connection reset"), DisconnectReason.ConnectionFailed))
+        idle()
+        assertThat(player.playerError?.errorCode).isEqualTo(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
+        val failure = (player.connection.value as Connection.Idle).failure as AirkastException.Disconnected
+        assertThat(failure.reason).isEqualTo(DisconnectReason.ConnectionFailed)
+    }
+
+    @Test
+    fun aReceiverThatHungUpEndsTheCastWithoutAnError() {
+        casting().emit(ReceiverEvent.Disconnected(java.io.EOFException(), DisconnectReason.ClosedByReceiver))
+        idle()
+        assertThat(player.playerError).isNull()
+        assertThat(player.playbackState).isEqualTo(Player.STATE_IDLE)
+        val failure = (player.connection.value as Connection.Idle).failure as AirkastException.Disconnected
+        assertThat(failure.reason).isEqualTo(DisconnectReason.ClosedByReceiver)
+        assertThat((heard.last() as Event.CastEnded).reason).isEqualTo(EndReason.Lost)
     }
 
     @Test
@@ -385,7 +406,7 @@ class ConnectTest {
     fun eachWayACastEndsIsReported() {
         casting().emit(ReceiverEvent.Back)
         idle()
-        casting().emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
+        casting().emit(ReceiverEvent.Disconnected(IOException("Connection reset"), DisconnectReason.ConnectionFailed))
         idle()
         casting()
         player.connect(Receiver("bedroom", "192.0.2.2"))
