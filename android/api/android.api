@@ -3,12 +3,33 @@ public final class io/github/aivanyuk/airkast/android/AirkastAndroid {
 	public static synthetic fun Airkast$default (Landroid/content/Context;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/Airkast;
 }
 
+public final class io/github/aivanyuk/airkast/android/EncryptedCredentialStoreKt {
+	public static final fun encrypted (Lio/github/aivanyuk/airkast/CredentialStore$Companion;Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;Lkotlin/jvm/functions/Function0;)Lio/github/aivanyuk/airkast/CredentialStore;
+	public static synthetic fun encrypted$default (Lio/github/aivanyuk/airkast/CredentialStore$Companion;Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/CredentialStore;
+}
+
 public final class io/github/aivanyuk/airkast/android/LocalNetwork {
 	public static final field INSTANCE Lio/github/aivanyuk/airkast/android/LocalNetwork;
 	public static final field PERMISSION Ljava/lang/String;
 	public final fun isAccessible (Landroid/content/Context;)Z
 	public final fun needsPermission (Landroid/content/Context;)Z
 	public final fun socketFactory (Landroid/content/Context;Ljava/lang/String;)Ljavax/net/SocketFactory;
+}
+
+public final class io/github/aivanyuk/airkast/android/LocalNetworkPermission {
+	public fun <init> (Landroid/content/Context;)V
+	public final fun getPermission ()Ljava/lang/String;
+	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun refresh (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/aivanyuk/airkast/android/LocalNetworkPermission$State : java/lang/Enum {
+	public static final field Denied Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
+	public static final field Granted Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
+	public static final field NotNeeded Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
+	public static fun values ()[Lio/github/aivanyuk/airkast/android/LocalNetworkPermission$State;
 }
 
 public final class io/github/aivanyuk/airkast/android/LogcatKt {
@@ -19,6 +40,8 @@ public final class io/github/aivanyuk/airkast/android/LogcatKt {
 public final class io/github/aivanyuk/airkast/android/ReceiverDiscovery {
 	public fun <init> (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;)V
 	public synthetic fun <init> (Landroid/content/Context;Lio/github/aivanyuk/airkast/Airkast$Logger;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun find (Ljava/lang/String;)Lio/github/aivanyuk/airkast/Receiver;
+	public final fun getKnown ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getReceivers ()Lkotlinx/coroutines/flow/Flow;
 }
 

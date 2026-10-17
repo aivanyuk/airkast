@@ -8,6 +8,20 @@ caller sees adds its line under "Unreleased".
 
 ### Added
 
+- `CredentialStore.encrypted(context)` in `airkast-android` keeps pairings in a file with each
+  one encrypted with AES-256-GCM under a key in the Android Keystore. A pairing it can no longer
+  decrypt reads as none, so the receiver asks again, and one it cannot encrypt stays in memory for
+  the process; neither fails a connect.
+- `CredentialStore.file(sealer, logger) { file }` encrypts the file with a
+  `CredentialStore.Sealer` of the app's own.
+- `LocalNetworkPermission` in `airkast-android`: Android 17's local network permission as a
+  `StateFlow` for a cast button, `NotNeeded`, `Granted` or `Denied`, with the `permission` to
+  request and `refresh()` to read the grant again when the screen starts and after the request's
+  result. The app asks, and decides how often.
+- `Receiver.id`, the key the built-in credential stores keep a receiver under: its `deviceid`, or
+  `host:port` without one. `ReceiverDiscovery.known` keeps every receiver an instance has found,
+  by `id`, after the scan stops, and `ReceiverDiscovery.find(id)` returns one of them, so an app
+  that keeps a receiver's `id` finds the receiver again after its picker stopped the scan.
 - `AirkastSession.renditions()` lists every audio and subtitle rendition of the loaded HLS item,
   with the ids `selectTrack` takes, read from its master playlist, where `tracks()` lists only the
   selected ones. `HlsMaster.renditions(text)` numbers a master the app has read itself, and
@@ -21,6 +35,9 @@ caller sees adds its line under "Unreleased".
 
 ### Changed
 
+- `Airkast(context)` keeps pairings with `CredentialStore.encrypted`, where it kept them in the
+  clear, in the same no-backup file. A pairing made with 0.5.0 still reads, and the first read
+  encrypts it.
 - `AirkastPlayer.connect` asks again for a PIN or password the receiver refused, where it ended
   the cast with `SecretRejected`. The state stays `Connection.AwaitingSecret`, whose new
   `rejected` counts the refusals since the connect began, until the receiver takes one or the app

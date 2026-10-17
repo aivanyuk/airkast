@@ -287,9 +287,16 @@ public abstract interface class io/github/aivanyuk/airkast/CredentialStore {
 }
 
 public final class io/github/aivanyuk/airkast/CredentialStore$Companion {
+	public final fun file (Lio/github/aivanyuk/airkast/CredentialStore$Sealer;Lio/github/aivanyuk/airkast/Airkast$Logger;Lkotlin/jvm/functions/Function0;)Lio/github/aivanyuk/airkast/CredentialStore;
 	public final fun file (Ljava/io/File;)Lio/github/aivanyuk/airkast/CredentialStore;
 	public final fun file (Lkotlin/jvm/functions/Function0;)Lio/github/aivanyuk/airkast/CredentialStore;
+	public static synthetic fun file$default (Lio/github/aivanyuk/airkast/CredentialStore$Companion;Lio/github/aivanyuk/airkast/CredentialStore$Sealer;Lio/github/aivanyuk/airkast/Airkast$Logger;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)Lio/github/aivanyuk/airkast/CredentialStore;
 	public final fun inMemory ()Lio/github/aivanyuk/airkast/CredentialStore;
+}
+
+public abstract interface class io/github/aivanyuk/airkast/CredentialStore$Sealer {
+	public abstract fun open ([B)[B
+	public abstract fun seal ([B)[B
 }
 
 public final class io/github/aivanyuk/airkast/Credentials {
@@ -422,6 +429,7 @@ public final class io/github/aivanyuk/airkast/Receiver {
 	public final fun getDeviceId ()Ljava/lang/String;
 	public final fun getFeatures ()J
 	public final fun getHost ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
 	public final fun getModel ()Ljava/lang/String;
 	public final fun getName ()Ljava/lang/String;
 	public final fun getPort ()I

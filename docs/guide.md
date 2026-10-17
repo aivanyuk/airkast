@@ -40,7 +40,8 @@ On Android, `Airkast(context)` from `airkast-android` builds a client with Andro
   Without that binding, a connection can go over mobile data when the Wi-Fi has no internet
   access, or into a VPN, and time out.
 - It keeps pairings in a file in the app's no-backup files, so a backup never copies a private
-  key to another device.
+  key to another device. Each pairing in the file is encrypted with a key kept in the Android
+  Keystore (see [Store pairings yourself](#store-pairings-yourself)).
 
 On a desktop JVM, `Airkast { ... }` from `airkast-core` builds a client with the same properties.
 It keeps pairings in memory unless you set `credentialStore`.
@@ -54,6 +55,7 @@ Set options in the builder block:
 
 ```kotlin
 import io.github.aivanyuk.airkast.Airkast
+import io.github.aivanyuk.airkast.CredentialStore
 import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.android.Airkast
 import io.github.aivanyuk.airkast.android.logcat
@@ -63,7 +65,8 @@ val airkast = Airkast(context) {
     identity = SenderIdentity(name = "Living room remote", deviceId = identity.deviceId)
     requestTimeout = 3.seconds
     logger = Airkast.Logger.logcat()
-    credentialStore = MyKeystoreStore(context)
+    // Forget pairings when the process ends, for an app that must not keep them.
+    credentialStore = CredentialStore.inMemory()
 }
 ```
 
@@ -78,7 +81,7 @@ val airkast = Airkast(context) {
 | `ntpTiming` | `true` | Answers the receiver's clock-sync (NTP) requests. The receiver must be able to reach the sender over UDP. A Mac rejects a session without it. An audio stream always answers them. |
 | `audioLatency` | 1 second | How far ahead of the receiver's output an `AudioStream` sends: the time from `play()` to the first sound, and how long a gap on the network can last. |
 | `socketFactory` | none; with `Airkast(context)`, the permission check and network binding above | Picks the socket factory for each receiver. Setting your own replaces both Android behaviours. |
-| `credentialStore` | `CredentialStore.inMemory()`; a file in the no-backup files with `Airkast(context)` | Where pairings are kept (see [Pairing](#pairing)). |
+| `credentialStore` | `CredentialStore.inMemory()`; `CredentialStore.encrypted(context)`, a file in the no-backup files, with `Airkast(context)` | Where pairings are kept (see [Pairing](#pairing)). |
 | `logger` | none | Takes debugging lines (see [Logs and statistics](#logs-and-statistics)). |
 | `eventListener` | none | Takes typed events for statistics (see [Logs and statistics](#logs-and-statistics)). |
 
@@ -93,10 +96,15 @@ val patient = airkast.copy { loadTimeout = 30.seconds }
 
 On Android, `ReceiverDiscovery(context).receivers` is a `Flow` of every receiver on the local
 network, sorted by name. Collecting the flow scans the network, and cancelling the collection
-stops the scan. Collect it while a picker is on screen:
+stops the scan. Build one `ReceiverDiscovery` for the app and share it, as you do the client, and
+collect `receivers` while a picker is on screen:
 
 ```kotlin
-ReceiverDiscovery(context).receivers.collect { receivers ->
+// Once, for example in your Application class.
+val discovery = ReceiverDiscovery(context)
+
+// While the picker is on screen.
+discovery.receivers.collect { receivers ->
     showPicker(receivers.filter { it.isSupported })
 }
 ```
@@ -128,6 +136,29 @@ case is decided.
 To connect to a receiver that discovery cannot see, such as from an emulator or a desktop JVM,
 build it from its address: `Receiver("TV", "192.168.1.20")`. Its compatibility is `Unknown`.
 
+### Remember a receiver
+
+`Receiver.id` identifies a receiver: its `deviceid` from the network announcement, or
+`"host:port"` when it has none, as for a receiver typed in by hand. With a `deviceid`, the ID
+stays the same when the receiver is renamed or gets a new address. The built-in credential stores
+keep pairings under it. Use it to key a picker's rows, or to save the receiver the user last
+picked.
+
+Stop the scan when the picker closes: `NsdManager` sends multicast queries for as long as it
+runs. The discovery still remembers what it found. `discovery.known` is a `StateFlow` of every
+receiver this instance has found, one per ID with its latest address and record, sorted by name,
+and `discovery.find(id)` returns one of them:
+
+```kotlin
+val receiver = discovery.find(savedId) ?: return // No scan has found it in this process.
+player.connect(receiver)
+```
+
+A receiver stays in `known` after it leaves the network, so `known` says where a receiver was
+last seen, not whether it is there now. `receivers` says that, and a connection to a receiver that
+has gone fails. `known` lives in memory: a new process, or a second `ReceiverDiscovery`, starts
+with nothing known until it scans, which is why the app shares one.
+
 ### Android 17's local network permission
 
 On Android 17 (API 37), an app that targets SDK 37 cannot reach the local network until the user
@@ -142,8 +173,78 @@ so airkast checks first: discovery and connections through `Airkast(context)` fa
    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
    ```
 
-2. Before you start discovery, check `LocalNetwork.isAccessible(context)`. If it returns `false`,
-   request `LocalNetwork.PERMISSION` with the activity result API.
+2. Follow `LocalNetworkPermission(context).state` from `airkast-android`. When it is `Denied`,
+   request the class's `permission` with the activity result API before you start discovery.
+
+`state` is a `StateFlow` of three values:
+
+| `State` | Meaning |
+| --- | --- |
+| `NotNeeded` | The device runs Android 16 or earlier, or the app targets SDK 36 or lower. The local network is open. |
+| `Granted` | The user granted the permission. |
+| `Denied` | The user has not granted it: the app has not asked yet, or the user refused. Discovery and connecting fail with `NotPermitted`. |
+
+This activity asks when the user taps its cast button, and opens the receiver picker once the
+local network is open. `castButton` and `showPicker` stand for your app's own view and picker:
+
+```kotlin
+import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import io.github.aivanyuk.airkast.android.LocalNetworkPermission
+import io.github.aivanyuk.airkast.android.LocalNetworkPermission.State
+import kotlinx.coroutines.launch
+
+class CastActivity : AppCompatActivity() {
+    private val localNetwork by lazy { LocalNetworkPermission(this) }
+    private val request =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            lifecycleScope.launch {
+                localNetwork.refresh()
+                if (granted) showPicker()
+            }
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // ...
+        castButton.setOnClickListener {
+            if (localNetwork.state.value == State.Denied) {
+                request.launch(localNetwork.permission)
+            } else {
+                showPicker()
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                localNetwork.state.collect { state -> castButton.isActivated = state != State.Denied }
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        lifecycleScope.launch { localNetwork.refresh() }
+    }
+}
+```
+
+- Building a `LocalNetworkPermission` reads the grant, which the system answers from memory, so
+  you can build it on the main thread. After that, `state` changes only when you call `refresh()`,
+  which reads the grant again, off the caller's thread.
+- Call `refresh()` when the screen starts, in `onStart` or Compose's `LifecycleStartEffect`. The
+  user may have changed the permission in Settings while the app was in the background.
+- Call `refresh()` with the request's result too. The system's dialog pauses the activity without
+  stopping it, so `onStart` does not run again.
+- `LocalNetworkPermission` only reports the grant. `ReceiverDiscovery` and `Airkast(context)` read
+  it themselves each time they start, and fail with `NotPermitted` without it.
+
+How often to ask is your app's decision. A reasonable policy is to ask on the first tap of the cast
+button, not when the app starts, and to stop asking after the user refuses. After a refusal, the
+way back is the app's page in the system settings.
 
 The permission is in the nearby devices group, so a user who has granted Bluetooth's nearby
 devices permission is not asked again.
@@ -205,16 +306,36 @@ keeps the password with the credentials and answers for the user, so the user ty
 
 ### Store pairings yourself
 
-`CredentialStore` is an interface with `get`, `put` and `remove`. The library provides two stores:
+A credential includes a private key, and the password for a receiver that uses one.
+`CredentialStore` is an interface with `get`, `put` and `remove`. The library provides three
+stores:
 
 - `CredentialStore.inMemory()` keeps pairings while the store exists. The receiver asks again in
-  the next process.
-- `CredentialStore.file(file)` keeps them in a file that only its owner can read.
-  `Airkast(context)` uses this, in the no-backup files.
+  the next process. `Airkast { ... }` uses this.
+- `CredentialStore.file(file)` keeps them in a file that only its owner can read, in the clear.
+- `CredentialStore.encrypted(context)` from `airkast-android` keeps them in a file too, each one
+  encrypted with AES-256-GCM under a key kept in the Android Keystore. `Airkast(context)` uses
+  this, in the no-backup files, and logs through the client's `logger`.
 
-A credential includes a private key, and the password for a receiver that uses one. An app with a
-secure store, such as the Android Keystore, can implement `CredentialStore` over it.
-`Credentials.encoded` and `Credentials.decode` convert credentials to and from a string.
+The encrypted store makes its key, under the alias `airkast-pairings`, the first time it is used.
+The key needs no screen lock, so a cast from the background can read a pairing. The store never
+fails a connect:
+
+- A pairing it can no longer decrypt, as after a factory reset or a Keystore wipe, reads as none,
+  and the receiver asks for its PIN or password again.
+- A pairing it cannot encrypt stays in memory until the process ends.
+- When the Keystore cannot make or load the key, every new pairing stays in memory until the
+  process ends.
+
+Each of these logs a line at `Warn`, under the tag `credentials`. A pairing kept in the clear, as
+`Airkast(context)` kept it up to 0.5.0, still reads: the first read encrypts it and rewrites the
+file, so the receiver does not ask again.
+
+To keep pairings somewhere else, implement `CredentialStore`. `Credentials.encoded` and
+`Credentials.decode` convert credentials to and from a string. To keep the file but encrypt it
+with your own key, pass a `CredentialStore.Sealer` to `CredentialStore.file(sealer) { file }`: its
+`seal` and `open` turn bytes into sealed bytes and back, and an `IOException` from either says
+there is no key.
 
 ## The media3 player
 

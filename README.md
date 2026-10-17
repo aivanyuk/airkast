@@ -113,9 +113,10 @@ Follow its progress in `player.connection`, as shown in the next section.
 
 If your app targets SDK 37 (Android 17), the system blocks the local network until the user grants
 `ACCESS_LOCAL_NETWORK`. Declare that permission in your manifest and request it before you start
-discovery. `LocalNetwork.isAccessible(context)` tells you whether you need to ask. Without the
-permission, discovery and connecting fail with `AirkastException.NotPermitted`. Apps that target
-a lower SDK leave the permission out.
+discovery. `LocalNetworkPermission(context).state` tells you whether you need to ask
+([guide](docs/guide.md#android-17s-local-network-permission)). Without the permission, discovery
+and connecting fail with `AirkastException.NotPermitted`. Apps that target a lower SDK leave the
+permission out.
 
 ## Common tasks
 
@@ -232,8 +233,8 @@ that lives as long as the process, such as your `Application`.
 
 `Airkast(context)` sets Android defaults: it names the sender after your app's label, gives it an
 ID that stays the same across launches, checks the local network permission, binds connections to
-the receiver's Wi-Fi, and keeps pairings in the app's no-backup files. Every default is a builder
-property you can change:
+the receiver's Wi-Fi, and keeps pairings in the app's no-backup files, encrypted with a key in the
+Android Keystore. Every default is a builder property you can change:
 
 ```kotlin
 import io.github.aivanyuk.airkast.Airkast
