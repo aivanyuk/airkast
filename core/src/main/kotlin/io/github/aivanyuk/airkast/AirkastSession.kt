@@ -40,14 +40,27 @@ public interface AirkastSession : AutoCloseable {
     /**
      * The renditions the receiver has selected, at most one per [TrackKind]. The LG reports them
      * only for [MediaFormat.Hls] items: for a [MediaFormat.File] item the list is empty, and
-     * [selectTrack] is ignored.
+     * [selectTrack] is ignored. [renditions] lists every rendition there is to select.
      */
     public suspend fun tracks(): List<Track>
 
     /**
-     * Selects the rendition [id] of [kind]; ids follow the master's `EXT-X-MEDIA` order. A null
-     * [id] turns subtitles off, but forced ones. The switch takes a moment, with a rebuffer for
-     * audio, and [tracks] then reports it.
+     * Every audio and subtitle rendition of the loaded [Media], with the ids [selectTrack] takes,
+     * read from its HLS master as [HlsMaster.renditions] reads it. Empty before a [load], and for a
+     * [MediaFormat.File] item.
+     *
+     * The session fetches the master once per [load], over HTTP with [Airkast.requestTimeout], and
+     * keeps it until the next one. The fetch goes over the phone's default network, not through
+     * [Airkast.socketFactory]: the master is on the internet, not on the receiver's network. The
+     * receiver fetches the same URL from its own address, so a URL that only it may read throws
+     * [AirkastException.MasterUnreadable] here, as does any answer but 200.
+     */
+    public suspend fun renditions(): List<Rendition>
+
+    /**
+     * Selects the rendition [id] of [kind]; ids follow the master's `EXT-X-MEDIA` order, as
+     * [renditions] lists them. A null [id] turns subtitles off, but forced ones. The switch takes a
+     * moment, with a rebuffer for audio, and [tracks] then reports it.
      */
     public suspend fun selectTrack(
         kind: TrackKind,
