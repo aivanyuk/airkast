@@ -60,6 +60,7 @@ internal class SessionPlayer(
     private val awake: KeepAwake?,
     private val pollInterval: Duration,
     private val disconnectOnBack: Boolean,
+    private val disconnectOnInterrupt: Boolean = true,
     private val connector: Connector,
     private val audioRoute: AudioRoute? = null,
     private val streamsAudio: (Receiver) -> Boolean = { false },
@@ -671,6 +672,11 @@ internal class SessionPlayer(
         if (attached !== s) return
         when (event) {
             is ReceiverEvent.StateChanged -> {
+                // The TV switched away from the item, to another input or app: as BACK, the cast ends.
+                if (interrupted(event) && loaded && s === owned && disconnectOnInterrupt) {
+                    endCast(EndReason.Interrupted)
+                    return
+                }
                 onState(event.state, event.reason)
             }
 
@@ -756,7 +762,8 @@ internal class SessionPlayer(
                 if (reason == Reason.Ended) {
                     end()
                 } else {
-                    // Stopped from the TV, such as by switching its input. The app reads why from the session.
+                    // Stopped from the TV, a cast the player keeps. The app reads why from the session.
+                    if (reason != Reason.Interrupted) log.debug { "the receiver stopped the item: ${reason?.name}" }
                     loaded = false
                     playback = Player.STATE_IDLE
                 }
@@ -766,6 +773,9 @@ internal class SessionPlayer(
         }
         moveTo(position.get())
     }
+
+    private fun interrupted(event: ReceiverEvent.StateChanged) =
+        event.state == PlaybackState.Stopped && event.reason == Reason.Interrupted
 
     private suspend fun poll(s: AirkastSession) {
         val info =

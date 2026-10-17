@@ -9,6 +9,8 @@ import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
+import io.github.aivanyuk.airkast.PlaybackState
+import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.Secret
@@ -250,6 +252,59 @@ class ConnectTest {
         assertThat(session.sent).doesNotContain("stop")
         assertThat(own.connection.value).isInstanceOf(Connection.Connected::class.java)
         own.release()
+    }
+
+    @Test
+    fun theTvSwitchingAwayEndsACastThePlayerOpened() {
+        val session = casting()
+        session.emit(ReceiverEvent.StateChanged(PlaybackState.Stopped, Reason.Interrupted))
+        idle()
+        assertThat(session.closed).isTrue()
+        assertThat(player.mediaItemCount).isEqualTo(0)
+        val idle = player.connection.value as Connection.Idle
+        assertThat(idle.failure).isNull()
+        assertThat(player.playerError).isNull()
+        assertThat((heard.last() as Event.CastEnded).reason).isEqualTo(EndReason.Interrupted)
+    }
+
+    @Test
+    fun theTvSwitchingAwayIsLeftToTheAppWhenItAsks() {
+        val own = player { disconnectOnInterrupt = false }
+        own.setMediaItem(item)
+        own.play()
+        own.connect(tv)
+        idle()
+        val session = connector.sessions.single()
+        session.emit(ReceiverEvent.StateChanged(PlaybackState.Stopped, Reason.Interrupted))
+        idle()
+        assertThat(session.closed).isFalse()
+        assertThat(own.playbackState).isEqualTo(Player.STATE_IDLE)
+        assertThat(own.connection.value).isInstanceOf(Connection.Connected::class.java)
+        assertThat(heard.filterIsInstance<Event.CastEnded>()).isEmpty()
+        own.release()
+    }
+
+    @Test
+    fun aStopForAnotherReasonLeavesTheCastIdle() {
+        val session = casting()
+        session.emit(ReceiverEvent.StateChanged(PlaybackState.Stopped, Reason("somethingNew")))
+        idle()
+        assertThat(session.closed).isFalse()
+        assertThat(player.playbackState).isEqualTo(Player.STATE_IDLE)
+        assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
+    }
+
+    @Test
+    fun theTvSwitchingAwayFromASessionTheAppSetIsTheApps() {
+        val session = FakeSession()
+        player.session = session
+        player.setMediaItem(item)
+        idle()
+        session.emit(ReceiverEvent.StateChanged(PlaybackState.Stopped, Reason.Interrupted))
+        idle()
+        assertThat(session.closed).isFalse()
+        assertThat(player.playbackState).isEqualTo(Player.STATE_IDLE)
+        assertThat(player.connection.value).isInstanceOf(Connection.Connected::class.java)
     }
 
     @Test

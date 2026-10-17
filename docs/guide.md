@@ -369,6 +369,11 @@ ends only when the user gives up, with `disconnect()`, or the connect fails for 
 - **Ends the cast on BACK.** By default, BACK on the TV's remote ends a cast the player opened, as
   `disconnect()` does. With `disconnectOnBack = false`, the app hears BACK as
   `ReceiverEvent.Back` on the session's events, and decides what to do.
+- **Ends the cast when the TV switches away.** When the TV leaves the item for another input,
+  another app or its home screen, the receiver reports `StateChanged(Stopped, Reason.Interrupted)`,
+  and by default the player ends a cast it opened as BACK does, with `EndReason.Interrupted`. With
+  `disconnectOnInterrupt = false`, the player goes idle and keeps the session, and the app reads
+  the event from the session.
 - **Reconnects on `prepare()`.** After a failure, or a session that ended by itself, `prepare()`
   connects to the same receiver again. A notification's play button calls `prepare()`.
 - **Keeps the phone awake.** The player holds a partial wake lock and a Wi-Fi lock while an item
@@ -435,6 +440,7 @@ val player = AirkastPlayer(context, airkast) {
 | `audioRoute` | none | Where the local player's audio goes for a cast to a speaker, such as `AirkastAudioSink` from `airkast-exoplayer`. Needs `localPlayer`. See [Play on a speaker](#play-on-a-speaker). |
 | `streamsAudio` | a speaker: `!it.isSupported && it.isAudioSupported` | Which receivers `connect` streams the local player's audio to, rather than handing them the item's URL. Applies only with an `audioRoute`. |
 | `disconnectOnBack` | `true` | Whether BACK on the TV's remote ends a cast the player opened. |
+| `disconnectOnInterrupt` | `true` | Whether the TV switching away from the item, to another input or app, ends a cast the player opened. |
 | `keepAwake` | `true` | Whether to hold the wake lock and Wi-Fi lock described above. |
 | `positionPollInterval` | 1 second | How often the player asks the receiver for its position. |
 | `looper` | the current thread's looper, or the main looper | The player's application looper. |

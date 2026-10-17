@@ -13,6 +13,7 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public final fun build ()Lio/github/aivanyuk/airkast/media3/AirkastPlayer;
 	public final fun getAudioRoute ()Lio/github/aivanyuk/airkast/AudioRoute;
 	public final fun getDisconnectOnBack ()Z
+	public final fun getDisconnectOnInterrupt ()Z
 	public final fun getEventListener ()Lkotlin/jvm/functions/Function1;
 	public final fun getKeepAwake ()Z
 	public final fun getLocalPlayer ()Landroidx/media3/common/Player;
@@ -22,6 +23,7 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Builder {
 	public final fun getStreamsAudio ()Lkotlin/jvm/functions/Function1;
 	public final fun setAudioRoute (Lio/github/aivanyuk/airkast/AudioRoute;)V
 	public final fun setDisconnectOnBack (Z)V
+	public final fun setDisconnectOnInterrupt (Z)V
 	public final fun setEventListener (Lkotlin/jvm/functions/Function1;)V
 	public final fun setKeepAwake (Z)V
 	public final fun setLocalPlayer (Landroidx/media3/common/Player;)V
@@ -108,6 +110,7 @@ public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Event$CastSta
 public final class io/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason : java/lang/Enum {
 	public static final field Back Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
 	public static final field Disconnect Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
+	public static final field Interrupted Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
 	public static final field Lost Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
 	public static final field Released Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;
 	public static final field Replaced Lio/github/aivanyuk/airkast/media3/AirkastPlayer$Event$EndReason;

@@ -8,6 +8,9 @@ caller sees adds its line under "Unreleased".
 
 ### Added
 
+- `AirkastPlayer.Builder.disconnectOnInterrupt`, true by default: when the TV switches away from
+  the item, to another input or app, the player ends a cast it opened as BACK does, with the new
+  `EndReason.Interrupted`, where it went idle and kept the session.
 - `CredentialStore.encrypted(context)` in `airkast-android` keeps pairings in a file with each
   one encrypted with AES-256-GCM under a key in the Android Keystore. A pairing it can no longer
   decrypt reads as none, so the receiver asks again, and one it cannot encrypt stays in memory for

@@ -9,6 +9,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.PlaybackState
+import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
@@ -89,6 +91,16 @@ class HandoffTest {
     fun backOnTheTvGivesTheItemBack() {
         val session = casting()
         session.emit(ReceiverEvent.Back)
+        idle()
+        assertThat(session.closed).isTrue()
+        assertThat(player.deviceInfo.playbackType).isEqualTo(DeviceInfo.PLAYBACK_TYPE_LOCAL)
+        assertThat(player.currentMediaItem).isEqualTo(item)
+    }
+
+    @Test
+    fun theTvSwitchingAwayGivesTheItemBack() {
+        val session = casting()
+        session.emit(ReceiverEvent.StateChanged(PlaybackState.Stopped, Reason.Interrupted))
         idle()
         assertThat(session.closed).isTrue()
         assertThat(player.deviceInfo.playbackType).isEqualTo(DeviceInfo.PLAYBACK_TYPE_LOCAL)
