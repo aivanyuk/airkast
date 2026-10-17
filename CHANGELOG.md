@@ -6,6 +6,13 @@ caller sees adds its line under "Unreleased".
 
 ## Unreleased
 
+### Added
+
+- `AirkastSession.renditions()` lists every audio and subtitle rendition of the loaded HLS item,
+  with the ids `selectTrack` takes, read from its master playlist, where `tracks()` lists only the
+  selected ones. `HlsMaster.renditions(text)` numbers a master the app has read itself, and
+  `AirkastException.MasterUnreadable` says the session could not read it.
+
 ### Changed
 
 - `AirkastPlayer.connect` asks again for a PIN or password the receiver refused, where it ended

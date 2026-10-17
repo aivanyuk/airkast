@@ -7,6 +7,7 @@ import io.github.aivanyuk.airkast.PlaybackInfo
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.Rendition
 import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
 import kotlinx.coroutines.flow.Flow
@@ -66,6 +67,8 @@ internal class FakeSession(
     override suspend fun playbackInfo(): PlaybackInfo = info
 
     override suspend fun tracks(): List<Track> = emptyList()
+
+    override suspend fun renditions(): List<Rendition> = emptyList()
 
     override suspend fun selectTrack(
         kind: TrackKind,
