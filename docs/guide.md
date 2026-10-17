@@ -488,6 +488,7 @@ session.close()
 | `seek(position)` | Seeks, and returns the position the receiver reports. |
 | `playbackInfo()` | Returns the state, position, duration, rate, and buffered and seekable ranges. |
 | `tracks()` | Returns the selected audio and subtitle renditions. |
+| `renditions()` | Returns every audio and subtitle rendition in the loaded item's HLS master playlist, with the ids `selectTrack` takes. |
 | `selectTrack(kind, id)` | Selects a rendition. Ids follow the order of `EXT-X-MEDIA` tags in the HLS master playlist. A `null` id turns subtitles off, except forced ones. |
 | `volume()` | Returns the TV's volume from 0 to 1, or `null`. |
 | `stop()` | Ends playback. The receiver leaves its player, and the session stays open for another `load`. |
@@ -509,6 +510,36 @@ playback state.
 
 Pressing BACK on the TV's remote sends `ReceiverEvent.Back`. The TV stays in its player until the
 sender calls `stop()`.
+
+### Choose an audio or subtitle track
+
+A receiver knows each audio and subtitle rendition of an HLS stream by a number, and reports only
+the ones it has selected (`tracks()`). `renditions()` lists all of them, with the numbers the
+receiver uses, so an app can pick one by language or name and pass its `id` to `selectTrack`:
+
+```kotlin
+session.load(Media("https://example.com/master.m3u8"))
+
+val renditions = session.renditions()
+renditions.firstOrNull { it.kind == TrackKind.Audio && it.language == "ru" }
+    ?.let { session.selectTrack(TrackKind.Audio, it.id) }
+renditions.firstOrNull { it.kind == TrackKind.Subtitles && it.language == "en" && !it.forced }
+    ?.let { session.selectTrack(TrackKind.Subtitles, it.id) }
+```
+
+The ids count the master's audio, subtitle and closed-caption `EXT-X-MEDIA` tags in order, in one
+count:
+on a master that lists subtitles first, the first audio rendition's id is the number of subtitle
+renditions before it. Closed captions count as subtitles. A rendition repeated in another group,
+with the same type, language and name, as a stream with an AAC and an AC-3 audio group has,
+counts once. This matches the ids the LG CX and a Mac reported, on masters with one audio group
+and with several ([compatibility](compatibility.md#lg-cx-webos-046400)).
+`HlsMaster.renditions(text)` numbers a master the app has read itself in the same way.
+
+The session reads the master over HTTP once per `load`, on the phone's default network, and
+waits `requestTimeout` for it. The receiver fetches the same URL from its own address, so a URL that
+only the receiver may read fails here with `MasterUnreadable`, and still plays on the receiver. A `File` item has no renditions, and `renditions()` returns
+an empty list for it.
 
 All times are `kotlin.time.Duration` values. A volume runs from 0 to 1.
 
@@ -628,6 +659,7 @@ the player's looper.
 | `Timeout` | The receiver did not answer in time. The session stays open, and ends only if the receiver is still silent at the next request. |
 | `Disconnected` | The connection is gone: it closed, another sender took over the receiver, or the network failed. |
 | `UnexpectedReply` | The receiver answered with something airkast cannot read. |
+| `MasterUnreadable` | `renditions()` could not read the HLS master: its server answered with another status than 200 (`status` holds it), did not send it within `requestTimeout`, sent more than 1 MB, or sent something that is not a playlist. |
 | `DiscoveryFailed` | Scanning for receivers could not start. `code` is the platform's error. |
 
 ## Threading

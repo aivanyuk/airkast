@@ -12,6 +12,10 @@ caller sees adds its line under "Unreleased".
   `StateFlow` for a cast button, `NotNeeded`, `Granted` or `Denied`, with the `permission` to
   request and `refresh()` to read the grant again when the screen starts and after the request's
   result. The app asks, and decides how often.
+- `AirkastSession.renditions()` lists every audio and subtitle rendition of the loaded HLS item,
+  with the ids `selectTrack` takes, read from its master playlist, where `tracks()` lists only the
+  selected ones. `HlsMaster.renditions(text)` numbers a master the app has read itself, and
+  `AirkastException.MasterUnreadable` says the session could not read it.
 
 ### Changed
 
