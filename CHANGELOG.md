@@ -8,6 +8,10 @@ caller sees adds its line under "Unreleased".
 
 ### Added
 
+- `Receiver.id`, the key the built-in credential stores keep a receiver under: its `deviceid`, or
+  `host:port` without one. `ReceiverDiscovery.known` keeps every receiver an instance has found,
+  by `id`, after the scan stops, and `ReceiverDiscovery.find(id)` returns one of them, so an app
+  that keeps a receiver's `id` finds the receiver again after its picker stopped the scan.
 - `AirkastSession.renditions()` lists every audio and subtitle rendition of the loaded HLS item,
   with the ids `selectTrack` takes, read from its master playlist, where `tracks()` lists only the
   selected ones. `HlsMaster.renditions(text)` numbers a master the app has read itself, and

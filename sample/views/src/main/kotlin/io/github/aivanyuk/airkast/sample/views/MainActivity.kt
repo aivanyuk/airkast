@@ -28,7 +28,6 @@ import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
 import io.github.aivanyuk.airkast.android.LocalNetwork
-import io.github.aivanyuk.airkast.android.ReceiverDiscovery
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.CastService
 import io.github.aivanyuk.airkast.sample.SampleMedia
@@ -170,7 +169,7 @@ class MainActivity : AppCompatActivity() {
         scanning =
             lifecycleScope.launch {
                 try {
-                    ReceiverDiscovery(this@MainActivity).receivers.collect(::showReceivers)
+                    cast.discovery.receivers.collect(::showReceivers)
                 } catch (e: AirkastException) {
                     binding.discovery.text = describe(e)
                 }
