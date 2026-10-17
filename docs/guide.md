@@ -376,8 +376,49 @@ ends only when the user gives up, with `disconnect()`, or the connect fails for 
   the session's keepalive stops, and the receiver may drop the sender. `airkast-media3` declares
   `WAKE_LOCK` for this.
 
-Things a `Player` has no method for, such as switching tracks, are on the session:
-`player.session?.selectTrack(...)`.
+### Tracks
+
+While an HLS item plays on the receiver, the player lists its audio and subtitle tracks in
+`currentTracks` and selects them through `trackSelectionParameters`, as an `ExoPlayer` does. A
+media3 track selection dialog, the track buttons of media3's `PlayerView`, or an app's own track
+menu written against `Player` work on the TV:
+
+```kotlin
+// Before or during the cast: once set, every HLS item the receiver takes follows it.
+player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+    .setPreferredAudioLanguage("ru")
+    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true) // subtitles off
+    .build()
+```
+
+- **One group per rendition.** After the receiver takes the item, the player reads its master
+  playlist with `session.renditions()` (see [Choose an audio or subtitle track](#choose-an-audio-or-subtitle-track))
+  and lists each audio and subtitle rendition as a `Tracks.Group` with one format. The format's
+  `id` is the rendition's `id`, with its `language`, its `NAME` as the `label`, its
+  `CHARACTERISTICS` as role flags, and `FORCED=YES` as `SELECTION_FLAG_FORCED`. The codec is not
+  known, so the MIME type is `audio/x-unknown` or `text/x-unknown`. `isSelected` is what the
+  receiver reports through `tracks()`.
+- **No video group.** The receiver picks the video variant from the master itself, and the sender
+  cannot choose it.
+- **What the parameters select.** An override of a group selects its rendition. Without one, the
+  first rendition in a preferred audio or text language is selected: `"es"` matches `es-MX` when no
+  rendition is plain `es`. Disabling `TRACK_TYPE_TEXT`, an override of a subtitle group that selects
+  no track, or ignoring `SELECTION_FLAG_DEFAULT` for text, as `PlayerView`'s "Off" does, turns
+  subtitles off, except forced ones. Audio cannot be turned off. Where the parameters select
+  nothing, the receiver's own picks stand, usually the stream's defaults.
+- **The switch.** Each selection is a `selectTrack` call. The receiver reports a switch a moment
+  after it takes it, with a rebuffer for audio, so `currentTracks` shows the selection at once and
+  then follows what the receiver reports, reading it again for a few seconds.
+- **Parameters wait for the item.** Parameters set before an item is on the receiver, or before
+  the cast starts, apply once the receiver takes it. With a local player, the parameters move to
+  the receiver when a cast starts and back when it ends. Overrides stay with the player they were
+  set on, since each names one of its track groups.
+- **No tracks when the master cannot be read.** If `renditions()` fails, `currentTracks` stays
+  empty, the player logs the failure at `Warn`, and the receiver's own picks stand. A `File` item
+  has no tracks.
+
+For a receiver-specific rule, such as matching tracks by name, the session's own calls are still
+there: `player.session?.renditions()` and `player.session?.selectTrack(...)`.
 
 ### Options
 

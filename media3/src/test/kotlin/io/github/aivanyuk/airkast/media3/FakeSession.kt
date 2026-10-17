@@ -34,6 +34,12 @@ internal class FakeSession(
     var loadError: AirkastException? = null
     var info = PlaybackInfo(PlaybackState.Playing, 1.0, Duration.ZERO, 3077.seconds, emptyList(), emptyList(), ITEM)
     var volume: Double? = 0.5
+    var renditions: List<Rendition> = emptyList()
+    var renditionsError: AirkastException? = null
+
+    /** What the receiver reports selected, which a selection changes unless [switches] is off. */
+    var selected: List<Track> = emptyList()
+    var switches = true
     var closed = false
         private set
 
@@ -66,14 +72,23 @@ internal class FakeSession(
 
     override suspend fun playbackInfo(): PlaybackInfo = info
 
-    override suspend fun tracks(): List<Track> = emptyList()
+    override suspend fun tracks(): List<Track> = selected
 
-    override suspend fun renditions(): List<Rendition> = emptyList()
+    override suspend fun renditions(): List<Rendition> {
+        renditionsError?.let { throw it }
+        return renditions
+    }
 
     override suspend fun selectTrack(
         kind: TrackKind,
         id: Long?,
-    ) {}
+    ) {
+        sent += "select $kind $id"
+        if (!switches) return
+        val others = selected.filter { it.kind != kind }
+        val picked = renditions.firstOrNull { it.kind == kind && it.id == id }
+        selected = others + listOfNotNull(picked?.let { Track(it.kind, it.id, it.name, it.language, it.forced) })
+    }
 
     override suspend fun volume(): Double? = volume
 
@@ -87,7 +102,39 @@ internal class FakeSession(
         emit(ReceiverEvent.Disconnected(null))
     }
 
+    /** Gives the session [RENDITIONS], with English audio and captions selected, as the stream's defaults. */
+    fun withRenditions() =
+        apply {
+            renditions = RENDITIONS
+            selected =
+                listOf(
+                    Track(TrackKind.Audio, 0, "English", "en", false),
+                    Track(TrackKind.Subtitles, 2, "English", "en", false),
+                )
+        }
+
     companion object {
         const val ITEM = "A4271638-F960-41C7-A11A-AC1D0E6C2960"
+
+        /** Two audio renditions, closed captions, Spanish subtitles and forced English ones. */
+        val RENDITIONS =
+            listOf(
+                Rendition(TrackKind.Audio, 0, "English", "en", false, emptyList(), "aac"),
+                Rendition(TrackKind.Audio, 1, "Русский", "ru", false, emptyList(), "aac"),
+                Rendition(
+                    TrackKind.Subtitles,
+                    2,
+                    "English",
+                    "en",
+                    false,
+                    listOf(
+                        "public.accessibility.transcribes-spoken-dialog",
+                        "public.accessibility.describes-music-and-sound",
+                    ),
+                    "cc",
+                ),
+                Rendition(TrackKind.Subtitles, 3, "Español", "es-MX", false, emptyList(), "subs"),
+                Rendition(TrackKind.Subtitles, 4, "English (forced)", "en", true, emptyList(), "subs"),
+            )
     }
 }

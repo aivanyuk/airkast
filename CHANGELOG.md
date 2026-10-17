@@ -26,6 +26,12 @@ caller sees adds its line under "Unreleased".
   with the ids `selectTrack` takes, read from its master playlist, where `tracks()` lists only the
   selected ones. `HlsMaster.renditions(text)` numbers a master the app has read itself, and
   `AirkastException.MasterUnreadable` says the session could not read it.
+- `AirkastPlayer` lists an HLS item's audio and subtitle renditions in `currentTracks`, with the
+  ones the receiver reports selected, and selects them through `trackSelectionParameters`: an
+  override of a group, preferred audio and text languages, and text disabled for subtitles off.
+  Parameters set before the item is on the receiver apply once it is, and with a local player they
+  move to the receiver and back with the item. A media3 track dialog, or an app's own one written
+  against `Player`, switches the TV's tracks.
 
 ### Changed
 

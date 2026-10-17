@@ -183,6 +183,7 @@
             android:layout_marginTop="8dp"
             app:hide_on_touch="false"
             app:show_buffering="never"
+            app:show_subtitle_button="true"
             app:show_timeout="0"
             app:use_artwork="false" />
 

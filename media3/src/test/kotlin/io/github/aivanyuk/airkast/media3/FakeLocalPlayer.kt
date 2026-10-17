@@ -6,6 +6,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -21,6 +22,8 @@ internal class FakeLocalPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     var output: Any? = null
         private set
     var released = false
+        private set
+    var parameters: TrackSelectionParameters = TrackSelectionParameters.DEFAULT
         private set
 
     /** Plays on to [ms], as time passing would move it. */
@@ -44,6 +47,7 @@ internal class FakeLocalPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                         .addAllCommands()
                         .build(),
                 ).setPlayWhenReady(wantsPlay, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+                .setTrackSelectionParameters(parameters)
         if (items.isEmpty()) return builder.build()
         return builder
             .setPlaylist(items.mapIndexed { i, item -> MediaItemData.Builder(i).setMediaItem(item).build() })
@@ -97,6 +101,11 @@ internal class FakeLocalPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
 
     override fun handleClearVideoOutput(videoOutput: Any?): ListenableFuture<*> {
         if (videoOutput == null || videoOutput === output) output = null
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleSetTrackSelectionParameters(parameters: TrackSelectionParameters): ListenableFuture<*> {
+        this.parameters = parameters
         return Futures.immediateVoidFuture()
     }
 

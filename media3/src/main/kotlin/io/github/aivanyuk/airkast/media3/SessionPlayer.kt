@@ -9,6 +9,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -119,6 +121,16 @@ internal class SessionPlayer(
     private var error: PlaybackException? = null
     private var volume = 0
 
+    /** What [setTrackSelectionParameters] asked for, which each HLS item the receiver takes follows. */
+    private var parameters = TrackSelectionParameters.DEFAULT
+
+    /** The item loaded as HLS, so it has tracks. */
+    private var hls = false
+
+    /** The loaded item's tracks, once its renditions are read. */
+    private var receiverTracks: ReceiverTracks? = null
+    private var tracksJob: Job? = null
+
     override var session: AirkastSession?
         get() = attached
         set(value) {
@@ -170,7 +182,8 @@ internal class SessionPlayer(
         val builder =
             State
                 .Builder()
-                .setAvailableCommands(COMMANDS)
+                .setAvailableCommands(if (loaded && hls) TRACK_COMMANDS else COMMANDS)
+                .setTrackSelectionParameters(parameters)
                 .setPlayWhenReady(wantsPlay, wantsPlayReason)
                 .setDeviceInfo(DEVICE_INFO)
                 .setDeviceVolume(volume)
@@ -183,6 +196,7 @@ internal class SessionPlayer(
                 .setIsSeekable(durationMs != C.TIME_UNSET)
                 // A live stream reports no duration.
                 .setIsDynamic(loaded && durationMs == C.TIME_UNSET)
+                .setTracks(receiverTracks?.takeIf { loaded }?.tracks ?: Tracks.EMPTY)
                 .build()
         builder
             .setPlaylist(listOf(data))
@@ -280,6 +294,7 @@ internal class SessionPlayer(
         val s = attached
         if (s != null && (loaded || loadJob?.isActive == true)) send(s) { stop() }
         loadJob?.cancel()
+        forgetTracks()
         loaded = false
         receiverItemId = null
         awaitingItem = false
@@ -298,6 +313,19 @@ internal class SessionPlayer(
         awake?.hold(false)
         scope.cancel()
         mutableConnection.value = Connection.Idle(null, null)
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleSetTrackSelectionParameters(parameters: TrackSelectionParameters): ListenableFuture<*> {
+        this.parameters = parameters
+        val s = attached
+        val known = receiverTracks
+        // Before the renditions are read, the read applies them.
+        if (s != null && loaded && known != null) {
+            tracksJob?.cancel()
+            val picks = known.ask(parameters)
+            if (picks.isNotEmpty()) tracksJob = scope.launch { select(s, known, picks) }
+        }
         return Futures.immediateVoidFuture()
     }
 
@@ -547,6 +575,7 @@ internal class SessionPlayer(
         startPositionMs: Long,
     ) {
         loadJob?.cancel()
+        forgetTracks()
         item = media
         itemUid = Any()
         loaded = false
@@ -584,6 +613,7 @@ internal class SessionPlayer(
         sessionJob?.cancel()
         sessionJob = null
         loadJob?.cancel()
+        forgetTracks()
         attached = null
         attachedAt = null
         loaded = false
@@ -606,7 +636,10 @@ internal class SessionPlayer(
             return
         }
         val startMs = position.get()
+        val format = MediaFormat.of(url, configuration.mimeType)
         loadJob?.cancel()
+        forgetTracks()
+        hls = format == MediaFormat.Hls
         loaded = false
         receiverItemId = null
         awaitingItem = true
@@ -615,8 +648,9 @@ internal class SessionPlayer(
         loadJob =
             scope.launch {
                 try {
-                    s.load(Media(url, startMs.milliseconds, MediaFormat.of(url, configuration.mimeType)))
+                    s.load(Media(url, startMs.milliseconds, format))
                     loaded = true
+                    if (hls) readTracks(s)
                     if (!wantsPlay) s.pause()
                 } catch (e: AirkastException) {
                     // An ended session reports itself through its events.
@@ -777,6 +811,77 @@ internal class SessionPlayer(
         changed()
     }
 
+    /**
+     * Reads the loaded item's renditions and what the receiver selected, then selects what
+     * [parameters] ask for. Without the renditions there are no tracks, and the receiver's own
+     * picks stand.
+     */
+    private fun readTracks(s: AirkastSession) {
+        tracksJob?.cancel()
+        tracksJob =
+            scope.launch {
+                val renditions =
+                    try {
+                        s.renditions()
+                    } catch (e: AirkastException) {
+                        log.warn(e) { "the item's renditions are unknown, so it shows no tracks" }
+                        return@launch
+                    }
+                val selected =
+                    try {
+                        s.tracks()
+                    } catch (_: AirkastException) {
+                        emptyList()
+                    }
+                if (attached !== s || !loaded) return@launch
+                val known = ReceiverTracks(renditions, selected).also { receiverTracks = it }
+                val picks = known.ask(parameters)
+                changed()
+                if (picks.isNotEmpty()) select(s, known, picks)
+            }
+    }
+
+    /**
+     * Sends [picks] and reads back what the receiver selected, until it reports them or
+     * [CONFIRMS] reads have not. The receiver reports a switch a moment after it takes it, with a
+     * rebuffer for audio, so the tracks show what was asked meanwhile.
+     */
+    private suspend fun select(
+        s: AirkastSession,
+        known: ReceiverTracks,
+        picks: List<Pick>,
+    ) {
+        try {
+            for (pick in picks) {
+                log.debug { "selecting ${pick.kind.name.lowercase()} ${pick.id ?: "off"}" }
+                s.selectTrack(pick.kind, pick.id)
+            }
+            repeat(CONFIRMS) { read ->
+                if (read > 0) delay(pollInterval)
+                val selected = s.tracks()
+                if (receiverTracks !== known) return
+                known.report(selected)
+                changed()
+                if (known.settled) {
+                    log.debug { "the receiver reports the selection, read ${read + 1}" }
+                    return
+                }
+            }
+        } catch (e: AirkastException) {
+            log.debug { "a track selection failed: $e" }
+        }
+        if (receiverTracks !== known) return
+        log.debug { "the receiver did not report the selection" }
+        known.giveUp()
+        changed()
+    }
+
+    private fun forgetTracks() {
+        tracksJob?.cancel()
+        tracksJob = null
+        receiverTracks = null
+    }
+
     private fun end() {
         loaded = false
         playback = Player.STATE_ENDED
@@ -825,6 +930,9 @@ internal class SessionPlayer(
     private companion object {
         const val MAX_VOLUME = 100
 
+        /** How many times [select] reads the tracks back, a poll interval apart. */
+        const val CONFIRMS = 5
+
         val DEVICE_INFO: DeviceInfo =
             DeviceInfo
                 .Builder(DeviceInfo.PLAYBACK_TYPE_REMOTE)
@@ -848,8 +956,12 @@ internal class SessionPlayer(
                     Player.COMMAND_GET_TIMELINE,
                     Player.COMMAND_GET_METADATA,
                     Player.COMMAND_GET_DEVICE_VOLUME,
+                    Player.COMMAND_SET_TRACK_SELECTION_PARAMETERS,
                     Player.COMMAND_RELEASE,
                 ).build()
+
+        /** While an HLS item is on the receiver. Setting parameters before it is keeps them for it. */
+        val TRACK_COMMANDS: Player.Commands = COMMANDS.buildUpon().add(Player.COMMAND_GET_TRACKS).build()
 
         fun playbackException(e: AirkastException): PlaybackException =
             PlaybackException(

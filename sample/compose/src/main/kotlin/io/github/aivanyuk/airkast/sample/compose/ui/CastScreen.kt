@@ -48,21 +48,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.ui.PlayerView
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
-import io.github.aivanyuk.airkast.Track
-import io.github.aivanyuk.airkast.TrackKind
 import io.github.aivanyuk.airkast.android.LocalNetworkPermission
 import io.github.aivanyuk.airkast.android.ReceiverDiscovery
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.Cast
 import io.github.aivanyuk.airkast.sample.SampleMedia
 import io.github.aivanyuk.airkast.sample.compose.R
+import io.github.aivanyuk.airkast.sample.trackName
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -286,7 +287,7 @@ private fun CastStatus(
     onPair: (Receiver, Secret) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var selected by remember { mutableStateOf<List<Track>?>(null) }
+    var tracks by remember { mutableStateOf<List<Tracks.Group>?>(null) }
     var info by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (state) {
@@ -329,7 +330,7 @@ private fun CastStatus(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { scope.launch { selected = cast.attempt { tracks() } } }) {
+                    Button(onClick = { tracks = cast.tracks }) {
                         Text(stringResource(R.string.renditions))
                     }
                     Button(
@@ -350,14 +351,18 @@ private fun CastStatus(
             }
         }
     }
-    selected?.let { tracks ->
+    tracks?.let { groups ->
         TracksDialog(
-            selected = tracks,
-            onSelect = { kind, id ->
-                selected = null
-                scope.launch { cast.attempt { selectTrack(kind, id) } }
+            tracks = groups,
+            onSelect = { group ->
+                tracks = null
+                cast.select(group)
             },
-            onDismiss = { selected = null },
+            onSubtitlesOff = {
+                tracks = null
+                cast.subtitlesOff()
+            },
+            onDismiss = { tracks = null },
         )
     }
     info?.let { text ->
@@ -428,43 +433,27 @@ private fun PlayerControls(player: Player?) {
 }
 
 /**
- * The receiver reports the renditions it selected, with ids that follow the HLS master's order,
- * so "next" is the next id. With none of a kind selected, as on a Mac with subtitles off, it is
- * the id after the highest one selected, since a master lists audio before subtitles. A subtitle
- * selection with a null id turns subtitles off.
+ * The item's audio and subtitle tracks, from the player's `Tracks`. A tap selects one through the
+ * player's track selection parameters, which the player sends to the TV.
  */
 @Composable
 private fun TracksDialog(
-    selected: List<Track>,
-    onSelect: (TrackKind, Long?) -> Unit,
+    tracks: List<Tracks.Group>,
+    onSelect: (Tracks.Group) -> Unit,
+    onSubtitlesOff: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    fun next(kind: TrackKind): Long {
-        val current = selected.firstOrNull { it.kind == kind } ?: selected.maxByOrNull { it.id }
-        return current?.id?.plus(1) ?: 0
-    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.tracks_title)) },
         text = {
             Column {
-                Text(
-                    if (selected.isEmpty()) {
-                        stringResource(R.string.tracks_none)
-                    } else {
-                        selected.joinToString(
-                            "\n",
-                        ) { "${it.kind} ${it.id} ${it.name.orEmpty()} ${it.language.orEmpty()}".trim() }
-                    },
-                )
-                TextButton(onClick = { onSelect(TrackKind.Audio, next(TrackKind.Audio)) }) {
-                    Text(stringResource(R.string.next_audio))
+                if (tracks.isEmpty()) Text(stringResource(R.string.tracks_none))
+                for (group in tracks) {
+                    TextButton(onClick = { onSelect(group) }) { Text(describe(group)) }
                 }
-                TextButton(onClick = { onSelect(TrackKind.Subtitles, next(TrackKind.Subtitles)) }) {
-                    Text(stringResource(R.string.next_subtitles))
-                }
-                TextButton(onClick = { onSelect(TrackKind.Subtitles, null) }) {
-                    Text(stringResource(R.string.subtitles_off))
+                if (tracks.isNotEmpty()) {
+                    TextButton(onClick = onSubtitlesOff) { Text(stringResource(R.string.subtitles_off)) }
                 }
             }
         },
@@ -478,6 +467,23 @@ private fun EventLog(lines: List<String>) {
         Text(stringResource(R.string.events_title), style = MaterialTheme.typography.titleMedium)
         Text(lines.joinToString("\n"), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
     }
+}
+
+@Composable
+private fun describe(group: Tracks.Group): String {
+    val name = trackName(group.getTrackFormat(0))
+    val track =
+        stringResource(
+            if (group.type ==
+                C.TRACK_TYPE_AUDIO
+            ) {
+                R.string.track_audio
+            } else {
+                R.string.track_subtitles
+            },
+            name,
+        )
+    return if (group.isSelected) stringResource(R.string.track_selected, track) else track
 }
 
 @Composable

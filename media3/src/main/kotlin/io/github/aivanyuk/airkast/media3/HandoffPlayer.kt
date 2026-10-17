@@ -11,6 +11,7 @@ import androidx.media3.common.DeviceInfo
 import androidx.media3.common.ForwardingSimpleBasePlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -36,6 +37,9 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * A cast to a speaker leaves [local] playing, with its audio on a stream. Meanwhile this tells the
  * receiver what plays, and the device volume is the receiver's.
+ *
+ * The track selection parameters cross with the item, so a language set on either player holds on
+ * the other. Overrides do not cross, since each names one of its own player's track groups.
  */
 @OptIn(UnstableApi::class)
 internal class HandoffPlayer(
@@ -94,6 +98,11 @@ internal class HandoffPlayer(
 
     override fun attached() {
         if (player !== local) return
+        remote.trackSelectionParameters =
+            local.trackSelectionParameters
+                .buildUpon()
+                .clearOverrides()
+                .build()
         local.currentMediaItem?.let { item ->
             log.debug { "the local player's item moves to the receiver at ${local.currentPosition} ms" }
             remote.setMediaItem(item, local.currentPosition)
@@ -157,6 +166,9 @@ internal class HandoffPlayer(
         positionMs: Long,
     ) {
         if (player !== remote) return
+        if (local.isCommandAvailable(COMMAND_SET_TRACK_SELECTION_PARAMETERS)) {
+            local.trackSelectionParameters = carried(remote.trackSelectionParameters, local.trackSelectionParameters)
+        }
         // Paused: the cast may have ended with nobody at the phone, such as by BACK on the TV.
         local.playWhenReady = false
         if (item != null) {
@@ -271,6 +283,17 @@ internal class HandoffPlayer(
 
 private const val MAX_VOLUME = 100
 private const val STEP = 5
+
+/** [from], with the overrides [to] has, which name its own track groups. */
+private fun carried(
+    from: TrackSelectionParameters,
+    to: TrackSelectionParameters,
+): TrackSelectionParameters =
+    from
+        .buildUpon()
+        .clearOverrides()
+        .apply { to.overrides.values.forEach(::addOverride) }
+        .build()
 
 private val STREAM_DEVICE: DeviceInfo =
     DeviceInfo
