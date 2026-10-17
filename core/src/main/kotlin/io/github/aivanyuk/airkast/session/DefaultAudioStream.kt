@@ -346,15 +346,17 @@ internal class DefaultAudioStream private constructor(
     ) {
         val now = lock.withLock { if (anchored) rtpAt(System.nanoTime()) else nextRtp } and 0xffffffffL
         val rtpInfo = "rtptime=$now"
-        parameter(
-            Dmap.track(nowPlaying.title, nowPlaying.artist, nowPlaying.album),
-            "application/x-dmap-tagged",
-            rtpInfo,
-        )
-        nowPlaying.artwork?.let { artwork ->
+        if (receiver.takesTrackInfo) {
+            parameter(
+                Dmap.track(nowPlaying.title, nowPlaying.artist, nowPlaying.album),
+                "application/x-dmap-tagged",
+                rtpInfo,
+            )
+        }
+        nowPlaying.artwork?.takeIf { receiver.takesArtwork }?.let { artwork ->
             parameter(artwork, if (artwork.isPng()) "image/png" else "image/jpeg", rtpInfo)
         }
-        nowPlaying.duration?.let { duration ->
+        nowPlaying.duration?.takeIf { receiver.takesProgress }?.let { duration ->
             val start = now - frames(elapsed)
             val end = start + frames(duration)
             val progress = "progress: ${start and 0xffffffffL}/$now/${end and 0xffffffffL}\r\n"

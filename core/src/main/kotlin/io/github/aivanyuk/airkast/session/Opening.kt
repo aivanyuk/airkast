@@ -48,6 +48,28 @@ internal object Opening {
     }
 
     /**
+     * Asks [receiver] what it is with `GET /info`, which the LG CX, the Samsung HW-Q990B and a Mac
+     * answer before pairing, and returns the answer as TXT record properties
+     * ([Receiver.propertiesFromInfo]).
+     */
+    fun info(
+        receiver: Receiver,
+        identity: SenderIdentity,
+        options: SessionOptions,
+    ): Map<String, String> =
+        try {
+            control(receiver, identity, options).use { control ->
+                val reply = control.exchange("GET", "/info").requireSuccess("GET /info")
+                if (!BinaryPlist.isPlist(reply.body)) {
+                    throw AirkastException.UnexpectedReply(IOException("GET /info answered no plist"))
+                }
+                Receiver.propertiesFromInfo(plist(reply))
+            }
+        } catch (e: Exception) {
+            throw failure(e)
+        }
+
+    /**
      * Starts pairing with [receiver] for [secret], showing a PIN if it is one, over the connection
      * the pairing then finishes on.
      */

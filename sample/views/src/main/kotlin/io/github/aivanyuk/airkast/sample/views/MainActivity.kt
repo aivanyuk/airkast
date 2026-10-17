@@ -77,15 +77,12 @@ class MainActivity : AppCompatActivity() {
 
         binding.grant.setOnClickListener { permission.launch(localNetwork.permission) }
         binding.host.doAfterTextChanged { binding.connect.isEnabled = !it.isNullOrBlank() }
-        // A receiver typed in by hand has no TXT record, so its compatibility is Unknown.
         binding.connect.setOnClickListener {
-            cast.start(
-                Receiver(
-                    getString(R.string.typed_in),
-                    binding.host.text
-                        .toString()
-                        .trim(),
-                ),
+            cast.startAt(
+                getString(R.string.typed_in),
+                binding.host.text
+                    .toString()
+                    .trim(),
                 url(),
                 format(),
             )

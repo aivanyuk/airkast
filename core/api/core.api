@@ -4,6 +4,7 @@ public final class io/github/aivanyuk/airkast/Airkast {
 	public final fun connectAudio (Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/PcmFormat;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun connectAudio$default (Lio/github/aivanyuk/airkast/Airkast;Lio/github/aivanyuk/airkast/Receiver;Lio/github/aivanyuk/airkast/PcmFormat;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun copy (Lkotlin/jvm/functions/Function1;)Lio/github/aivanyuk/airkast/Airkast;
+	public final fun describe (Lio/github/aivanyuk/airkast/Receiver;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getApprovalTimeout-UwyO8pc ()J
 	public final fun getAudioLatency-UwyO8pc ()J
 	public final fun getConnectTimeout-UwyO8pc ()J

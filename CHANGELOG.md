@@ -32,6 +32,11 @@ caller sees adds its line under "Unreleased".
   Parameters set before the item is on the receiver apply once it is, and with a local player they
   move to the receiver and back with the item. A media3 track dialog, or an app's own one written
   against `Player`, switches the TV's tracks.
+- `Airkast.describe(receiver)` asks a receiver typed in by hand what it is, with `GET /info`,
+  and returns it with its feature bits, status flags, model and device ID, so its
+  `compatibility` and `audioCompatibility` are known before connecting. `connect` and
+  `connectAudio` do this themselves for a receiver without a TXT record, so one that asks for a
+  PIN or password pairs on its first connect.
 
 ### Changed
 
@@ -44,6 +49,11 @@ caller sees adds its line under "Unreleased".
   calls `disconnect()`. `Event.CastAbandoned` carries `rejected` too.
 - A PIN or password the receiver refuses is logged at `Debug`, without a stack trace, where it was
   an `Error` from both `Airkast.pair` and `Airkast.connect`.
+- `AudioStream.setNowPlaying` sends only the parts the receiver's metadata feature bits say it
+  shows: track info, artwork and progress. A receiver typed in by hand and not described still
+  gets all three.
+- `Airkast.Builder.socketFactory` also runs before `describe`, so a connect to a receiver typed in
+  by hand asks it twice.
 
 ## 0.5.0 - 2026-10-14
 

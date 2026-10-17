@@ -117,7 +117,7 @@ can, and if not, why:
 | `Supported` | Plays without a PIN or password. | yes |
 | `NeedsPin` | Asks for the PIN shown on its screen the first time. | yes |
 | `NeedsPassword` | Asks for the password set on it the first time. | yes |
-| `Unknown` | Typed in by hand, so there is nothing to read. Connecting is the only test. | no |
+| `Unknown` | Typed in by hand, so there is nothing to read until `Airkast.describe` asks it. | no |
 | `AccessRestricted` | Lets in only its owner's Apple devices, such as a Mac at its default, "Current User". | no |
 | `NoTransientPairing` | Does not offer the pairing airkast starts with. | no |
 | `VideoV1Only` | Accepts URLs only over AirPlay video v1, which airkast does not speak. | no |
@@ -134,7 +134,23 @@ branch. [compatibility.md](compatibility.md#how-receivercompatibility-decides) e
 case is decided.
 
 To connect to a receiver that discovery cannot see, such as from an emulator or a desktop JVM,
-build it from its address: `Receiver("TV", "192.168.1.20")`. Its compatibility is `Unknown`.
+build it from its address: `Receiver("TV", "192.168.1.20")`. Its compatibility is `Unknown`,
+since it has no TXT record. `Airkast.describe` asks the receiver what it is, with `GET /info`,
+which receivers answer before pairing, and returns it with its feature bits, status flags, model
+and device ID filled in:
+
+```kotlin
+val receiver = airkast.describe(Receiver("Soundbar", "192.168.1.30", 36617))
+if (receiver.isAudioSupported && !receiver.isSupported) {
+    // A speaker: stream the app's audio with connectAudio.
+}
+```
+
+`describe` throws an `AirkastException` when the receiver does not answer. The answer from the
+receivers checked holds no access setting, so a Mac set to "Current User" may read as `Supported`
+and still refuse the connect. `connect` and `connectAudio` describe a receiver typed in by hand
+themselves, so one that asks for a PIN or password gets the right prompt. If the receiver answers
+`GET /info` with an error, they go on with the receiver as it was given.
 
 ### Remember a receiver
 
@@ -671,7 +687,8 @@ stream.close()
   full; `offer` takes what fits and returns at once, for a player whose output must not block.
 - **Control.** `play`, `pause` and `flush` return at once and tell the receiver in the background.
   `setVolume` and `volume` run from 0 to 1. `setNowPlaying` tells a receiver with a screen what
-  plays, and how far into the track it is.
+  plays, and how far into the track it is. It sends only what the receiver's feature bits say it
+  shows: the title, artist and album, the artwork, and the progress each have a bit of their own.
 - **The end.** `events` ends with `ReceiverEvent.Disconnected`, after which `write` and `offer`
   throw `AirkastException.Disconnected`. `close()` ends playback and lets the receiver go back to
   its own input.
