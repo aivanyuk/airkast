@@ -543,11 +543,13 @@ internal class DefaultAudioStream private constructor(
     private fun onMessage(message: Map<String, Any?>) {
         eventLog.at(Level.Debug, null) { "${message["type"]} ${message["name"] ?: ""}".trim() }
         val volume = (message["volume"] as? Number)?.toDouble()
+        val remote = message["type"] == "sendMediaRemoteCommand"
+        val command = if (remote) remoteCommand(message["value"]) else null
         val event =
-            if (message["type"] == "sendMediaRemoteCommand" && message["value"] == "dvlc" && volume != null) {
-                ReceiverEvent.VolumeChanged(volume)
-            } else {
-                ReceiverEvent.Other(message)
+            when {
+                remote && message["value"] == "dvlc" && volume != null -> ReceiverEvent.VolumeChanged(volume)
+                command != null -> ReceiverEvent.RemoteCommand(command)
+                else -> ReceiverEvent.Other(message)
             }
         mutableEvents.tryEmit(event)
     }

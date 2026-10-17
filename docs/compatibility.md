@@ -174,7 +174,8 @@ What the soundbar does, as seen on the wire.
   its TXT record, `model` and `sdk`. Asked for `txtAirPlay`, it adds its TXT record.
 - Its remote's play/pause, next and previous arrive on the event channel as `POST /command`
   with `type: sendMediaRemoteCommand` and `value` `plps`, `nitm` or `pitm`, which airkast reports
-  as `ReceiverEvent.Other`. Its volume keys arrive as `ReceiverEvent.VolumeChanged`. Checked
+  as `ReceiverEvent.RemoteCommand` (`PlayPause`, `Next`, `Previous`). owntone's sender reads
+  `play` and `paus` too, which map to `Play` and `Pause`; the Samsung was not seen sending them. Its volume keys arrive as `ReceiverEvent.VolumeChanged`. Checked
   on 2026-10-17 with a silent stream: it never looked up a `_dacp._tcp` service or sent a DACP
   request, though airkast sends `DACP-ID` and `Active-Remote` and one was advertised.
 - The openairplay spec's sample `GET /info` from a Denon AVR-X3500H has the same features

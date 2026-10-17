@@ -497,6 +497,14 @@ public final class io/github/aivanyuk/airkast/ReceiverEvent$RateChanged : io/git
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/aivanyuk/airkast/ReceiverEvent$RemoteCommand : io/github/aivanyuk/airkast/ReceiverEvent {
+	public fun <init> (Lio/github/aivanyuk/airkast/RemoteCommand;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCommand ()Lio/github/aivanyuk/airkast/RemoteCommand;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/aivanyuk/airkast/ReceiverEvent$StateChanged : io/github/aivanyuk/airkast/ReceiverEvent {
 	public synthetic fun <init> (Lio/github/aivanyuk/airkast/PlaybackState;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun equals (Ljava/lang/Object;)Z
@@ -520,6 +528,17 @@ public final class io/github/aivanyuk/airkast/ReceiverEvent$VolumeChanged : io/g
 	public final fun getVolume ()D
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/aivanyuk/airkast/RemoteCommand : java/lang/Enum {
+	public static final field Next Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static final field Pause Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static final field Play Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static final field PlayPause Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static final field Previous Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/RemoteCommand;
+	public static fun values ()[Lio/github/aivanyuk/airkast/RemoteCommand;
 }
 
 public final class io/github/aivanyuk/airkast/Rendition {

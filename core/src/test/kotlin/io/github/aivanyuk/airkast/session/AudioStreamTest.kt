@@ -8,11 +8,16 @@ import io.github.aivanyuk.airkast.NowPlaying
 import io.github.aivanyuk.airkast.PcmFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.RemoteCommand
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.nio.ByteBuffer
@@ -262,6 +267,33 @@ class AudioStreamTest {
                     )
                     val sent = fake.messages.filter { it.startLine.startsWith("SET_PARAMETER") }
                     assertThat(sent.map { it.header("Content-Type") }).containsExactly("application/x-dmap-tagged")
+                }
+            }
+        }
+
+    @Test
+    fun aSpeakersRemoteArrivesAsTypedEvents(): Unit =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                stream(fake).use { stream ->
+                    val heard =
+                        async {
+                            stream.events
+                                .filter { it !is ReceiverEvent.Other }
+                                .take(3)
+                                .toList()
+                        }
+                    yield()
+                    // As the Samsung HW-Q990B (366.0) sends its remote's play/pause and next, and its volume keys.
+                    fake.event(mapOf("type" to "sendMediaRemoteCommand", "value" to "plps"))
+                    fake.event(mapOf("type" to "sendMediaRemoteCommand", "value" to "nitm"))
+                    fake.event(mapOf("type" to "sendMediaRemoteCommand", "value" to "dvlc", "volume" to 0.25))
+                    assertThat(withTimeout(5.seconds) { heard.await() })
+                        .containsExactly(
+                            ReceiverEvent.RemoteCommand(RemoteCommand.PlayPause),
+                            ReceiverEvent.RemoteCommand(RemoteCommand.Next),
+                            ReceiverEvent.VolumeChanged(0.25),
+                        ).inOrder()
                 }
             }
         }

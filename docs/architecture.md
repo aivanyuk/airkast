@@ -206,7 +206,9 @@ internal and no unstable type reaches airkast's API dump.
   `release`, and it ends the cast on BACK unless `disconnectOnBack` is off. One the app set is the
   app's: the player never closes it, and leaves BACK to it. Either way it lets go of a session
   that has ended, and reports a `PlaybackException` only when the connection failed, not when it
-  was closed.
+  was closed, and it follows play/pause, next and previous on the receiver's remote unless
+  `followsRemote` is off: on the player the app sees, which is the local player during a cast to
+  a speaker.
 - **`disconnect` clears the item.** The player offers no `COMMAND_CHANGE_MEDIA_ITEMS`, so media3's
   `clearMediaItems()` does nothing on it. `disconnect` clears the item itself, which takes a
   `MediaSession`'s notification down: media3 keeps one up for an idle player that has played.

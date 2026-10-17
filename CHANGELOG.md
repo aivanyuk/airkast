@@ -32,6 +32,10 @@ caller sees adds its line under "Unreleased".
   Parameters set before the item is on the receiver apply once it is, and with a local player they
   move to the receiver and back with the item. A media3 track dialog, or an app's own one written
   against `Player`, switches the TV's tracks.
+- `ReceiverEvent.RemoteCommand` with a `RemoteCommand` (`Play`, `Pause`, `PlayPause`, `Next`,
+  `Previous`): the playback buttons a receiver's remote leaves to the sender, such as a
+  speaker's, which came as `ReceiverEvent.Other`. `AirkastPlayer` follows them, as a media button,
+  unless `AirkastPlayer.Builder.followsRemote` is off.
 - `Airkast.describe(receiver)` asks a receiver typed in by hand what it is, with `GET /info`,
   and returns it with its feature bits, status flags, model and device ID, so its
   `compatibility` and `audioCompatibility` are known before connecting. `connect` and
