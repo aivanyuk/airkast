@@ -21,6 +21,7 @@ import java.net.Socket
  */
 internal object Opening {
     private const val UNAUTHORIZED = 401
+    private val INFO_QUALIFIER = BinaryPlist.encode(mapOf("qualifier" to listOf("txtAirPlay")))
 
     /**
      * Opens the control connection to [receiver] and pairs on it: pair-verify with the options'
@@ -48,6 +49,32 @@ internal object Opening {
             throw e
         }
     }
+
+    /**
+     * Asks [receiver] what it is with `GET /info`, which the LG CX, the Samsung HW-Q990B and a Mac
+     * answer before pairing, and returns the answer as TXT record properties
+     * ([Receiver.propertiesFromInfo]). The body asks for the record itself, as Apple's senders do
+     * by Emanuele Cozzi's notes: without it, those three leave `txtAirPlay` out.
+     */
+    fun info(
+        receiver: Receiver,
+        identity: SenderIdentity,
+        options: SessionOptions,
+    ): Map<String, String> =
+        try {
+            control(receiver, identity, options).use { control ->
+                val reply =
+                    control
+                        .exchange("GET", "/info", body = INFO_QUALIFIER, contentType = ControlConnection.BPLIST)
+                        .requireSuccess("GET /info")
+                if (!BinaryPlist.isPlist(reply.body)) {
+                    throw AirkastException.UnexpectedReply(IOException("GET /info answered no plist"))
+                }
+                Receiver.propertiesFromInfo(plist(reply))
+            }
+        } catch (e: Exception) {
+            throw failure(e)
+        }
 
     /**
      * Starts pairing with [receiver] for [secret], showing a PIN if it is one, over the connection

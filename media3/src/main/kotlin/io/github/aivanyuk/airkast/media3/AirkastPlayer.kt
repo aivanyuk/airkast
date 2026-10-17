@@ -274,6 +274,16 @@ public interface AirkastPlayer : Player {
         public var disconnectOnBack: Boolean = true
 
         /**
+         * Whether the playback buttons on the receiver's remote drive this player, as a media
+         * button does: play/pause, next and previous on a speaker's remote, such as the Samsung
+         * HW-Q990B's, during a cast to it, and on a TV's during a session. Next and previous act
+         * only when the player offers them, so on a speaker they move the [localPlayer] through
+         * its playlist. With false, the app hears them as [ReceiverEvent.RemoteCommand] on the
+         * session's or the stream's events, and decides.
+         */
+        public var followsRemote: Boolean = true
+
+        /**
          * The player that plays while no cast does, such as the app's `ExoPlayer`, or null to play
          * only on receivers. With one, the [AirkastPlayer] forwards to it until a session attaches,
          * then stops it and plays its current item on the receiver from the position it reached.
@@ -318,6 +328,7 @@ public interface AirkastPlayer : Player {
                     awake = if (keepAwake) KeepAwake(context, log) else null,
                     pollInterval = positionPollInterval,
                     disconnectOnBack = disconnectOnBack,
+                    followsRemote = followsRemote,
                     connector = connector,
                     audioRoute = audioRoute,
                     streamsAudio = streamsAudio,

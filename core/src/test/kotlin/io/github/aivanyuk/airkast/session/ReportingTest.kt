@@ -59,7 +59,10 @@ class ReportingTest {
                 assertThat(events.map { it::class })
                     .containsExactly(Event.Connected::class, Event.Loaded::class, Event.SessionEnded::class)
                     .inOrder()
-                assertThat(events.map { it.receiver }.distinct()).containsExactly(receiver)
+                // Typed in by hand, so every event names it as GET /info described it.
+                val described = events.map { it.receiver }.distinct().single()
+                assertThat(described.host to described.port).isEqualTo(receiver.host to receiver.port)
+                assertThat(described.model).isEqualTo("OLED65CX6LA")
                 val connected = events[0] as Event.Connected
                 assertThat(connected.pairing).isEqualTo(Event.Pairing.Transient)
                 assertThat(connected.took).isGreaterThan(Duration.ZERO)

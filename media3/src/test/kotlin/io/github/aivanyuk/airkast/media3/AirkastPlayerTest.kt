@@ -13,6 +13,7 @@ import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.ReceiverEvent
+import io.github.aivanyuk.airkast.RemoteCommand
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -153,6 +154,21 @@ class AirkastPlayerTest {
         fake.emit(ReceiverEvent.TimeJumped(90.seconds))
         idle()
         assertThat(player.currentPosition).isAtLeast(90_000)
+    }
+
+    @Test
+    fun aPlayPauseButtonTheReceiverLeavesToTheSenderPausesAndPlaysIt() {
+        playing()
+        fake.emit(ReceiverEvent.RemoteCommand(RemoteCommand.PlayPause))
+        idle()
+        assertThat(player.playWhenReady).isFalse()
+        fake.emit(ReceiverEvent.RemoteCommand(RemoteCommand.Play))
+        idle()
+        assertThat(player.playWhenReady).isTrue()
+        // One item, so next has nothing to move to.
+        fake.emit(ReceiverEvent.RemoteCommand(RemoteCommand.Next))
+        idle()
+        assertThat(fake.sent).containsExactly("load", "pause", "play").inOrder()
     }
 
     @Test

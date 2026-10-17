@@ -420,9 +420,11 @@ internal class DefaultVideoSession private constructor(
                 // keys as `dvlc` with the volume from 0 to 1.
                 "sendMediaRemoteCommand" -> {
                     val volume = (message["volume"] as? Number)?.toDouble()
+                    val command = remoteCommand(message["value"])
                     when {
                         message["value"] == "pbal" -> ReceiverEvent.Back
                         message["value"] == "dvlc" && volume != null -> ReceiverEvent.VolumeChanged(volume)
+                        command != null -> ReceiverEvent.RemoteCommand(command)
                         else -> ReceiverEvent.Other(message)
                     }
                 }

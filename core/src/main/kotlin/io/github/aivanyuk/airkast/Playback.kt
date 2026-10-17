@@ -184,6 +184,16 @@ public sealed interface ReceiverEvent {
      */
     public data object Back : ReceiverEvent
 
+    /**
+     * A playback button on the receiver's remote, or on the receiver itself, that it leaves to the
+     * sender: play/pause, next or previous on a speaker's remote. `AirkastPlayer` acts on it
+     * unless its `followsRemote` is off; an app that drives a session or stream itself decides.
+     */
+    @Poko
+    public class RemoteCommand(
+        public val command: io.github.aivanyuk.airkast.RemoteCommand,
+    ) : ReceiverEvent
+
     /** The TV's remote changed its volume. [volume] runs from 0 to 1. */
     @Poko
     public class VolumeChanged(
@@ -229,4 +239,18 @@ public enum class DisconnectReason {
 
     /** It ended in a way none of the others describes. */
     Unknown,
+}
+
+/**
+ * The playback button a [ReceiverEvent.RemoteCommand] names. New buttons may join in a minor
+ * release, so a `when` over them keeps an `else` branch.
+ */
+public enum class RemoteCommand {
+    Play,
+    Pause,
+
+    /** One button that plays when paused and pauses when playing. */
+    PlayPause,
+    Next,
+    Previous,
 }

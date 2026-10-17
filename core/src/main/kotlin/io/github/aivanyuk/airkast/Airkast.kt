@@ -67,8 +67,8 @@ public class Airkast private constructor(
 
     /**
      * Picks the socket factory for the connections to a receiver, or null for the platform's
-     * default. It runs before every connect and pairing, off the caller's thread, and may refuse
-     * with an [AirkastException]. On Android, `Airkast(context)` sets one that fails with
+     * default. It runs before every connect, pairing and [describe], off the caller's thread, and
+     * may refuse with an [AirkastException]. On Android, `Airkast(context)` sets one that fails with
      * [AirkastException.NotPermitted] without the local network permission, and binds the
      * connections to the Wi-Fi or Ethernet network the receiver is on, off mobile data and out of a
      * VPN. Setting another replaces both.
@@ -113,6 +113,11 @@ public class Airkast private constructor(
      * it takes is kept for the next connect. A receiver that pairs transiently leaves no
      * credentials to keep it with, so it is asked on every connect.
      *
+     * A receiver typed in by hand, with no [Receiver.properties], is [describe]d first, so a PIN
+     * or password it asks for is known before pairing, and the session's [AirkastSession.receiver]
+     * is the described one. If it answers that request with an error, or not at all, the connect
+     * goes on with [receiver] as given.
+     *
      * A receiver that refuses its credentials has forgotten this sender, or is not the receiver
      * they are for: they leave [credentialStore], and the next connect pairs again. Any other
      * [AirkastException.PairingFailed], such as a busy receiver's error status, keeps them. A
@@ -121,13 +126,15 @@ public class Airkast private constructor(
     public suspend fun connect(
         receiver: Receiver,
         ask: (suspend (Secret) -> String)? = null,
-    ): AirkastSession = open(receiver, ask) { options -> DefaultVideoSession.open(receiver, identity, options) }
+    ): AirkastSession =
+        open(receiver, ask) { described, options -> DefaultVideoSession.open(described, identity, options) }
 
     /**
      * Pairs with [receiver] and opens an [AudioStream] that plays the PCM the app writes, in
      * [format]: on a speaker or a soundbar, or on a TV or Mac that plays AirPlay audio
      * ([Receiver.audioCompatibility]). It pairs as [connect] does, and [ask] works the same way.
      * The receiver's NTP timing requests must reach this device over UDP, whatever [ntpTiming] says.
+     * A receiver typed in by hand is [describe]d first, as for [connect].
      *
      * [format] is the one input that differs from stream to stream, so it is a parameter here;
      * how streams behave, such as [audioLatency], is the client's, on its builder.
@@ -136,22 +143,72 @@ public class Airkast private constructor(
         receiver: Receiver,
         format: PcmFormat = PcmFormat(),
         ask: (suspend (Secret) -> String)? = null,
-    ): AudioStream = open(receiver, ask) { options -> DefaultAudioStream.open(receiver, identity, options, format) }
+    ): AudioStream =
+        open(receiver, ask) { described, options -> DefaultAudioStream.open(described, identity, options, format) }
+
+    /**
+     * Asks [receiver] what it is, with `GET /info`, and returns it with [Receiver.properties]
+     * filled from the answer, so that [Receiver.compatibility], [Receiver.audioCompatibility],
+     * [Receiver.model] and [Receiver.deviceId] say what discovery's record would. Use it for a
+     * receiver typed in by hand, which is [Compatibility.Unknown] until then: a picker can then
+     * tell a TV from a speaker. [Receiver.name], [Receiver.host] and [Receiver.port] stay as given,
+     * and what the answer holds replaces properties of the same name.
+     *
+     * The receiver answers before pairing, so this asks for no PIN or password. The LG CX, the
+     * Samsung HW-Q990B and a Mac answer with their whole TXT record. A receiver that sends only
+     * its feature bits and status flags leaves out `pw` and `act`: one that restricts who may
+     * cast without saying so in its status flags may then read as [Compatibility.Supported] and
+     * fail to connect.
+     *
+     * Throws [AirkastException.Unreachable] when nothing answers at the address,
+     * [AirkastException.Rejected] when the receiver refuses the request, and
+     * [AirkastException.UnexpectedReply] when its answer cannot be read.
+     */
+    public suspend fun describe(receiver: Receiver): Receiver {
+        val options = options(receiver, null)
+        val properties = withContext(Dispatchers.IO) { Opening.info(receiver, identity, options) }
+        return Receiver(receiver.name, receiver.host, receiver.port, receiver.properties + properties)
+    }
+
+    /**
+     * [describe], or [receiver] as given when it answers `GET /info` with an error or not at all.
+     * Nothing at the address, or no permission to reach it, fails the connect as it is.
+     */
+    private suspend fun describedForConnect(
+        receiver: Receiver,
+        log: Log,
+    ): Receiver {
+        if (receiver.properties.isNotEmpty()) return receiver
+        return try {
+            describe(receiver).also { log.debug { "described: ${it.model} srcvers ${it.sourceVersion}" } }
+        } catch (e: AirkastException) {
+            if (e is AirkastException.Unreachable || e is AirkastException.NotPermitted) throw e
+            log.warn { "GET /info failed (${e.message}), connecting as typed in" }
+            receiver
+        }
+    }
 
     /** What [connect] and [connectAudio] share: the pairing, the password, and their events. */
     private suspend fun <T : AutoCloseable> open(
-        receiver: Receiver,
+        typedIn: Receiver,
         ask: (suspend (Secret) -> String)?,
-        open: (SessionOptions) -> T,
+        open: (Receiver, SessionOptions) -> T,
     ): T {
         val log = Log(logger, "connect")
         val start = TimeSource.Monotonic.markNow()
         // The user's typing, left out of how long the connect took.
         var asking = Duration.ZERO
         var credentials: Credentials? = null
+        var receiver = typedIn
+        // The receiver the credentials are filed under: a pairing made before it was described is
+        // under its host and port, not under the device id that describing it found.
+        var filedUnder = typedIn
         try {
+            receiver = describedForConnect(typedIn, log)
+            filedUnder = receiver
             val secret = receiver.secret
             credentials = credentialStore.get(receiver)
+                ?: (if (receiver !== typedIn) credentialStore.get(typedIn)?.also { filedUnder = typedIn } else null)
                 ?: if (ask != null && secret != null) {
                     val mark = TimeSource.Monotonic.markNow()
                     try {
@@ -165,7 +222,7 @@ public class Airkast private constructor(
             val options = options(receiver, credentials)
             val session =
                 try {
-                    opening { open(options) }
+                    opening { open(receiver, options) }
                 } catch (e: AirkastException) {
                     if (ask == null || !asksForPassword(e)) throw e
                     log.debug { "the receiver asks for its password when the session starts" }
@@ -176,8 +233,8 @@ public class Airkast private constructor(
                         } finally {
                             asking += mark.elapsedNow()
                         }
-                    opening { open(options.withPassword(password)) }.also {
-                        keep(receiver, credentials, password, it)
+                    opening { open(receiver, options.withPassword(password)) }.also {
+                        keep(filedUnder, credentials, password, it)
                     }
                 }
             val took = start.elapsedNow() - asking
@@ -187,7 +244,7 @@ public class Airkast private constructor(
             return session
         } catch (e: AirkastException) {
             if (credentials != null && e is AirkastException.PairingFailed && e.credentialsRefused) {
-                credentialStore.remove(receiver)
+                credentialStore.remove(filedUnder)
                 log.warn { "the receiver refused its credentials, which leave the store" }
                 eventListener.report(Event.CredentialsDropped(receiver), log)
             }

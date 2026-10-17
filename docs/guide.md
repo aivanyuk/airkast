@@ -117,7 +117,7 @@ can, and if not, why:
 | `Supported` | Plays without a PIN or password. | yes |
 | `NeedsPin` | Asks for the PIN shown on its screen the first time. | yes |
 | `NeedsPassword` | Asks for the password set on it the first time. | yes |
-| `Unknown` | Typed in by hand, so there is nothing to read. Connecting is the only test. | no |
+| `Unknown` | Typed in by hand, so there is nothing to read until `Airkast.describe` asks it. | no |
 | `AccessRestricted` | Lets in only its owner's Apple devices, such as a Mac at its default, "Current User". | no |
 | `NoTransientPairing` | Does not offer the pairing airkast starts with. | no |
 | `VideoV1Only` | Accepts URLs only over AirPlay video v1, which airkast does not speak. | no |
@@ -134,13 +134,31 @@ branch. [compatibility.md](compatibility.md#how-receivercompatibility-decides) e
 case is decided.
 
 To connect to a receiver that discovery cannot see, such as from an emulator or a desktop JVM,
-build it from its address: `Receiver("TV", "192.168.1.20")`. Its compatibility is `Unknown`.
+build it from its address: `Receiver("TV", "192.168.1.20")`. Its compatibility is `Unknown`,
+since it has no TXT record. `Airkast.describe` asks the receiver what it is, with `GET /info`,
+which receivers answer before pairing, and returns it with the TXT record the receiver sends back,
+as discovery would have found it:
+
+```kotlin
+val receiver = airkast.describe(Receiver("Soundbar", "192.168.1.30", 36617))
+if (receiver.isAudioSupported && !receiver.isSupported) {
+    // A speaker: stream the app's audio with connectAudio.
+}
+```
+
+`describe` throws an `AirkastException` when the receiver does not answer. A receiver that answers
+without its TXT record gets its feature bits, status flags, model and device ID, but no access
+setting, so one that lets in only its owner's devices may read as `Supported` and still refuse the
+connect. `connect` and `connectAudio` describe a receiver typed in by hand themselves, so one
+that asks for a PIN or password gets the right prompt. If the receiver answers
+`GET /info` with an error, they go on with the receiver as it was given.
 
 ### Remember a receiver
 
 `Receiver.id` identifies a receiver: its `deviceid` from the network announcement, or
-`"host:port"` when it has none, as for a receiver typed in by hand. With a `deviceid`, the ID
-stays the same when the receiver is renamed or gets a new address. The built-in credential stores
+`"host:port"` when it has none, as for a receiver typed in by hand. `Airkast.describe` gives such
+a receiver its `deviceid`, so it has the ID discovery gives it. With a `deviceid`, the ID stays the
+same when the receiver is renamed or gets a new address. The built-in credential stores
 keep pairings under it. Use it to key a picker's rows, or to save the receiver the user last
 picked.
 
@@ -369,6 +387,10 @@ ends only when the user gives up, with `disconnect()`, or the connect fails for 
 - **Ends the cast on BACK.** By default, BACK on the TV's remote ends a cast the player opened, as
   `disconnect()` does. With `disconnectOnBack = false`, the app hears BACK as
   `ReceiverEvent.Back` on the session's events, and decides what to do.
+- **Follows the receiver's remote.** Play/pause, next and previous on a speaker's remote, such as
+  the Samsung HW-Q990B's, drive the player as a media button would: during a cast to a speaker
+  they reach the local player, so next and previous move through its playlist. With
+  `followsRemote = false`, the app hears them as `ReceiverEvent.RemoteCommand` and decides.
 - **Reconnects on `prepare()`.** After a failure, or a session that ended by itself, `prepare()`
   connects to the same receiver again. A notification's play button calls `prepare()`.
 - **Notices a receiver that went away.** A receiver silent past `requestTimeout` ends the session
@@ -441,6 +463,7 @@ val player = AirkastPlayer(context, airkast) {
 | `audioRoute` | none | Where the local player's audio goes for a cast to a speaker, such as `AirkastAudioSink` from `airkast-exoplayer`. Needs `localPlayer`. See [Play on a speaker](#play-on-a-speaker). |
 | `streamsAudio` | a speaker: `!it.isSupported && it.isAudioSupported` | Which receivers `connect` streams the local player's audio to, rather than handing them the item's URL. Applies only with an `audioRoute`. |
 | `disconnectOnBack` | `true` | Whether BACK on the TV's remote ends a cast the player opened. |
+| `followsRemote` | `true` | Whether play/pause, next and previous on the receiver's remote drive the player. |
 | `keepAwake` | `true` | Whether to hold the wake lock and Wi-Fi lock described above. |
 | `positionPollInterval` | 1 second | How often the player asks the receiver for its position. |
 | `looper` | the current thread's looper, or the main looper | The player's application looper. |
@@ -602,7 +625,8 @@ session.load(Media(url, format = MediaFormat.of(url, mimeType = "video/mp4")))
 ```
 
 `session.events` emits what the receiver reports: state changes, the end of an item, a new item,
-rate changes, time jumps, volume changes, and BACK on the TV's remote. The flow ends with
+rate changes, time jumps, volume changes, BACK on the TV's remote, and the playback buttons a
+receiver leaves to the sender (`ReceiverEvent.RemoteCommand`). The flow ends with
 `ReceiverEvent.Disconnected`, and then completes. `session.state` is a `StateFlow` with the latest
 playback state.
 
@@ -690,7 +714,12 @@ stream.close()
   full; `offer` takes what fits and returns at once, for a player whose output must not block.
 - **Control.** `play`, `pause` and `flush` return at once and tell the receiver in the background.
   `setVolume` and `volume` run from 0 to 1. `setNowPlaying` tells a receiver with a screen what
-  plays, and how far into the track it is.
+  plays, and how far into the track it is. It sends only what the receiver's feature bits say it
+  shows: the title, artist and album, the artwork, and the progress each have a bit of their own.
+- **The remote.** A speaker sends the play/pause, next and previous buttons of its remote to the
+  sender, as `ReceiverEvent.RemoteCommand` on `events`, and its volume keys as
+  `ReceiverEvent.VolumeChanged`. The speaker acts on none of them itself: the app plays, pauses
+  or skips, or `AirkastPlayer` does.
 - **The end.** `events` ends with `ReceiverEvent.Disconnected`, after which `write` and `offer`
   throw `AirkastException.Disconnected`, each with a `reason` as a session's has. `close()` ends playback and lets the receiver go back to
   its own input.
