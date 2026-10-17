@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AudioStream
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.NowPlaying
 import io.github.aivanyuk.airkast.PcmFormat
 import io.github.aivanyuk.airkast.Receiver
@@ -326,7 +327,8 @@ class AudioStreamTest {
                 val stream = stream(fake)
                 val ended = async { stream.events.first { it is ReceiverEvent.Disconnected } }
                 fake.dropConnections()
-                withTimeout(3_000) { ended.await() }
+                val event = withTimeout(3_000) { ended.await() } as ReceiverEvent.Disconnected
+                assertThat(event.reason).isEqualTo(DisconnectReason.ClosedByReceiver)
                 assertThrows(AirkastException.Disconnected::class.java) {
                     runBlocking { stream.write(ByteArray(4)) }
                 }
@@ -341,7 +343,9 @@ class AudioStreamTest {
                 val stream = stream(fake)
                 stream.close()
                 waitFor { fake.requests.contains("TEARDOWN") }
-                assertThrows(AirkastException.Disconnected::class.java) { stream.offer(ByteBuffer.allocate(4)) }
+                val error =
+                    assertThrows(AirkastException.Disconnected::class.java) { stream.offer(ByteBuffer.allocate(4)) }
+                assertThat(error.reason).isEqualTo(DisconnectReason.ClosedByApp)
             }
         }
 

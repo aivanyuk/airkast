@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
 import io.github.aivanyuk.airkast.ReceiverEvent
@@ -217,7 +218,7 @@ class AirkastPlayerTest {
     @Test
     fun aFailedConnectionIsAnError() {
         playing()
-        fake.emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
+        fake.emit(ReceiverEvent.Disconnected(IOException("Connection reset"), DisconnectReason.ConnectionFailed))
         idle()
         assertThat(player.playbackState).isEqualTo(Player.STATE_IDLE)
         assertThat(player.playerError?.errorCode).isEqualTo(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
@@ -279,7 +280,7 @@ class AirkastPlayerTest {
     fun aNewSessionPicksUpWhereTheLostOneLeftOff() {
         playing()
         fake.emit(ReceiverEvent.TimeJumped(300.seconds))
-        fake.emit(ReceiverEvent.Disconnected(IOException("Connection reset")))
+        fake.emit(ReceiverEvent.Disconnected(IOException("Connection reset"), DisconnectReason.ConnectionFailed))
         idle()
         val next = FakeSession()
         player.session = next

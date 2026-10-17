@@ -489,7 +489,7 @@ public class Airkast private constructor(
 
         /**
          * A session or an [AudioStream] ended, [lasted] after it opened. [failure] is null when the app closed it, and
-         * [AirkastException.Disconnected] when the receiver or the network ended it.
+         * [AirkastException.Disconnected] when the receiver or the network ended it, with its reason.
          */
         @Poko
         public class SessionEnded(

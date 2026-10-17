@@ -102,8 +102,8 @@ public interface AirkastPlayer : Player {
         /**
          * No session. [failure] says why the last cast to [receiver] ended, when it did not end
          * through [disconnect]: the connect failed, or the session ended with
-         * [AirkastException.Disconnected] (the network failed, the TV closed it, or another
-         * sender took it).
+         * [AirkastException.Disconnected], whose `reason` says whether the receiver closed it, as
+         * when another sender takes it, or the network failed.
          */
         public class Idle(
             public val receiver: Receiver?,

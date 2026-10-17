@@ -16,6 +16,7 @@ import io.github.aivanyuk.airkast.wire.Tlv8
 import java.math.BigInteger
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.Socket
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
@@ -131,6 +132,8 @@ internal class FakeReceiver(
 
     @Volatile
     private var eventLink: Link? = null
+    private var eventSocket: Socket? = null
+    private var controlSocket: Socket? = null
 
     @Volatile
     private var controlLink: Link? = null
@@ -149,7 +152,7 @@ internal class FakeReceiver(
     private fun serve() {
         // A pairing with a PIN takes one connection, and the session after it another.
         while (true) {
-            val link = Link(control.accept()).also { controlLink = it }
+            val link = Link(control.accept().also { controlSocket = it }).also { controlLink = it }
             runCatching { serve(link) }
             runCatching { link.close() }
         }
@@ -328,7 +331,7 @@ internal class FakeReceiver(
                         val key = sessionKey
                         thread(isDaemon = true) {
                             eventLink =
-                                Link(events.accept()).apply {
+                                Link(events.accept().also { eventSocket = it }).apply {
                                     encrypt(
                                         Hkdf.sha512(key, "Events-Salt", "Events-Write-Encryption-Key"),
                                         Hkdf.sha512(key, "Events-Salt", "Events-Read-Encryption-Key"),
@@ -559,6 +562,24 @@ internal class FakeReceiver(
     fun dropConnections() {
         runCatching { eventLink?.close() }
         runCatching { controlLink?.close() }
+    }
+
+    /**
+     * Hangs up the control connection's sending side only, as a receiver that closes between two
+     * requests. Closing the socket outright may send a reset rather than a clean end.
+     */
+    fun dropControl() {
+        runCatching { controlSocket?.shutdownOutput() }
+    }
+
+    /** Resets both connections, as a receiver whose network fails does, rather than closing them. */
+    fun resetConnections() {
+        listOfNotNull(eventSocket, controlSocket).forEach { socket ->
+            runCatching {
+                socket.setSoLinger(true, 0)
+                socket.close()
+            }
+        }
     }
 
     override fun close() {

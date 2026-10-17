@@ -367,7 +367,7 @@ with any `Player`.
 
 | State | Meaning |
 | --- | --- |
-| `Idle` | No session. `failure` says why the last cast ended, unless it ended through `disconnect()`. |
+| `Idle` | No session. `failure` says why the last cast ended, unless it ended through `disconnect()`. A session that ended by itself leaves `AirkastException.Disconnected`, whose `reason` says how (see [Using a session directly](#using-a-session-directly)). |
 | `Connecting` | Connecting to `receiver`. |
 | `AwaitingSecret` | `receiver` asks for a `secret`, the PIN on its screen or its password. Pass what the user typed to `enterSecret`, or call `disconnect()`. `rejected` counts the secrets the receiver refused since this connect began. |
 | `Connected` | Playing on `session`. |
@@ -393,6 +393,12 @@ ends only when the user gives up, with `disconnect()`, or the connect fails for 
   `followsRemote = false`, the app hears them as `ReceiverEvent.RemoteCommand` and decides.
 - **Reconnects on `prepare()`.** After a failure, or a session that ended by itself, `prepare()`
   connects to the same receiver again. A notification's play button calls `prepare()`.
+- **Notices a receiver that went away.** A receiver silent past `requestTimeout` ends the session
+  at the next request, with `ConnectionFailed`, and the player's position poll each second and
+  the session's keepalive every two seconds make that request come soon. An app needs no liveness
+  check of its own. A session that failed so sets the player error
+  `ERROR_CODE_IO_NETWORK_CONNECTION_FAILED`; a receiver that hung up, such as for another sender,
+  ends the cast with no player error, so a notification does not say playback failed.
 - **Keeps the phone awake.** The player holds a partial wake lock and a Wi-Fi lock while an item
   loads, plays or is paused on the receiver. Without them, the phone sleeps with its screen off,
   the session's keepalive stops, and the receiver may drop the sender. `airkast-media3` declares
@@ -624,6 +630,19 @@ receiver leaves to the sender (`ReceiverEvent.RemoteCommand`). The flow ends wit
 `ReceiverEvent.Disconnected`, and then completes. `session.state` is a `StateFlow` with the latest
 playback state.
 
+`Disconnected.reason` says how the session ended, and every call on an ended session throws
+`AirkastException.Disconnected` with the same `reason`:
+
+| `DisconnectReason` | What happened | What a UI shows |
+| --- | --- | --- |
+| `ClosedByReceiver` | The receiver closed the connection: another sender took it over, or it left its player and hung up. | The cast ended. |
+| `ConnectionFailed` | The connection was reset, or the receiver went silent past `requestTimeout`, as when it loses power or the Wi-Fi drops. | The connection was lost, with a retry. |
+| `ClosedByApp` | The app called `close()`. | Nothing. |
+| `Unknown` | It ended in a way none of the others describes. | The connection was lost. |
+
+`cause` holds what the connection failed with, for logs. New reasons may join in a minor release,
+so a `when` over them keeps an `else` branch.
+
 Pressing BACK on the TV's remote sends `ReceiverEvent.Back`. The TV stays in its player until the
 sender calls `stop()`.
 
@@ -702,7 +721,7 @@ stream.close()
   `ReceiverEvent.VolumeChanged`. The speaker acts on none of them itself: the app plays, pauses
   or skips, or `AirkastPlayer` does.
 - **The end.** `events` ends with `ReceiverEvent.Disconnected`, after which `write` and `offer`
-  throw `AirkastException.Disconnected`. `close()` ends playback and lets the receiver go back to
+  throw `AirkastException.Disconnected`, each with a `reason` as a session's has. `close()` ends playback and lets the receiver go back to
   its own input.
 
 The stream uses the receiver's UDP ports and its own, and the receiver must reach the sender over
@@ -778,7 +797,7 @@ the player's looper.
 | `SecretRejected` | The user typed a wrong PIN or password. |
 | `Rejected` | The receiver answered a request with an error status. |
 | `Timeout` | The receiver did not answer in time. The session stays open, and ends only if the receiver is still silent at the next request. |
-| `Disconnected` | The connection is gone: it closed, another sender took over the receiver, or the network failed. |
+| `Disconnected` | The connection is gone. `reason` says how: `ClosedByReceiver` when the receiver hung up, as for another sender, `ConnectionFailed` when the network failed or the receiver went silent, `ClosedByApp` after `close()`. |
 | `UnexpectedReply` | The receiver answered with something airkast cannot read. |
 | `MasterUnreadable` | `renditions()` could not read the HLS master: its server answered with another status than 200 (`status` holds it), did not send it within `requestTimeout`, sent more than 1 MB, or sent something that is not a playlist. |
 | `DiscoveryFailed` | Scanning for receivers could not start. `code` is the platform's error. |

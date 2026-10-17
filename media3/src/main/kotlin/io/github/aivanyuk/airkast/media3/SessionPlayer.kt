@@ -19,6 +19,7 @@ import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.AudioRoute
 import io.github.aivanyuk.airkast.AudioStream
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
@@ -410,7 +411,7 @@ internal class SessionPlayer(
                         .onEach { if (it is ReceiverEvent.RemoteCommand && streaming === stream) follow(it.command) }
                         .first { it is ReceiverEvent.Disconnected } as ReceiverEvent.Disconnected
                 if (streaming !== stream) return@launch
-                val failure = AirkastException.Disconnected(end.cause)
+                val failure = AirkastException.Disconnected(end.cause, end.reason)
                 stopStreaming(EndReason.Lost, failure)
                 mutableConnection.value = Connection.Idle(receiver, failure)
                 changed()
@@ -759,16 +760,23 @@ internal class SessionPlayer(
 
             is ReceiverEvent.Disconnected -> {
                 if (s === owned) owned = null
-                val failure = AirkastException.Disconnected(event.cause)
+                val failure = AirkastException.Disconnected(event.cause, event.reason)
                 ended(s, EndReason.Lost, failure)
                 detach()
+                // A receiver that hung up, for another sender say, ended the cast; nothing failed.
                 error =
-                    event.cause?.let {
-                        PlaybackException(
-                            "The connection to the receiver failed",
-                            it,
-                            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-                        )
+                    when (event.reason) {
+                        DisconnectReason.ClosedByReceiver, DisconnectReason.ClosedByApp -> {
+                            null
+                        }
+
+                        else -> {
+                            PlaybackException(
+                                "The connection to the receiver failed",
+                                event.cause,
+                                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                            )
+                        }
                     }
                 mutableConnection.value = Connection.Idle(s.receiver, failure)
                 handBack()

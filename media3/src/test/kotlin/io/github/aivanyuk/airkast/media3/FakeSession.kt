@@ -2,6 +2,7 @@ package io.github.aivanyuk.airkast.media3
 
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.PlaybackInfo
 import io.github.aivanyuk.airkast.PlaybackState
@@ -99,7 +100,7 @@ internal class FakeSession(
 
     override fun close() {
         closed = true
-        emit(ReceiverEvent.Disconnected(null))
+        emit(ReceiverEvent.Disconnected(null, DisconnectReason.ClosedByApp))
     }
 
     /** Gives the session [RENDITIONS], with English audio and captions selected, as the stream's defaults. */

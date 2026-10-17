@@ -62,6 +62,7 @@ Terms used on this page:
 | Samsung HW-Q990B (soundbar) | SAT-iMX8M22WWC-1010.0, 366.0 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `Airkast.describe` of the address typed in: `NoVideo`, audio `Supported`, from the TXT record it sent back in `txtAirPlay` (`acl=0`, flags `0x4`). `LiveAudioTest` passes through `connectAudio` to the address typed in, which describes it first. Its remote's play/pause, next and previous arrive on the event channel ([below](#samsung-hw-q990b-airplay-sdk-207-3660)); it made no DACP request |
 | MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | "Require password" on. `Airkast.describe` of the address typed in: `NeedsPassword`, from the TXT record it sent back (`acl=0`, flags `0x84`). Not connected |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `Airkast.describe` of the address typed in: `Supported` for video and audio, from the TXT record it sent back (`acl=0`, flags `0x244`). Not connected |
+| LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 03a4361 | Xiaomi 2201117TY, Android 13, the sample app; a desktop JVM 21 (WSL) as the second sender | How a session ends, through `AirkastPlayer`, each by hand. Another sender took the TV: the LG closed the first sender's event channel cleanly at once, `ClosedByReceiver`. Turned off with the remote: closed cleanly at once, `ClosedByReceiver`. Power plug pulled: no close; the next `/command` had no answer in 5 s and the request after it found the LG still silent, so the session ended about 12 s after the last event, `ConnectionFailed` (`Still no answer to an earlier request`, a read timeout). BACK on the remote: the player stopped and closed the session, `ClosedByApp`. The sample showed "The TV ended the cast, or another sender took it over" after the takeover |
 
 ### How `Receiver.compatibility` decides
 
@@ -219,6 +220,9 @@ What the LG CX does, as seen on the wire.
 - Set to ask for a PIN in its AirPlay settings, it reads as `NeedsPin` (status flag `0x8`), shows
   a PIN for `/pair-pin-start`, pairs with it, and lets the sender in with pair-verify after.
 - Without RECORD after the event channel opens, it plays but sends no events.
+- Another sender taking it over, or the remote turning it off, closes the first sender's
+  connections cleanly at once. A power cut closes nothing: the sender hears silence, and the
+  session ends at the next request after one goes unanswered (`ConnectionFailed`).
 - It plays with or without NTP timing. With `timingProtocol: NTP` its SETUP answer adds a
   `timingPort`. No timing request was seen, but the one run with NTP (2026-10-10, the live test)
   was from WSL, where Windows' firewall would have dropped them.

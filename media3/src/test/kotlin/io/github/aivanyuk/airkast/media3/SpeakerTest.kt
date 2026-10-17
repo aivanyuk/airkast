@@ -9,6 +9,7 @@ import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AudioStream
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.RemoteCommand
@@ -143,7 +144,7 @@ class SpeakerTest {
         player.connect(soundbar)
         idle()
         val stream = streams.single()
-        stream.emit(ReceiverEvent.Disconnected(IOException("gone")))
+        stream.emit(ReceiverEvent.Disconnected(IOException("gone"), DisconnectReason.ConnectionFailed))
         idle()
         assertThat(routed.last()).isNull()
         val idle = player.connection.value as Connection.Idle

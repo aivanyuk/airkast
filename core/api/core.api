@@ -168,7 +168,8 @@ public abstract class io/github/aivanyuk/airkast/AirkastException : java/lang/Ex
 }
 
 public final class io/github/aivanyuk/airkast/AirkastException$Disconnected : io/github/aivanyuk/airkast/AirkastException {
-	public fun <init> (Ljava/lang/Throwable;)V
+	public fun <init> (Ljava/lang/Throwable;Lio/github/aivanyuk/airkast/DisconnectReason;)V
+	public final fun getReason ()Lio/github/aivanyuk/airkast/DisconnectReason;
 }
 
 public final class io/github/aivanyuk/airkast/AirkastException$DiscoveryFailed : io/github/aivanyuk/airkast/AirkastException {
@@ -310,6 +311,16 @@ public final class io/github/aivanyuk/airkast/Credentials {
 
 public final class io/github/aivanyuk/airkast/Credentials$Companion {
 	public final fun decode (Ljava/lang/String;)Lio/github/aivanyuk/airkast/Credentials;
+}
+
+public final class io/github/aivanyuk/airkast/DisconnectReason : java/lang/Enum {
+	public static final field ClosedByApp Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static final field ClosedByReceiver Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static final field ConnectionFailed Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static final field Unknown Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/aivanyuk/airkast/DisconnectReason;
+	public static fun values ()[Lio/github/aivanyuk/airkast/DisconnectReason;
 }
 
 public final class io/github/aivanyuk/airkast/HlsMaster {
@@ -456,9 +467,10 @@ public final class io/github/aivanyuk/airkast/ReceiverEvent$Back : io/github/aiv
 }
 
 public final class io/github/aivanyuk/airkast/ReceiverEvent$Disconnected : io/github/aivanyuk/airkast/ReceiverEvent {
-	public fun <init> (Ljava/lang/Throwable;)V
+	public fun <init> (Ljava/lang/Throwable;Lio/github/aivanyuk/airkast/DisconnectReason;)V
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getCause ()Ljava/lang/Throwable;
+	public final fun getReason ()Lio/github/aivanyuk/airkast/DisconnectReason;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

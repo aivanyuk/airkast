@@ -5,6 +5,7 @@ import io.github.aivanyuk.airkast.Airkast.Logger.Level
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AirkastSession
 import io.github.aivanyuk.airkast.Credentials
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.HlsMaster
 import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.MediaFormat
@@ -49,6 +50,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -89,6 +91,9 @@ internal class DefaultVideoSession private constructor(
     private val pending = ConcurrentHashMap<Long, CompletableDeferred<Map<String, Any?>>>()
     private val nextMessageId = AtomicLong(1)
     private val closed = AtomicBoolean(false)
+
+    /** Why the session ended, set once and before [closed], so a call that finds it closed reads it. */
+    private val endReason = AtomicReference<DisconnectReason?>(null)
     private var eventChannel: EventChannel? = null
     private var streamId = 0L
     private val rtspUri = "rtsp://${control.localAddress.hostAddress}/${SecureRandom().nextInt() and Int.MAX_VALUE}"
@@ -316,7 +321,7 @@ internal class DefaultVideoSession private constructor(
 
     override suspend fun volume(): Double? =
         io {
-            if (closed.get()) throw AirkastException.Disconnected(null)
+            if (closed.get()) throw ended(null)
             val reply =
                 try {
                     control.exchange(
@@ -328,8 +333,7 @@ internal class DefaultVideoSession private constructor(
                 } catch (e: LateReply) {
                     throw AirkastException.Timeout(e.message.orEmpty())
                 } catch (e: IOException) {
-                    end(e)
-                    throw AirkastException.Disconnected(e)
+                    throw end(e)
                 }
             if (reply.status !in 200..299) return@io null
             // The receiver answers in decibels, from -30 to 0, and -144 for muted.
@@ -342,7 +346,9 @@ internal class DefaultVideoSession private constructor(
         io { command(mapOf("type" to "stop")) }
     }
 
-    override fun close() = end(null, byApp = true)
+    override fun close() {
+        end(null, byApp = true)
+    }
 
     private suspend fun request(payload: Map<String, Any?>): Map<String, Any?> {
         val id = nextMessageId.getAndIncrement()
@@ -358,7 +364,7 @@ internal class DefaultVideoSession private constructor(
     }
 
     private fun command(payload: Map<String, Any?>) {
-        if (closed.get()) throw AirkastException.Disconnected(null)
+        if (closed.get()) throw ended(null)
         val response =
             try {
                 control.exchange(
@@ -378,8 +384,7 @@ internal class DefaultVideoSession private constructor(
             } catch (e: LateReply) {
                 throw AirkastException.Timeout("No answer to ${payload["type"]}")
             } catch (e: Exception) {
-                end(e)
-                throw AirkastException.Disconnected(e)
+                throw end(e)
             }
         val level =
             when {
@@ -468,34 +473,57 @@ internal class DefaultVideoSession private constructor(
     private fun shown(state: PlaybackState): PlaybackState =
         if (state == PlaybackState.Loading && paused) PlaybackState.Paused else state
 
-    private fun onEventChannelClosed(cause: Throwable?) = end(cause)
+    private fun onEventChannelClosed(cause: Throwable?) {
+        end(cause)
+    }
 
-    /** Ends the session, once: by [close] when [byApp], or by a failure or the receiver hanging up. */
+    /**
+     * Ends the session, once: by [close] when [byApp], or by a failure or the receiver hanging up.
+     * Returns what a call that found it ended throws.
+     */
     private fun end(
         cause: Throwable?,
         byApp: Boolean = false,
-    ) {
-        if (!closed.compareAndSet(false, true)) return
-        val error = AirkastException.Disconnected(cause)
+    ): AirkastException.Disconnected {
+        val reason = if (byApp) DisconnectReason.ClosedByApp else Opening.disconnectReason(cause)
+        if (!endReason.compareAndSet(null, reason)) return ended(cause)
+        closed.set(true)
+        val error = AirkastException.Disconnected(cause, reason)
         pending.values.forEach { it.completeExceptionally(error) }
         itemTaken?.completeExceptionally(error)
         mutableState.value = PlaybackState.Stopped
-        val event = ReceiverEvent.Disconnected(cause)
+        val event = ReceiverEvent.Disconnected(cause, reason)
         disconnected = event
         mutableEvents.tryEmit(event)
         runCatching { eventChannel?.close() }
         runCatching { control.close() }
         runCatching { timing?.close() }
         scope.cancel()
-        val lasted = opened?.elapsedNow() ?: return
+        val lasted = opened?.elapsedNow() ?: return error
         val failure = if (byApp) null else error
-        if (failure == null) {
-            log.info { "closed after ${lasted.inWholeMilliseconds} ms" }
-        } else {
-            log.error(cause) { "ended after ${lasted.inWholeMilliseconds} ms" }
+        when {
+            failure == null -> {
+                log.info { "closed after ${lasted.inWholeMilliseconds} ms" }
+            }
+
+            // Another sender took it, or it was turned off: nothing failed.
+            reason == DisconnectReason.ClosedByReceiver -> {
+                log.info {
+                    "the receiver closed it after ${lasted.inWholeMilliseconds} ms"
+                }
+            }
+
+            else -> {
+                log.error(cause) { "ended after ${lasted.inWholeMilliseconds} ms: $reason" }
+            }
         }
         options.eventListener.report(Airkast.Event.SessionEnded(receiver, lasted, failure), log)
+        return error
     }
+
+    /** What a call on the ended session throws, [cause] and all, with the reason it ended for. */
+    private fun ended(cause: Throwable?) =
+        AirkastException.Disconnected(cause, endReason.get() ?: DisconnectReason.Unknown)
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
