@@ -8,6 +8,10 @@ caller sees adds its line under "Unreleased".
 
 ### Added
 
+- `LocalNetworkPermission` in `airkast-android`: Android 17's local network permission as a
+  `StateFlow` for a cast button, `NotNeeded`, `Granted` or `Denied`, with the `permission` to
+  request and `refresh()` to read the grant again when the screen starts and after the request's
+  result. The app asks, and decides how often.
 - `Receiver.id`, the key the built-in credential stores keep a receiver under: its `deviceid`, or
   `host:port` without one. `ReceiverDiscovery.known` keeps every receiver an instance has found,
   by `id`, after the scan stops, and `ReceiverDiscovery.find(id)` returns one of them, so an app

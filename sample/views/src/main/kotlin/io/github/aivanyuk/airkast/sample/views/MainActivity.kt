@@ -27,7 +27,7 @@ import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.Track
 import io.github.aivanyuk.airkast.TrackKind
-import io.github.aivanyuk.airkast.android.LocalNetwork
+import io.github.aivanyuk.airkast.android.LocalNetworkPermission
 import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.CastService
 import io.github.aivanyuk.airkast.sample.SampleMedia
@@ -36,7 +36,7 @@ import io.github.aivanyuk.airkast.sample.views.databinding.ActivityMainBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.DialogSecretBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.DialogTracksBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.ItemReceiverBinding
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -47,11 +47,14 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var connecting: ListenableFuture<MediaController>? = null
-    private var scanning: Job? = null
     private var secretDialog: AlertDialog? = null
 
     /** Android 17's local network permission, which the app declares and asks for itself. */
-    private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { scan() }
+    private val localNetwork by lazy { LocalNetworkPermission(this) }
+    private val permission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            lifecycleScope.launch { localNetwork.refresh() }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,7 +75,7 @@ class MainActivity : AppCompatActivity() {
         binding.sampleAudio.setOnClickListener { pick(SampleMedia.Audio) }
         binding.sampleMusic.setOnClickListener { pick(SampleMedia.Music) }
 
-        binding.grant.setOnClickListener { permission.launch(LocalNetwork.PERMISSION) }
+        binding.grant.setOnClickListener { permission.launch(localNetwork.permission) }
         binding.host.doAfterTextChanged { binding.connect.isEnabled = !it.isNullOrBlank() }
         // A receiver typed in by hand has no TXT record, so its compatibility is Unknown.
         binding.connect.setOnClickListener {
@@ -99,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { cast.player.connection.collect(::showState) }
+                launch { localNetwork.state.collectLatest(::scan) }
                 launch { cast.log.collect { binding.log.text = it.joinToString("\n") } }
             }
         }
@@ -106,7 +110,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        scan()
+        // The user may change it in Settings and come back.
+        lifecycleScope.launch { localNetwork.refresh() }
         // Connecting a controller starts CastService, whose MediaSession puts up the notification.
         val token = SessionToken(this, ComponentName(this, CastService::class.java))
         val future = MediaController.Builder(this, token).buildAsync()
@@ -125,7 +130,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
-        scanning?.cancel()
         binding.playerView.player = null
         connecting?.let(MediaController::releaseFuture)
         connecting = null
@@ -155,25 +159,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Scans while started and permitted: the flow scans while it is collected. Runs again when
-     * the permission is granted, and on every start, since the user may change it in Settings.
+     * Scans while started and permitted: the flow scans while it is collected, until the stop or
+     * the next [state].
      */
-    private fun scan() {
-        scanning?.cancel()
-        val accessible = LocalNetwork.isAccessible(this)
+    private suspend fun scan(state: LocalNetworkPermission.State) {
+        val accessible = state != LocalNetworkPermission.State.Denied
         binding.permissionCard.isVisible = !accessible
         binding.receivers.removeAllViews()
         binding.discovery.isVisible = accessible
         binding.discovery.setText(R.string.searching)
         if (!accessible) return
-        scanning =
-            lifecycleScope.launch {
-                try {
-                    cast.discovery.receivers.collect(::showReceivers)
-                } catch (e: AirkastException) {
-                    binding.discovery.text = describe(e)
-                }
-            }
+        try {
+            cast.discovery.receivers.collect(::showReceivers)
+        } catch (e: AirkastException) {
+            binding.discovery.text = describe(e)
+        }
     }
 
     private fun showReceivers(receivers: List<Receiver>) {
