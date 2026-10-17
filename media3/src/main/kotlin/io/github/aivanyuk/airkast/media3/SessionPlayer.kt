@@ -84,6 +84,9 @@ internal class SessionPlayer(
     private var lastReceiver: Receiver? = null
     private var connecting: Job? = null
     private var typed: CompletableDeferred<String>? = null
+
+    /** Secrets the receiver refused since the last [open] began. */
+    private var rejected = 0
     private var sessionJob: Job? = null
     private var loadJob: Job? = null
 
@@ -339,6 +342,7 @@ internal class SessionPlayer(
         letGo(stop = true, EndReason.Replaced)
         error = null
         lastReceiver = receiver
+        rejected = 0
         log.debug { if (pairWith != null) "connecting, pairing with a ${pairWith.name.lowercase()}" else "connecting" }
         mutableConnection.value = Connection.Connecting(receiver)
         val route = audioRoute
@@ -351,9 +355,10 @@ internal class SessionPlayer(
             scope.launch {
                 val s =
                     try {
-                        connector.connect(receiver, pairWith) { secret -> ask(receiver, secret) }
+                        untilTaken(receiver) { ask -> connector.connect(receiver, pairWith, ask) }
                     } catch (e: AirkastException) {
                         connecting = null
+                        typed = null
                         error = playbackException(e)
                         log.debug { "the connect failed: $e" }
                         report(Event.CastFailed(receiver, e))
@@ -381,9 +386,10 @@ internal class SessionPlayer(
     ) {
         val stream =
             try {
-                streams.connect(receiver, pairWith) { secret -> ask(receiver, secret) }
+                untilTaken(receiver) { ask -> streams.connect(receiver, pairWith, ask) }
             } catch (e: AirkastException) {
                 connecting = null
+                typed = null
                 log.debug { "the connect failed: $e" }
                 report(Event.CastFailed(receiver, e))
                 mutableConnection.value = Connection.Idle(receiver, e)
@@ -428,13 +434,37 @@ internal class SessionPlayer(
         stream.close()
     }
 
+    /**
+     * Runs [connect] until the receiver takes the secret it asks for: a refused one connects again
+     * at once, with the prompt left up, and a receiver that pairs with a PIN shows a new one.
+     */
+    private suspend fun <T> untilTaken(
+        receiver: Receiver,
+        connect: suspend (ask: suspend (Secret) -> String) -> T,
+    ): T {
+        while (true) {
+            var asked = false
+            try {
+                return connect { secret -> ask(receiver, secret).also { asked = true } }
+            } catch (e: AirkastException.SecretRejected) {
+                // Only a secret the user typed is theirs to type again.
+                if (!asked) throw e
+                rejected++
+                log.debug { "the receiver refused the ${e.secret.name.lowercase()}, asking again" }
+                // What the user types before the receiver asks again goes to the next ask.
+                typed = CompletableDeferred()
+                mutableConnection.value = Connection.AwaitingSecret(receiver, e.secret, rejected)
+            }
+        }
+    }
+
     private suspend fun ask(
         receiver: Receiver,
         secret: Secret,
     ): String {
-        val code = CompletableDeferred<String>().also { typed = it }
+        val code = typed ?: CompletableDeferred<String>().also { typed = it }
         log.debug { "waiting for the ${secret.name.lowercase()}" }
-        mutableConnection.value = Connection.AwaitingSecret(receiver, secret)
+        mutableConnection.value = Connection.AwaitingSecret(receiver, secret, rejected)
         return code.await().also {
             typed = null
             mutableConnection.value = Connection.Connecting(receiver)
@@ -467,7 +497,7 @@ internal class SessionPlayer(
         log.debug {
             if (atSecret != null) "the ${atSecret.name.lowercase()} prompt was given up" else "the connect was given up"
         }
-        report(Event.CastAbandoned(receiver, atSecret))
+        report(Event.CastAbandoned(receiver, atSecret, rejected))
     }
 
     private fun started(s: AirkastSession) {

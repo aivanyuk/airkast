@@ -19,6 +19,15 @@ caller sees adds its line under "Unreleased".
   move to the receiver and back with the item. A media3 track dialog, or an app's own one written
   against `Player`, switches the TV's tracks.
 
+### Changed
+
+- `AirkastPlayer.connect` asks again for a PIN or password the receiver refused, where it ended
+  the cast with `SecretRejected`. The state stays `Connection.AwaitingSecret`, whose new
+  `rejected` counts the refusals since the connect began, until the receiver takes one or the app
+  calls `disconnect()`. `Event.CastAbandoned` carries `rejected` too.
+- A PIN or password the receiver refuses is logged at `Debug`, without a stack trace, where it was
+  an `Error` from both `Airkast.pair` and `Airkast.connect`.
+
 ## 0.5.0 - 2026-10-14
 
 ### Added

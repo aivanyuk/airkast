@@ -21,6 +21,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /** The session reads the loaded master from a server on loopback, as it would from a CDN. */
 class RenditionsTest {
@@ -46,6 +47,19 @@ class RenditionsTest {
                         else -> null
                     }
                 if (path == "/slow.m3u8") Thread.sleep(2_000)
+                if (path == "/trickle.m3u8") {
+                    exchange.sendResponseHeaders(200, 0)
+                    runCatching {
+                        exchange.responseBody.write("#EXTM3U\n".toByteArray())
+                        repeat(30) {
+                            Thread.sleep(100)
+                            exchange.responseBody.write("#\n".toByteArray())
+                            exchange.responseBody.flush()
+                        }
+                    }
+                    exchange.close()
+                    return@createContext
+                }
                 if (body == null) {
                     exchange.sendResponseHeaders(404, -1)
                 } else {
@@ -134,6 +148,17 @@ class RenditionsTest {
             val error =
                 assertThrows(AirkastException.MasterUnreadable::class.java) { runBlocking { session.renditions() } }
             assertThat(error).hasCauseThat().isInstanceOf(SocketTimeoutException::class.java)
+        }
+
+    @Test
+    fun aServerThatSendsAByteNowAndThenIsUnreadableAfterTheRequestTimeout() =
+        withSession(airkast.copy { requestTimeout = 500.milliseconds }) { session ->
+            session.load(Media(url("trickle.m3u8")))
+            val start = TimeSource.Monotonic.markNow()
+            val error =
+                assertThrows(AirkastException.MasterUnreadable::class.java) { runBlocking { session.renditions() } }
+            assertThat(error).hasMessageThat().contains("longer than")
+            assertThat(start.elapsedNow()).isLessThan(2.seconds)
         }
 
     @Test
