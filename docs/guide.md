@@ -136,8 +136,8 @@ case is decided.
 To connect to a receiver that discovery cannot see, such as from an emulator or a desktop JVM,
 build it from its address: `Receiver("TV", "192.168.1.20")`. Its compatibility is `Unknown`,
 since it has no TXT record. `Airkast.describe` asks the receiver what it is, with `GET /info`,
-which receivers answer before pairing, and returns it with its feature bits, status flags, model
-and device ID filled in:
+which receivers answer before pairing, and returns it with the TXT record the receiver sends back,
+as discovery would have found it:
 
 ```kotlin
 val receiver = airkast.describe(Receiver("Soundbar", "192.168.1.30", 36617))
@@ -146,9 +146,10 @@ if (receiver.isAudioSupported && !receiver.isSupported) {
 }
 ```
 
-`describe` throws an `AirkastException` when the receiver does not answer. The answer from the
-receivers checked holds no access setting, so a Mac set to "Current User" may read as `Supported`
-and still refuse the connect. `connect` and `connectAudio` describe a receiver typed in by hand
+`describe` throws an `AirkastException` when the receiver does not answer. A receiver that answers
+without its TXT record gets its feature bits, status flags, model and device ID, but no access
+setting, so one that lets in only its owner's devices may read as `Supported` and still refuse the
+connect. `connect` and `connectAudio` describe a receiver typed in by hand
 themselves, so one that asks for a PIN or password gets the right prompt. If the receiver answers
 `GET /info` with an error, they go on with the receiver as it was given.
 

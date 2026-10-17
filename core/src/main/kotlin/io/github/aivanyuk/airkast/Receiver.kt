@@ -164,10 +164,9 @@ public class Receiver(
 
         /**
          * The TXT record properties a `GET /info` answer holds: the record itself where the
-         * receiver includes it (`txtAirPlay`, as the spec's Apple TV 4K sample does), and otherwise
-         * its keys under their TXT names. The LG CX, the Samsung HW-Q990B and a Mac send no
-         * `txtAirPlay`, so nothing tells their `pw` or `act`; their status flags still say whether
-         * they ask for a PIN or password.
+         * receiver includes it (`txtAirPlay`), as the LG CX, the Samsung HW-Q990B and a Mac do
+         * when asked for it, and otherwise its keys under their TXT names, which leave out `pw`
+         * and `act`.
          */
         internal fun propertiesFromInfo(info: Map<*, *>): Map<String, String> {
             (info["txtAirPlay"] as? ByteArray)?.let(::parseTxt)?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -191,7 +190,7 @@ public class Receiver(
                 val entry = String(record, i + 1, length, Charsets.UTF_8)
                 i += 1 + length
                 val key = entry.substringBefore('=')
-                if (key.isNotEmpty()) properties[key.lowercase()] = entry.substringAfter('=', "")
+                if (key.isNotEmpty()) properties[key] = entry.substringAfter('=', "")
             }
             return properties
         }

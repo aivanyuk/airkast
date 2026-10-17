@@ -59,8 +59,9 @@ Terms used on this page:
 | LG OLED CX (webOS), Samsung HW-Q990B, MacBook Pro (MacBookPro18,1) | as above, not read again | 2026-10-17, at 4cfedec | Xiaomi 2201117TY, Android 13, the sample app | One `ReceiverDiscovery` shared by the app: each receiver listed once, and again once when the picker was opened a second time. Cast to the LG and played. The `deviceid` was not checked across an address change |
 | LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 66014b8 | Xiaomi 2201117TY, Android 13, the sample app | Paired with a PIN by the build before, which kept the pairing in the clear. Installed over it, `CredentialStore.encrypted` sealed it on the first connect under a new Android Keystore key (the file then held hex only), and the LG verified the pairing without asking: connected in 783 ms, against 474 ms before, the key made once. After the app was stopped and started again, the sealed pairing opened and verified, connected in 712 ms. Not checked: Android 6 (API 23), a factory reset, a backup restored to another phone |
 | LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 0908cc6 with the sample's subtitle button | Xiaomi 2201117TY, Android 13, the sample app | `Supported`. By hand, through `AirkastPlayer` and its media3 `Tracks`, on Shaka's Angel One master (six audio renditions in one group, four subtitle ones): the sample's track dialog and `PlayerView`'s audio menu and subtitle button listed them, and picking German and French audio, two subtitle languages and subtitles off switched the TV. The LG reported each selection on the first `tracks()` read after it, about 0.1 s later; audio rebuffered for a second or two. Ids followed the master: audio 0 to 5, subtitles 6 to 9 |
-| Samsung HW-Q990B (soundbar) | SAT-iMX8M22WWC-1010.0, 366.0 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `Airkast.describe` of the address typed in: `NoVideo`, audio `Supported`, with the features, status flags and device ID its TXT record has. `LiveAudioTest` passes through `connectAudio` to the address typed in, which describes it first. Its remote's play/pause, next and previous arrive on the event channel ([below](#samsung-hw-q990b-airplay-sdk-207-3660)); it made no DACP request |
-| MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | "Require password" on. `Airkast.describe` of the address typed in: `NeedsPassword`, from status flags `0x84`, with the features its TXT record has. Not connected |
+| Samsung HW-Q990B (soundbar) | SAT-iMX8M22WWC-1010.0, 366.0 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `Airkast.describe` of the address typed in: `NoVideo`, audio `Supported`, from the TXT record it sent back in `txtAirPlay` (`acl=0`, flags `0x4`). `LiveAudioTest` passes through `connectAudio` to the address typed in, which describes it first. Its remote's play/pause, next and previous arrive on the event channel ([below](#samsung-hw-q990b-airplay-sdk-207-3660)); it made no DACP request |
+| MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | "Require password" on. `Airkast.describe` of the address typed in: `NeedsPassword`, from the TXT record it sent back (`acl=0`, flags `0x84`). Not connected |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `Airkast.describe` of the address typed in: `Supported` for video and audio, from the TXT record it sent back (`acl=0`, flags `0x244`). Not connected |
 
 ### How `Receiver.compatibility` decides
 
@@ -92,19 +93,21 @@ authentication, as `NoTransientPairing`. The Samsung HW-Q990B (`0x445F8A00,0x1C3
 is `NoVideo` and, for audio, `Supported`; the LG CX is `Supported` for both.
 
 A receiver typed in by hand has no TXT record until `Airkast.describe` asks it `GET /info`,
-which the LG CX, the Samsung HW-Q990B and a Mac answer before pairing. `describe` keeps the
-record the answer carries in `txtAirPlay`, as the openairplay spec's Apple TV 4K sample does.
-None of the three checked sends one, so their properties come from the answer's keys:
-`features` (a 64-bit integer, written as `0xLOW,0xHIGH`), `statusFlags` as `flags`, `deviceID`
-as `deviceid`, `model`, `sourceVersion` as `srcvers`, and `manufacturer`. The answer holds no
-`pw` or `act`: a password still shows in the status flags (`0x80`), but an access restriction
-does not. The Samsung's and the Mac's `deviceID` is the `deviceid` of their TXT record, so a
-pairing kept for one is found for the other.
+which the LG CX, the Samsung HW-Q990B and a Mac answer before pairing. The request's body is
+`{qualifier: [txtAirPlay]}`, as Apple's senders send it by Emanuele Cozzi's notes, and with it
+all three answer with their TXT record in `txtAirPlay`, `acl` included: the record discovery
+reads. Without that body, none of them sends `txtAirPlay`. A receiver that leaves it out gets its
+properties from the answer's keys: `features` (a 64-bit integer, written as `0xLOW,0xHIGH`),
+`statusFlags` as `flags`, `deviceID` as `deviceid`, `model`, `sourceVersion` as `srcvers`, and
+`manufacturer`, with no `pw` or `act`: a password still shows in the status flags (`0x80`), but
+an access restriction does not. The Samsung's and the Mac's `deviceID` is the `deviceid` of their
+TXT record, so a pairing kept for one is found for the other.
 
 The openairplay spec names some feature bits differently from pyatv: bit 48 is
 `SupportsTransientPairing` there and CoreUtils pairing in pyatv, and bit 38 is CoreUtils pairing
 there and `SupportsUnifiedMediaControl` in pyatv. `NoTransientPairing` checks bit 43 or 48, which
-reads the same under either name for every receiver on this page.
+reads the same under either name for every receiver on this page. Emanuele Cozzi's notes side
+with pyatv, and read transient pairing as bit 48 or 43, which is airkast's check.
 
 The Mac's TXT record, with "Require password" on, has `acl=0` and no `act` key. pyatv reads
 `acl=1` as pairing disabled, such as for a receiver that lets in only its Home. airkast does not
@@ -168,14 +171,15 @@ What the soundbar does, as seen on the wire.
 - It sets its volume from `SET_PARAMETER` and reads it back, to about 0.3 dB of what was set.
 - It plays 44.1 and 48 kHz ALAC.
 - It answers `GET /info` before pairing, with its features, status flags `4`, the device ID of
-  its TXT record, `model` and `sdk`, and no `txtAirPlay`.
+  its TXT record, `model` and `sdk`. Asked for `txtAirPlay`, it adds its TXT record.
 - Its remote's play/pause, next and previous arrive on the event channel as `POST /command`
   with `type: sendMediaRemoteCommand` and `value` `plps`, `nitm` or `pitm`, which airkast reports
   as `ReceiverEvent.Other`. Its volume keys arrive as `ReceiverEvent.VolumeChanged`. Checked
   on 2026-10-17 with a silent stream: it never looked up a `_dacp._tcp` service or sent a DACP
   request, though airkast sends `DACP-ID` and `Active-Remote` and one was advertised.
 - The openairplay spec's sample `GET /info` from a Denon AVR-X3500H has the same features
-  (`0x1C340445F8A00`) and `srcvers` (366.0). That receiver is not checked.
+  (`0x1C340445F8A00`) and `srcvers` (366.0), and Emanuele Cozzi's notes give a Sonos One the same
+  features, with flags `0x404`. Neither receiver is checked.
 
 ### Pairing
 
@@ -233,7 +237,7 @@ What the LG CX does, as seen on the wire.
   answers `volumeControlType: 1`, where a Mac answers 4; whether that value says the volume is
   fixed is not known.
 - Its `GET /info` (2026-10-17) holds its features, status flags 580 (`0x244`), `model`
-  (`OLED65CX6LA`) and `sourceVersion`, and no `txtAirPlay`.
+  (`OLED65CX6LA`) and `sourceVersion`. Asked for `txtAirPlay`, it adds its TXT record.
 - BACK on its remote arrives as `pbpr` then `pbal`, and it leaves the player only once the
   sender stops. Its volume keys arrive as `dvlc`, with a volume from 0 to 1.
 - Its player is Apple's web receiver on hls.js, so streams need CORS headers. A `file` item

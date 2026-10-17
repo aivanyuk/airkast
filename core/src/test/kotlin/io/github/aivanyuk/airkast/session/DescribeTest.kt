@@ -6,6 +6,7 @@ import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
+import io.github.aivanyuk.airkast.wire.BinaryPlist
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -32,11 +33,26 @@ class DescribeTest {
                 assertThat(described.model).isEqualTo("OLED65CX6LA")
                 assertThat(described.deviceId).isEqualTo("02:00:00:00:00:01")
                 assertThat(described.sourceVersion).isEqualTo("377.25.06")
+                // The TXT record itself, which it sends when asked.
+                assertThat(described.properties).containsEntry("acl", "0")
+                val asked = BinaryPlist.decode(fake.messages.single().body) as Map<*, *>
+                assertThat(asked["qualifier"]).isEqualTo(listOf("txtAirPlay"))
                 assertThat(listOf(described.name, described.host, described.port))
                     .containsExactly("tv", "127.0.0.1", fake.port)
                     .inOrder()
                 // Before pairing, on a connection of its own.
                 assertThat(fake.requests).containsExactly("GET /info")
+            }
+        }
+
+    @Test
+    fun aReceiverThatSendsNoTxtRecordIsDescribedByItsKeys(): Unit =
+        runBlocking {
+            FakeReceiver(sendsTxt = false).use { fake ->
+                val described = airkast.describe(Receiver("tv", "127.0.0.1", fake.port))
+                assertThat(described.compatibility).isEqualTo(Compatibility.Supported)
+                assertThat(described.properties).containsEntry("flags", "0x244")
+                assertThat(described.properties).doesNotContainKey("acl")
             }
         }
 
