@@ -54,7 +54,8 @@ public interface AirkastPlayer : Player {
      * through the [Builder.audioRoute], and the local player plays on. A receiver that asks for a PIN
      * ([Compatibility.NeedsPin]) or a password ([Compatibility.NeedsPassword]), or any receiver
      * when [pairWith] is set, pairs first unless it paired before: [connection] turns
-     * [Connection.AwaitingSecret] until [enterSecret].
+     * [Connection.AwaitingSecret] until [enterSecret], and stays there while the receiver refuses
+     * what the user typed.
      *
      * The player owns the session it opens: it closes it on [disconnect], on the next connect, and
      * on [release]. After a failure, or a session that ended by itself, [prepare] (the play button
@@ -111,12 +112,19 @@ public interface AirkastPlayer : Player {
         /**
          * [receiver] asks for a [secret]: the PIN on its screen, or the password set on it. Pass
          * what the user types to [enterSecret], or [disconnect].
+         *
+         * A secret the receiver refuses leaves the prompt up: the player connects again at once,
+         * and a receiver that pairs with a PIN shows a new one. [rejected] counts the secrets it
+         * refused since this [connect] began, 0 on the first ask, so a prompt can say the last one
+         * was wrong. There is no limit on tries; [disconnect] gives up.
          */
         public class AwaitingSecret(
             public val receiver: Receiver,
             public val secret: Secret,
+            public val rejected: Int,
         ) : Connection {
-            override fun toString(): String = "AwaitingSecret(receiver=${receiver.name}, secret=$secret)"
+            override fun toString(): String =
+                "AwaitingSecret(receiver=${receiver.name}, secret=$secret, rejected=$rejected)"
         }
 
         public class Connected(
@@ -173,12 +181,16 @@ public interface AirkastPlayer : Player {
          * A [connect] to [receiver] was given up before it finished: by [disconnect], another
          * connect, a session set by hand, or `release()`. [atSecret] is the PIN or password the
          * receiver was asking for, never entered, or null if it was given up while connecting.
+         * [rejected] is how many secrets the receiver refused before, as in
+         * [Connection.AwaitingSecret.rejected].
          */
         public class CastAbandoned(
             override val receiver: Receiver,
             public val atSecret: Secret?,
+            public val rejected: Int,
         ) : Event {
-            override fun toString(): String = "CastAbandoned(receiver=${receiver.name}, atSecret=$atSecret)"
+            override fun toString(): String =
+                "CastAbandoned(receiver=${receiver.name}, atSecret=$atSecret, rejected=$rejected)"
         }
 
         /**

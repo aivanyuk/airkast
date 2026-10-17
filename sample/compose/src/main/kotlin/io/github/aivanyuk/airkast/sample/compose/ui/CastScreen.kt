@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
@@ -307,6 +308,7 @@ private fun CastStatus(
                 SecretDialog(
                     state.receiver,
                     state.secret,
+                    state.rejected,
                     onEnter = cast.player::enterSecret,
                     onDismiss = cast.player::disconnect,
                 )
@@ -363,6 +365,7 @@ private fun CastStatus(
 private fun SecretDialog(
     receiver: Receiver,
     secret: Secret,
+    rejected: Int,
     onEnter: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -372,15 +375,28 @@ private fun SecretDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (pin) R.string.pin_title else R.string.password_title, receiver.name)) },
         text = {
-            OutlinedTextField(
-                value = code,
-                onValueChange = { code = if (pin) it.filter(Char::isDigit) else it },
-                label = { Text(stringResource(if (pin) R.string.pin_hint else R.string.password_hint)) },
-                singleLine = true,
-                visualTransformation = if (pin) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions =
-                    KeyboardOptions(keyboardType = if (pin) KeyboardType.NumberPassword else KeyboardType.Password),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // The player asks again after a refusal; a PIN receiver shows a new code.
+                if (rejected > 0) {
+                    Text(
+                        pluralStringResource(
+                            if (pin) R.plurals.pin_rejected else R.plurals.password_rejected,
+                            rejected,
+                            rejected,
+                        ),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = if (pin) it.filter(Char::isDigit) else it },
+                    label = { Text(stringResource(if (pin) R.string.pin_hint else R.string.password_hint)) },
+                    singleLine = true,
+                    visualTransformation = if (pin) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions =
+                        KeyboardOptions(keyboardType = if (pin) KeyboardType.NumberPassword else KeyboardType.Password),
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = { onEnter(code) }, enabled = code.isNotEmpty()) { Text(stringResource(R.string.pair)) }

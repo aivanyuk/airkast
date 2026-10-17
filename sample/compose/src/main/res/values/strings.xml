@@ -39,6 +39,14 @@
     <string name="pin_hint">The code on the TV</string>
     <string name="password_title">Password for %1$s</string>
     <string name="password_hint">The password set in the TV\'s AirPlay settings</string>
+    <plurals name="pin_rejected">
+        <item quantity="one">The TV refused %d PIN. Enter the new one it shows.</item>
+        <item quantity="other">The TV refused %d PINs. Enter the new one it shows.</item>
+    </plurals>
+    <plurals name="password_rejected">
+        <item quantity="one">The TV refused %d password.</item>
+        <item quantity="other">The TV refused %d passwords.</item>
+    </plurals>
     <string name="pair">Pair</string>
     <string name="pair_with_pin">Pair with a PIN</string>
     <string name="pair_with_password">Pair with a password</string>
