@@ -581,7 +581,7 @@ the player's looper.
 | `Timeout` | The receiver did not answer in time. The session stays open, and ends only if the receiver is still silent at the next request. |
 | `Disconnected` | The connection is gone: it closed, another sender took over the receiver, or the network failed. |
 | `UnexpectedReply` | The receiver answered with something airkast cannot read. |
-| `MasterUnreadable` | `renditions()` could not read the HLS master: its server answered with another status than 200 (`status` holds it), did not answer within `requestTimeout`, sent more than 1 MB, or sent something that is not a playlist. |
+| `MasterUnreadable` | `renditions()` could not read the HLS master: its server answered with another status than 200 (`status` holds it), did not send it within `requestTimeout`, sent more than 1 MB, or sent something that is not a playlist. |
 | `DiscoveryFailed` | Scanning for receivers could not start. `code` is the platform's error. |
 
 ## Threading
