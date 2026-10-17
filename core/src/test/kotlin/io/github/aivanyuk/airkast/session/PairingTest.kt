@@ -128,6 +128,19 @@ class PairingTest {
     }
 
     @Test
+    fun aWrongPinIsLoggedAsAStepNotAnError() =
+        runBlocking {
+            val lines = mutableListOf<Pair<Airkast.Logger.Level, Throwable?>>()
+            val logged = airkast.copy { logger = Airkast.Logger { level, _, _, error -> lines += level to error } }
+            FakeReceiver().use { fake ->
+                val error = runCatching { logged.connect(asksForAPin(fake)) { "0000" } }.exceptionOrNull()
+                assertThat(error).isInstanceOf(AirkastException.SecretRejected::class.java)
+            }
+            assertThat(lines.map { it.first }).doesNotContain(Airkast.Logger.Level.Error)
+            assertThat(lines.mapNotNull { it.second }).isEmpty()
+        }
+
+    @Test
     fun aWrongPasswordIsRejected() {
         FakeReceiver(password = "hunter2").use { fake ->
             val error = pairing(fake, Secret.Password) { "hunter3" }
