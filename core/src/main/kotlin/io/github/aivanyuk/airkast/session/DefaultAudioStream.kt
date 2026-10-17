@@ -4,6 +4,7 @@ import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.Airkast.Logger.Level
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AudioStream
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.NowPlaying
 import io.github.aivanyuk.airkast.PcmFormat
 import io.github.aivanyuk.airkast.Receiver
@@ -249,7 +250,7 @@ internal class DefaultAudioStream private constructor(
         while (at < end) {
             at +=
                 lock.withLock {
-                    if (closed.get()) throw AirkastException.Disconnected(null)
+                    if (closed.get()) throw ended(null)
                     buffer.append(pcm, at, end - at, format.channels).also { if (it > 0) wake.signalAll() }
                 } * format.frameSize
             // A closed channel wakes the writer to find the stream closed.
@@ -259,7 +260,7 @@ internal class DefaultAudioStream private constructor(
 
     override fun offer(pcm: ByteBuffer): Int =
         lock.withLock {
-            if (closed.get()) throw AirkastException.Disconnected(null)
+            if (closed.get()) throw ended(null)
             buffer.append(pcm, format.channels).also { if (it > 0) wake.signalAll() } * format.frameSize
         }
 
@@ -380,14 +381,14 @@ internal class DefaultAudioStream private constructor(
     /** Runs [block] on the control connection, failing as the rest of the API does. */
     private suspend fun <T> request(block: () -> T): T =
         withContext(Dispatchers.IO) {
-            if (closed.get()) throw AirkastException.Disconnected(null)
+            if (closed.get()) throw ended(null)
             try {
                 block()
             } catch (e: LateReply) {
                 throw AirkastException.Timeout(e.message.orEmpty())
             } catch (e: IOException) {
                 end(e)
-                throw AirkastException.Disconnected(e)
+                throw ended(e)
             }
         }
 
@@ -562,12 +563,13 @@ internal class DefaultAudioStream private constructor(
         byApp: Boolean,
     ) {
         if (!closed.compareAndSet(false, true)) return
+        val reason = if (byApp) DisconnectReason.ClosedByApp else Opening.disconnectReason(cause)
         lock.withLock {
             playing = false
             wake.signalAll()
         }
         space.close()
-        val event = ReceiverEvent.Disconnected(cause)
+        val event = ReceiverEvent.Disconnected(cause, reason)
         disconnected = event
         mutableEvents.tryEmit(event)
         requests.cancel()
@@ -590,14 +592,18 @@ internal class DefaultAudioStream private constructor(
             closeSockets()
         }
         val lasted = opened?.elapsedNow() ?: return
-        val failure = if (byApp) null else AirkastException.Disconnected(cause)
+        val failure = if (byApp) null else AirkastException.Disconnected(cause, reason)
         if (failure == null) {
             log.info { "closed after ${lasted.inWholeMilliseconds} ms" }
         } else {
-            log.error(cause) { "ended after ${lasted.inWholeMilliseconds} ms" }
+            log.error(cause) { "ended after ${lasted.inWholeMilliseconds} ms: $reason" }
         }
         options.eventListener.report(Airkast.Event.SessionEnded(receiver, lasted, failure), log)
     }
+
+    /** What a call on the ended stream throws, [cause] and all, with the reason it ended for. */
+    private fun ended(cause: Throwable?) =
+        AirkastException.Disconnected(cause, disconnected?.reason ?: DisconnectReason.Unknown)
 
     private fun closeSockets() {
         runCatching { data?.close() }

@@ -65,10 +65,14 @@ public sealed class AirkastException(
         cause: Throwable,
     ) : AirkastException("The receiver's answer could not be read", cause)
 
-    /** The connection to the receiver is gone: it closed, another sender took over, or the network failed. */
+    /**
+     * The connection to the receiver is gone, for [reason]: the receiver closed it, as when another
+     * sender takes over, or the network failed, or the app closed the session.
+     */
     public class Disconnected(
         cause: Throwable?,
-    ) : AirkastException("The receiver connection closed", cause)
+        public val reason: DisconnectReason,
+    ) : AirkastException("The receiver connection closed ($reason)", cause)
 
     /**
      * The HLS master playlist could not be read from the phone, so [AirkastSession.renditions] has

@@ -8,6 +8,10 @@ caller sees adds its line under "Unreleased".
 
 ### Added
 
+- `DisconnectReason` says how a session or stream ended: `ClosedByReceiver` when the receiver
+  hung up, as for another sender, `ConnectionFailed` when the connection was reset or the
+  receiver went silent, `ClosedByApp`, or `Unknown`. `ReceiverEvent.Disconnected` and
+  `AirkastException.Disconnected` carry it as `reason`.
 - `CredentialStore.encrypted(context)` in `airkast-android` keeps pairings in a file with each
   one encrypted with AES-256-GCM under a key in the Android Keystore. A pairing it can no longer
   decrypt reads as none, so the receiver asks again, and one it cannot encrypt stays in memory for
@@ -35,6 +39,10 @@ caller sees adds its line under "Unreleased".
 
 ### Changed
 
+- `AirkastPlayer` sets no player error when the receiver hangs up, as when another sender takes
+  it, so a notification does not say playback failed; a failed connection still sets
+  `ERROR_CODE_IO_NETWORK_CONNECTION_FAILED`. The constructors of `ReceiverEvent.Disconnected` and
+  `AirkastException.Disconnected` take the reason.
 - `Airkast(context)` keeps pairings with `CredentialStore.encrypted`, where it kept them in the
   clear, in the same no-backup file. A pairing made with 0.5.0 still reads, and the first read
   encrypts it.

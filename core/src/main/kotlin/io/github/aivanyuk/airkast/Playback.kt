@@ -196,8 +196,37 @@ public sealed interface ReceiverEvent {
         public val payload: Map<String, Any?>,
     ) : ReceiverEvent
 
+    /**
+     * The session or stream ended, for [reason]: the last event, after which the flow completes.
+     * [cause] is what the connection failed with, for logs, or null.
+     */
     @Poko
     public class Disconnected(
         public val cause: Throwable?,
+        public val reason: DisconnectReason,
     ) : ReceiverEvent
+}
+
+/**
+ * Why a session or stream ended, as the connection showed it. New reasons may join in a minor
+ * release, so a `when` over them keeps an `else` branch.
+ */
+public enum class DisconnectReason {
+    /**
+     * The receiver closed the connection: another sender took it over, or it left its player and
+     * hung up. The cast ended; nothing failed.
+     */
+    ClosedByReceiver,
+
+    /**
+     * The connection failed: it was reset, or the receiver went silent, as it does when it loses
+     * power or the Wi-Fi drops. Connecting again may work.
+     */
+    ConnectionFailed,
+
+    /** The app closed it. */
+    ClosedByApp,
+
+    /** It ended in a way none of the others describes. */
+    Unknown,
 }

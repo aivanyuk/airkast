@@ -54,6 +54,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.ui.PlayerView
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.Compatibility
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.Secret
@@ -544,7 +545,13 @@ private fun describe(failure: AirkastException): String =
         }
 
         is AirkastException.Disconnected -> {
-            stringResource(R.string.failed_disconnected)
+            stringResource(
+                if (failure.reason == DisconnectReason.ClosedByReceiver) {
+                    R.string.failed_closed_by_receiver
+                } else {
+                    R.string.failed_disconnected
+                },
+            )
         }
 
         is AirkastException.DiscoveryFailed -> {

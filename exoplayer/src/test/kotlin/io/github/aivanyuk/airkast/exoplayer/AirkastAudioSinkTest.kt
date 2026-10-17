@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.audio.AudioSink
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.AirkastException
 import io.github.aivanyuk.airkast.AudioStream
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.NowPlaying
 import io.github.aivanyuk.airkast.PcmFormat
 import io.github.aivanyuk.airkast.Receiver
@@ -199,7 +200,7 @@ class AirkastAudioSinkTest {
         ) {}
 
         override fun offer(pcm: ByteBuffer): Int {
-            if (ended) throw AirkastException.Disconnected(null)
+            if (ended) throw AirkastException.Disconnected(null, DisconnectReason.ClosedByApp)
             val n = minOf(room, pcm.remaining()) / 4 * 4
             val bytes = ByteArray(n).also { pcm.get(it) }
             received.write(bytes)

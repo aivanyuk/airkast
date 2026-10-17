@@ -3,6 +3,7 @@ package io.github.aivanyuk.airkast.session
 import com.google.common.truth.Truth.assertThat
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.AirkastException
+import io.github.aivanyuk.airkast.DisconnectReason
 import io.github.aivanyuk.airkast.Media
 import io.github.aivanyuk.airkast.MediaFormat
 import io.github.aivanyuk.airkast.PlaybackState
@@ -167,9 +168,39 @@ class SessionTest {
                 val ended = async { session.events.first { it is ReceiverEvent.Disconnected } }
                 yield()
                 fake.dropConnections()
-                withTimeout(2_000) { ended.await() }
+                val event = withTimeout(2_000) { ended.await() } as ReceiverEvent.Disconnected
+                assertThat(event.reason).isEqualTo(DisconnectReason.ClosedByReceiver)
                 val error = runCatching { session.play() }.exceptionOrNull()
-                assertThat(error).isInstanceOf(AirkastException.Disconnected::class.java)
+                assertThat((error as AirkastException.Disconnected).reason).isEqualTo(DisconnectReason.ClosedByReceiver)
+            }
+        }
+
+    @Test
+    fun aResetConnectionIsAFailedOne() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                val session = airkast.connect(Receiver("fake", "127.0.0.1", fake.port))
+                val ended = async { session.events.first { it is ReceiverEvent.Disconnected } }
+                yield()
+                fake.resetConnections()
+                val event = withTimeout(2_000) { ended.await() } as ReceiverEvent.Disconnected
+                assertThat(event.reason).isEqualTo(DisconnectReason.ConnectionFailed)
+                assertThat(event.cause).isInstanceOf(java.net.SocketException::class.java)
+            }
+        }
+
+    @Test
+    fun aClosedControlConnectionIsTheReceiverHangingUp() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                airkast.connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    fake.dropControl()
+                    val error = runCatching { session.play() }.exceptionOrNull()
+                    assertThat(
+                        (error as AirkastException.Disconnected).reason,
+                    ).isEqualTo(DisconnectReason.ClosedByReceiver)
+                    assertThat(error.cause).hasCauseThat().isInstanceOf(java.io.EOFException::class.java)
+                }
             }
         }
 
@@ -189,6 +220,7 @@ class SessionTest {
                 val late = withTimeout(2_000) { session.events.toList() }
                 assertThat(late).hasSize(1)
                 assertThat(late.single()).isInstanceOf(ReceiverEvent.Disconnected::class.java)
+                assertThat((late.single() as ReceiverEvent.Disconnected).reason).isEqualTo(DisconnectReason.ClosedByApp)
             }
         }
 
@@ -241,6 +273,7 @@ class SessionTest {
                 val session = patient.connect(Receiver("fake", "127.0.0.1", fake.port))
                 val ended = withTimeout(10_000) { session.events.first { it is ReceiverEvent.Disconnected } }
                 assertThat((ended as ReceiverEvent.Disconnected).cause).hasMessageThat().contains("earlier request")
+                assertThat(ended.reason).isEqualTo(DisconnectReason.ConnectionFailed)
             }
         }
 
