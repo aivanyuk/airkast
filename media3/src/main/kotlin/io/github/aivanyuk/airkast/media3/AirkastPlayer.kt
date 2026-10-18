@@ -10,6 +10,8 @@ import io.github.aivanyuk.airkast.AudioRoute
 import io.github.aivanyuk.airkast.AudioStream
 import io.github.aivanyuk.airkast.Compatibility
 import io.github.aivanyuk.airkast.MediaFormat
+import io.github.aivanyuk.airkast.PlaybackState
+import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.Secret
@@ -23,7 +25,8 @@ import kotlin.time.Duration.Companion.seconds
  *
  * [connect] runs a whole cast: it opens a session through the player's [Airkast], asks for a PIN
  * or password when the receiver needs one, plays the media item, and ends the cast when BACK is
- * pressed on the TV's remote. [connection] says where it stands. An app that opens its own
+ * pressed on the TV's remote or the TV switches to another input or app. [connection] says where
+ * it stands. An app that opens its own
  * sessions sets [session] instead, and the player only plays on it.
  *
  * It plays one media item, whose URL the receiver fetches itself: an HLS stream, or an MP4 or audio
@@ -90,7 +93,8 @@ public interface AirkastPlayer : Player {
      * The session this player drives, or null. Setting one by hand attaches it as it is: it loads
      * the current media item on it, at the last position, so a session that replaces a lost one
      * picks up where it left off, and the app keeps it. Neither detaching it nor [release] closes
-     * it, and the app hears BACK on the TV's remote ([ReceiverEvent.Back]) from it.
+     * it, and the app hears BACK on the TV's remote ([ReceiverEvent.Back]) and the TV switching
+     * away from the item ([ReceiverEvent.StateChanged]) from it.
      *
      * The player sets this back to null when the session ends, and reports an error if the
      * connection failed rather than closed.
@@ -224,6 +228,12 @@ public interface AirkastPlayer : Player {
             /** BACK on the TV's remote, with [Builder.disconnectOnBack]. */
             Back,
 
+            /**
+             * The TV switched away from the item, to another input or app, with
+             * [Builder.disconnectOnInterrupt].
+             */
+            Interrupted,
+
             /** Another [connect], or another session set by hand. */
             Replaced,
 
@@ -274,6 +284,15 @@ public interface AirkastPlayer : Player {
         public var disconnectOnBack: Boolean = true
 
         /**
+         * Whether the TV switching away from the item, to another input or app or to its home
+         * screen, ends a cast the player connected, as BACK and [disconnect] do. The receiver
+         * reports it as [PlaybackState.Stopped] for [Reason.Interrupted]. With false, the player
+         * goes idle and keeps the session, and the app hears it as [ReceiverEvent.StateChanged] on
+         * the session's events, and decides.
+         */
+        public var disconnectOnInterrupt: Boolean = true
+
+        /**
          * Whether the playback buttons on the receiver's remote drive this player, as a media
          * button does: play/pause, next and previous on a speaker's remote, such as the Samsung
          * HW-Q990B's, during a cast to it, and on a TV's during a session. Next and previous act
@@ -287,7 +306,8 @@ public interface AirkastPlayer : Player {
          * The player that plays while no cast does, such as the app's `ExoPlayer`, or null to play
          * only on receivers. With one, the [AirkastPlayer] forwards to it until a session attaches,
          * then stops it and plays its current item on the receiver from the position it reached.
-         * When the cast ends, by [AirkastPlayer.disconnect], BACK on the TV, a failure, or
+         * When the cast ends, by [AirkastPlayer.disconnect], BACK on the TV, the TV switching away
+         * from the item, a failure, or
          * [AirkastPlayer.session] set to null, the item comes back to it paused at the position
          * the receiver reached: the notification stays, and play resumes on the phone rather than
          * connecting again. Commands, the timeline and the device info follow whichever plays, so
@@ -328,6 +348,7 @@ public interface AirkastPlayer : Player {
                     awake = if (keepAwake) KeepAwake(context, log) else null,
                     pollInterval = positionPollInterval,
                     disconnectOnBack = disconnectOnBack,
+                    disconnectOnInterrupt = disconnectOnInterrupt,
                     followsRemote = followsRemote,
                     connector = connector,
                     audioRoute = audioRoute,

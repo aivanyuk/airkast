@@ -54,7 +54,8 @@ class Cast(
      * The app's one client. `Airkast(context)` names the sender after the app's label, gives it
      * an ID that stays across launches, so a Mac asks once whether to allow it, checks Android 17's
      * local network permission, binds sessions to the Wi-Fi the receiver is on, and keeps pairings
-     * in the app's no-backup files. This only adds a logger: `adb logcat -s airkast`.
+     * in the app's no-backup files, encrypted with a key in the Android Keystore. This only adds a
+     * logger: `adb logcat -s airkast`.
      */
     val airkast = Airkast(context) { logger = Airkast.Logger.logcat() }
 

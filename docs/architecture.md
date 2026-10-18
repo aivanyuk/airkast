@@ -63,7 +63,7 @@ build file.
 | Package | Holds | May use |
 | --- | --- | --- |
 | `io.github.aivanyuk.airkast` | The public API: `Airkast`, `AirkastSession`, `AudioStream`, `AudioRoute`, `Media`, `PcmFormat`, `NowPlaying`, `Receiver`, `Compatibility`, `Credentials`, `CredentialStore`, the values and events, `AirkastException` | everything below |
-| `.session` | The protocol's state: `Opening` (the control connection, pairing and base SETUP every session starts with), `DefaultVideoSession` (AirPlay video v2), `DefaultAudioStream` (AirPlay 2 realtime audio) and its `PcmBuffer`, `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder`, and `Log`, which writes to the client's logger | `wire`, `crypto` |
+| `.session` | The protocol's state: `Opening` (the control connection, pairing and base SETUP every session starts with), `DefaultVideoSession` (AirPlay video v2), `DefaultAudioStream` (AirPlay 2 realtime audio) and its `PcmBuffer`, `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder`, `MasterPlaylist` (fetches the HLS master that `renditions()` reads), `RemoteCommands` (the remote's button codes as `RemoteCommand`), and `Log`, which writes to the client's logger | `wire`, `crypto` |
 | `.wire` | Encodings and framing: HTTP and RTSP messages, TLV8, binary plists, the encrypted `Link`, RTP audio and sync packets, uncompressed ALAC frames, DMAP. No protocol decisions | `crypto` |
 | `.crypto` | SRP-6a, HKDF-SHA512, ChaCha20-Poly1305, X25519, Ed25519, as pure functions with vector tests. airkast carries its own ChaCha20-Poly1305 because Android's JCA has no provider for it below Android 9, and its own X25519 and Ed25519 because the JCA has none below Android 13 | nothing |
 | `.internal` | Build support, such as the `@Poko` annotation | nothing |
@@ -230,6 +230,11 @@ internal and no unstable type reaches airkast's API dump.
   be bound by controllers in every app that depends on it, beside the app's own.
 - **It connects through `Airkast`, never `airkast-android`.** The app passes the client in, so
   `:media3` depends on `:core` alone.
+- **Tracks are the master's renditions.** Once the receiver takes an HLS item, `ReceiverTracks`
+  reads `session.renditions()` and lists each one as a media3 `Tracks.Group`, selected as the
+  receiver last reported through `tracks()`, or as the player's `TrackSelectionParameters` asked
+  until the receiver reports that. A selection is one `selectTrack` call, so media3's own track
+  dialogs switch the TV.
 - **Locks follow the state.** A partial wake lock and a Wi-Fi lock are held while a session is
   attached and the item is buffering or ready, paused included, since the keepalive has to go on,
   and for as long as a stream to a speaker is open.

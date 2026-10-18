@@ -63,6 +63,7 @@ Terms used on this page:
 | MacBook Pro (MacBookPro18,1, macOS build 25G241) | 960.13.25 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | "Require password" on. `Airkast.describe` of the address typed in: `NeedsPassword`, from the TXT record it sent back (`acl=0`, flags `0x84`). Not connected |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `Airkast.describe` of the address typed in: `Supported` for video and audio, from the TXT record it sent back (`acl=0`, flags `0x244`). Not connected |
 | LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 03a4361 | Xiaomi 2201117TY, Android 13, the sample app; a desktop JVM 21 (WSL) as the second sender | How a session ends, through `AirkastPlayer`, each by hand. Another sender took the TV: the LG closed the first sender's event channel cleanly at once, `ClosedByReceiver`. Turned off with the remote: closed cleanly at once, `ClosedByReceiver`. Power plug pulled: no close; the next `/command` had no answer in 5 s and the request after it found the LG still silent, so the session ended about 12 s after the last event, `ConnectionFailed` (`Still no answer to an earlier request`, a read timeout). BACK on the remote: the player stopped and closed the session, `ClosedByApp`. The sample showed "The TV ended the cast, or another sender took it over" after the takeover |
+| LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 0392fca | Xiaomi 2201117TY, Android 13, the sample app | Switching away from the item while it played, to another input, another app or live TV: each time the LG sent `sendMediaRemoteCommand` `pbpr` then `pbal`, as for BACK, and no `stopped` with `interrupted`. The player ended the cast as `Back`; `disconnectOnInterrupt` did not come into it |
 | Samsung HW-Q990B (soundbar) | SAT-iMX8M22WWC-1010.0, 366.0 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `AudioProbeTest`: transient pairing, `GET /info`, the base SETUP (reply `eventPort` and `timingPort`), RECORD, a type-96 stream SETUP and TEARDOWN, with no packet sent. RECORD was answered 200 with `Server` and `CSeq` alone, no `Audio-Latency`; the stream SETUP reply held `type`, `dataPort` and `controlPort` alone; `GET /info` listed no `audioLatencies`. It asked the sender's timing port five times in the second before answering the stream SETUP, and once in the two seconds after |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `AudioProbeTest`, as for the Samsung: the first audio-stream SETUP sent to the LG, answered 200 with `type`, `dataPort` and `controlPort`; no `Audio-Latency` on RECORD; `GET /info` lists `audioLatencies` for types 100, 101 and 102, every `outputLatencyMicros` 0; the base SETUP reply adds `uiPreloaded: true`. The same five timing requests, then one. No audio was sent or played |
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | Audio `Supported`. `LiveAudioTest` passes at 44.1 kHz, the first audio stream airkast sent the LG: described from the address typed in, transient pairing, connected in 950 ms, a type-96 ALAC stream, play, pause and resume from the frame that played, flush, the track's name and progress sent. The beeps, the pause, the resume and the tone after the flush heard in the room. It ignored the volume set (0.2) and read back 0.04 before and after, as it ignores a session's |
@@ -230,6 +231,8 @@ What the LG CX does, as seen on the wire.
 - Set to ask for a PIN in its AirPlay settings, it reads as `NeedsPin` (status flag `0x8`), shows
   a PIN for `/pair-pin-start`, pairs with it, and lets the sender in with pair-verify after.
 - Without RECORD after the event channel opens, it plays but sends no events.
+- Switching away from the item, to another input, another app or live TV, sends BACK
+  (`pbpr`, `pbal`), not `stopped` with `interrupted`.
 - Another sender taking it over, or the remote turning it off, closes the first sender's
   connections cleanly at once. A power cut closes nothing: the sender hears silence, and the
   session ends at the next request after one goes unanswered (`ConnectionFailed`).
@@ -240,9 +243,9 @@ What the LG CX does, as seen on the wire.
   live test's run with NTP on 2026-10-10 saw none: it ran from WSL, and the sender only began
   sending that request on 2026-10-14.
 - It takes a type-96 audio stream SETUP after RECORD, answered 200 with `type`, `dataPort` and
-  `controlPort`, as the Samsung answers it, and plays it (`LiveAudioTest`, 2026-10-17). Its base SETUP reply adds
-  `uiPreloaded: true` to the ports. It says nothing about its output latency: no `Audio-Latency`
-  on RECORD, and `GET /info` lists `audioLatencies` for types 100, 101 and 102 with every
+  `controlPort`, as the Samsung answers it, and plays it (`LiveAudioTest`, 2026-10-17). Its base
+  SETUP reply adds `uiPreloaded: true` to the ports. It says nothing about its output latency: no
+  `Audio-Latency` on RECORD, and `GET /info` lists `audioLatencies` for types 100, 101 and 102 with every
   `inputLatencyMicros` and `outputLatencyMicros` 0, and `audioType`s `default`, `media`,
   `telephony`, `speechRecognition` and `alert`. What the types are, and whether 0 is a
   measurement, is not known.
@@ -345,7 +348,7 @@ tests run under Robolectric at API 23, 34, 36 and 37.
 | below 9 (API 28) | The JCA has no ChaCha20-Poly1305 | Carries its own (RFC 8439) |
 | below 14 (API 34) | `NsdManager` resolves one service at a time, and a resolved service has one `host` | Resolves services one after another |
 | 14 (API 34) and later | A resolved service has `hostAddresses`, which may list IPv6 before IPv4 | Takes the first IPv4 address |
-| 17 (API 37), when the app targets 37 | The local network is blocked until the user grants `ACCESS_LOCAL_NETWORK`. A TCP connection times out with no error that names the cause, and `NsdManager` is blocked too | `ReceiverDiscovery`, and a connect through `Airkast(context)`, fail at once with `AirkastException.NotPermitted`. `LocalNetwork.isAccessible` tells an app when to ask |
+| 17 (API 37), when the app targets 37 | The local network is blocked until the user grants `ACCESS_LOCAL_NETWORK`. A TCP connection times out with no error that names the cause, and `NsdManager` is blocked too | `ReceiverDiscovery`, and a connect through `Airkast(context)`, fail at once with `AirkastException.NotPermitted`. `LocalNetworkPermission(context).state` tells an app when to ask |
 
 The app declares `ACCESS_LOCAL_NETWORK` itself, and only when it targets SDK 37 or more, since
 Android's guidance is to leave it out below that. It is in the `NEARBY_DEVICES` group, so a user

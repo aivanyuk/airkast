@@ -4,10 +4,13 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
-## Unreleased
+## 0.6.0 - 2026-10-17
 
 ### Added
 
+- `AirkastPlayer.Builder.disconnectOnInterrupt`, true by default: when the TV switches away from
+  the item, to another input or app, the player ends a cast it opened as BACK does, with the new
+  `EndReason.Interrupted`, where it went idle and kept the session.
 - `DisconnectReason` says how a session or stream ended: `ClosedByReceiver` when the receiver
   hung up, as for another sender, `ConnectionFailed` when the connection was reset or the
   receiver went silent, `ClosedByApp`, or `Unknown`. `ReceiverEvent.Disconnected` and

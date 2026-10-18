@@ -57,10 +57,10 @@ airkast is on Maven Central:
 
 ```kotlin
 dependencies {
-    implementation("io.github.aivanyuk:airkast-android:0.5.0")
-    implementation("io.github.aivanyuk:airkast-media3:0.5.0")
+    implementation("io.github.aivanyuk:airkast-android:0.6.0")
+    implementation("io.github.aivanyuk:airkast-media3:0.6.0")
     // For speakers, with ExoPlayer:
-    implementation("io.github.aivanyuk:airkast-exoplayer:0.5.0")
+    implementation("io.github.aivanyuk:airkast-exoplayer:0.6.0")
 }
 ```
 
@@ -154,8 +154,9 @@ player.disconnect()
 ```
 
 `disconnect` stops playback on the TV, closes the session and clears the item. By default, the
-player also disconnects when the user presses BACK on the TV's remote. To handle BACK yourself,
-build the player with `disconnectOnBack = false`.
+player also disconnects when the user presses BACK on the TV's remote, or switches the TV to
+another input or app. To handle these yourself, build the player with `disconnectOnBack = false`
+or `disconnectOnInterrupt = false`.
 
 If the connection drops, the player does not reconnect by itself. Calling `prepare()` connects
 again and continues from the last position. A notification's play button calls `prepare()`.
