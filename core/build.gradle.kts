@@ -16,6 +16,14 @@ tasks.test {
     environment("AIRKAST_AUDIO_RECEIVER", System.getenv("AIRKAST_AUDIO_RECEIVER") ?: "")
     environment("AIRKAST_AUDIO_RATE", System.getenv("AIRKAST_AUDIO_RATE") ?: "")
     environment("AIRKAST_AUDIO_VOLUME", System.getenv("AIRKAST_AUDIO_VOLUME") ?: "")
+    environment("AIRKAST_PROBE_RECEIVERS", System.getenv("AIRKAST_PROBE_RECEIVERS") ?: "")
+    // Gradle tracks no environment variable as an input, so a run that names a receiver would be
+    // up to date, or come from the build cache, after one that named none. A live run never is.
+    val live = listOf("AIRKAST_RECEIVER", "AIRKAST_AUDIO_RECEIVER", "AIRKAST_PROBE_RECEIVERS")
+    if (live.any { !System.getenv(it).isNullOrBlank() }) {
+        outputs.upToDateWhen { false }
+        outputs.cacheIf("a live test runs against a real receiver") { false }
+    }
     testLogging {
         events("failed")
         showStandardStreams = true

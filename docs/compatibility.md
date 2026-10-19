@@ -64,6 +64,9 @@ Terms used on this page:
 | LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `Airkast.describe` of the address typed in: `Supported` for video and audio, from the TXT record it sent back (`acl=0`, flags `0x244`). Not connected |
 | LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 03a4361 | Xiaomi 2201117TY, Android 13, the sample app; a desktop JVM 21 (WSL) as the second sender | How a session ends, through `AirkastPlayer`, each by hand. Another sender took the TV: the LG closed the first sender's event channel cleanly at once, `ClosedByReceiver`. Turned off with the remote: closed cleanly at once, `ClosedByReceiver`. Power plug pulled: no close; the next `/command` had no answer in 5 s and the request after it found the LG still silent, so the session ended about 12 s after the last event, `ConnectionFailed` (`Still no answer to an earlier request`, a read timeout). BACK on the remote: the player stopped and closed the session, `ClosedByApp`. The sample showed "The TV ended the cast, or another sender took it over" after the takeover |
 | LG OLED CX (webOS) | 04.64.00, not read again; 377.25.06 from the connect log | 2026-10-17, at 0392fca | Xiaomi 2201117TY, Android 13, the sample app | Switching away from the item while it played, to another input, another app or live TV: each time the LG sent `sendMediaRemoteCommand` `pbpr` then `pbal`, as for BACK, and no `stopped` with `interrupted`. The player ended the cast as `Back`; `disconnectOnInterrupt` did not come into it |
+| Samsung HW-Q990B (soundbar) | SAT-iMX8M22WWC-1010.0, 366.0 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `AudioProbeTest`: transient pairing, `GET /info`, the base SETUP (reply `eventPort` and `timingPort`), RECORD, a type-96 stream SETUP and TEARDOWN, with no packet sent. RECORD was answered 200 with `Server` and `CSeq` alone, no `Audio-Latency`; the stream SETUP reply held `type`, `dataPort` and `controlPort` alone; `GET /info` listed no `audioLatencies`. It asked the sender's timing port five times in the second before answering the stream SETUP, and once in the two seconds after |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | `AudioProbeTest`, as for the Samsung: the first audio-stream SETUP sent to the LG, answered 200 with `type`, `dataPort` and `controlPort`; no `Audio-Latency` on RECORD; `GET /info` lists `audioLatencies` for types 100, 101 and 102, every `outputLatencyMicros` 0; the base SETUP reply adds `uiPreloaded: true`. The same five timing requests, then one. No audio was sent or played |
+| LG OLED CX (webOS) | 04.64.00, 377.25.06 | 2026-10-17, after 0.5.0 | desktop JVM 21 (WSL) | Audio `Supported`. `LiveAudioTest` passes at 44.1 kHz, the first audio stream airkast sent the LG: described from the address typed in, transient pairing, connected in 950 ms, a type-96 ALAC stream, play, pause and resume from the frame that played, flush, the track's name and progress sent. The beeps, the pause, the resume and the tone after the flush heard in the room. It ignored the volume set (0.2) and read back 0.04 before and after, as it ignores a session's |
 
 ### How `Receiver.compatibility` decides
 
@@ -172,6 +175,13 @@ What the soundbar does, as seen on the wire.
   and plays nothing.
 - It sets its volume from `SET_PARAMETER` and reads it back, to about 0.3 dB of what was set.
 - It plays 44.1 and 48 kHz ALAC.
+- It says nothing about its output latency: its RECORD reply carries `Server` and `CSeq` alone,
+  no `Audio-Latency`; its `GET /info` lists no `audioLatencies`; its stream SETUP reply holds
+  `type`, `dataPort` and `controlPort` alone (`AudioProbeTest`, 2026-10-17). A sender that
+  keeps it in step with another receiver has to measure the difference itself.
+- It asks the sender's timing port five times in the second before it answers the stream SETUP,
+  and once in the two seconds after, with nothing sent on the stream. How often it asks while
+  playing is not measured.
 - It answers `GET /info` before pairing, with its features, status flags `4`, the device ID of
   its TXT record, `model` and `sdk`. Asked for `txtAirPlay`, it adds its TXT record.
 - Its remote's play/pause, next and previous arrive on the event channel as `POST /command`
@@ -227,8 +237,18 @@ What the LG CX does, as seen on the wire.
   connections cleanly at once. A power cut closes nothing: the sender hears silence, and the
   session ends at the next request after one goes unanswered (`ConnectionFailed`).
 - It plays with or without NTP timing. With `timingProtocol: NTP` its SETUP answer adds a
-  `timingPort`. No timing request was seen, but the one run with NTP (2026-10-10, the live test)
-  was from WSL, where Windows' firewall would have dropped them.
+  `timingPort`, and it asks the sender's timing port for the time: five requests in the second
+  before it answered an audio stream's SETUP and one two seconds later (`AudioProbeTest`,
+  2026-10-17, from WSL, after the sender's own request to that port opened the firewall). The
+  live test's run with NTP on 2026-10-10 saw none: it ran from WSL, and the sender only began
+  sending that request on 2026-10-14.
+- It takes a type-96 audio stream SETUP after RECORD, answered 200 with `type`, `dataPort` and
+  `controlPort`, as the Samsung answers it, and plays it (`LiveAudioTest`, 2026-10-17). Its base
+  SETUP reply adds `uiPreloaded: true` to the ports. It says nothing about its output latency: no
+  `Audio-Latency` on RECORD, and `GET /info` lists `audioLatencies` for types 100, 101 and 102 with every
+  `inputLatencyMicros` and `outputLatencyMicros` 0, and `audioType`s `default`, `media`,
+  `telephony`, `speechRecognition` and `alert`. What the types are, and whether 0 is a
+  measurement, is not known.
 - `Start-Position` must be a CMTime. `Start-Position-Seconds` is ignored.
 - A seek without the item's UUID and both tolerances is ignored.
 - `selectedMediaArray` lists the selected audio and subtitle renditions, and a `setProperty` on
