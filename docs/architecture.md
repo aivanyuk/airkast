@@ -133,7 +133,9 @@ The protocol facts, with the receivers they were seen on, are in
   `Compatibility` case it clears becomes `Supported` in the same change. With a second
   implementation, the choice becomes a list of factories on `Airkast.Builder`, as Retrofit's
   converter factories and Coil's components are, so an app can add its own; until then it is a
-  branch in `connect`.
+  branch in `connect`. [design/sender-served-media.md](design/sender-served-media.md) plans the
+  local file and DASH case differently: not another session but a step inside `load`, with an
+  HTTP server in `:core` the receiver fetches from.
 - **`Airkast.Builder.socketFactory` is the network seam.** `:core` opens every connection
   through the factory it returns for the receiver, so `:android` can refuse a connect without the
   local network permission and bind the session to a network without `:core` knowing Android.
