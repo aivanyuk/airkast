@@ -290,6 +290,13 @@ device:
 ./gradlew :sample:compose:installDebug
 ```
 
+To put a URL in the sample's URL field without typing it on the phone, start the app with a `url`
+extra. A sample that is already open takes the new URL too:
+
+```bash
+adb shell am start -n io.github.aivanyuk.airkast.sample.compose/.MainActivity --es url https://example.com/master.m3u8
+```
+
 ## Documentation
 
 - [docs/guide.md](docs/guide.md): the full usage guide: the client's options, pairing, the
