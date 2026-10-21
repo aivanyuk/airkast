@@ -1,6 +1,7 @@
 package io.github.aivanyuk.airkast.sample.views
 
 import android.content.ComponentName
+import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
 import androidx.activity.enableEdgeToEdge
@@ -33,6 +34,7 @@ import io.github.aivanyuk.airkast.media3.AirkastPlayer.Connection
 import io.github.aivanyuk.airkast.sample.CastService
 import io.github.aivanyuk.airkast.sample.SampleMedia
 import io.github.aivanyuk.airkast.sample.cast
+import io.github.aivanyuk.airkast.sample.mediaUrl
 import io.github.aivanyuk.airkast.sample.trackName
 import io.github.aivanyuk.airkast.sample.views.databinding.ActivityMainBinding
 import io.github.aivanyuk.airkast.sample.views.databinding.DialogSecretBinding
@@ -43,7 +45,8 @@ import kotlinx.coroutines.launch
 /**
  * Plays a URL on the phone or casts it to the TV tapped, and shows what the TV reports: the Compose
  * flavor's `CastScreen`, in views. It runs over the process's [Cast], and holds a MediaController
- * to [CastService] while shown, for media3's player in the layout.
+ * to [CastService] while shown, for media3's player in the layout. A `url` extra in the intent
+ * that starts it, or in a later one, goes into the URL field.
  */
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -68,7 +71,7 @@ class MainActivity : AppCompatActivity() {
             WindowInsetsCompat.CONSUMED
         }
 
-        if (savedInstanceState == null) binding.url.setText(SampleMedia.Stream.url)
+        if (savedInstanceState == null) binding.url.setText(intent.mediaUrl() ?: SampleMedia.Stream.url)
         binding.url.doAfterTextChanged { showAutoFormat() }
         showAutoFormat()
         binding.sampleStream.setOnClickListener { pick(SampleMedia.Stream) }
@@ -104,6 +107,11 @@ class MainActivity : AppCompatActivity() {
                 launch { cast.log.collect { binding.log.text = it.joinToString("\n") } }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.mediaUrl()?.let(::showUrl)
     }
 
     override fun onStart() {
@@ -147,8 +155,11 @@ class MainActivity : AppCompatActivity() {
             else -> null
         }
 
-    private fun pick(sample: SampleMedia) {
-        binding.url.setText(sample.url)
+    private fun pick(sample: SampleMedia) = showUrl(sample.url)
+
+    /** Puts [url] in the field, with its format read from it. */
+    private fun showUrl(url: String) {
+        binding.url.setText(url)
         binding.formats.check(R.id.format_auto)
     }
 

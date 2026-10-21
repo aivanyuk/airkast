@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -73,18 +74,28 @@ import kotlinx.coroutines.launch
 /**
  * Plays a URL on the phone or casts it to the TV tapped, and shows what the TV reports. [player] is
  * the MediaController to [io.github.aivanyuk.airkast.sample.CastService], while one is connected.
+ * [pendingUrl] replaces the URL in the field, with its format read from it, and then
+ * [onPendingUrlTaken] runs, so the same URL can come again.
  */
 @Composable
 fun CastScreen(
     cast: Cast,
     player: Player?,
     modifier: Modifier = Modifier,
+    pendingUrl: String? = null,
+    onPendingUrlTaken: () -> Unit = {},
 ) {
     val connection by cast.player.connection.collectAsStateWithLifecycle()
     val log by cast.log.collectAsStateWithLifecycle()
     var url by rememberSaveable { mutableStateOf(SampleMedia.Stream.url) }
     // Null reads it from the URL.
     var format by rememberSaveable { mutableStateOf<MediaFormat?>(null) }
+    LaunchedEffect(pendingUrl) {
+        if (pendingUrl == null) return@LaunchedEffect
+        url = pendingUrl
+        format = null
+        onPendingUrlTaken()
+    }
     val typedIn = stringResource(R.string.typed_in)
     val access = rememberLocalNetworkAccess()
 

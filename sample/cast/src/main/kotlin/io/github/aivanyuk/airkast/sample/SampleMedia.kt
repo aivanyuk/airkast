@@ -1,5 +1,7 @@
 package io.github.aivanyuk.airkast.sample
 
+import android.content.Intent
+
 /**
  * Something to cast in each format, as the live test plays them. Apple's stream sends CORS
  * headers, which the LG's player needs for HLS; the files are ExoPlayer's test media.
@@ -16,3 +18,11 @@ enum class SampleMedia(
     /** A few minutes of music, for a speaker. */
     Music("https://storage.googleapis.com/exoplayer-test-media-0/Jazz_In_Paris.mp3"),
 }
+
+/**
+ * The media URL an intent carries for the URL field, or null: the [EXTRA_URL] string extra, as
+ * `adb shell am start -n <package>/.MainActivity --es url <url>` sends it.
+ */
+fun Intent.mediaUrl(): String? = getStringExtra(EXTRA_URL)?.trim()?.takeIf { it.isNotEmpty() }
+
+const val EXTRA_URL = "url"
