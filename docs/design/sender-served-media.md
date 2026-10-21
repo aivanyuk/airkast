@@ -332,8 +332,9 @@ In this order. Step 3 needs no new code on the phone side beyond a test server.
    passed `LiveReceiverTest` on the LG from a desktop JVM: start at 30 s, position on the wall
    clock, seek, pause, play, tracks and subtitles off
    ([compatibility](../compatibility.md#checked)). So the translation's output plays on the LG
-   with no remux to MPEG-TS. Not cast from the sample app yet, and not on the Mac with the H.264
-   example.
+   with no remux to MPEG-TS. The same stream cast from the sample app through `AirkastPlayer`
+   played, and its media3 track dialog switched the TV's subtitles. Not checked on the Mac with
+   the H.264 example.
 2. **Serving from the sender.** A hand-written playlist, and an MP4 as a `file` item, served from
    the phone over plain HTTP with `Access-Control-Allow-Origin: *`. Does the LG's hls.js fetch
    from an `http://` origin, and seek through the file with ranges; does the Mac. From a desktop
