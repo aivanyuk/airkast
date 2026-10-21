@@ -323,12 +323,17 @@ tracks check, so the renditions the translation lists can be compared against th
 
 ## What to verify
 
-In this order. Steps 1 and 3 need no new code on the phone side beyond a test server.
+In this order. Step 3 needs no new code on the phone side beyond a test server.
 
-1. **Fragmented MP4 HLS on the LG CX and the Mac.** Cast Apple's
-   `img_bipbop_adv_example_fmp4/master.m3u8` from the sample app. If the LG does not play it,
-   the translation serves Macs and Apple TVs only, and the LG needs a remux to MPEG-TS on the
-   phone, a different and heavier job.
+1. **Fragmented MP4 HLS on the LG CX and the Mac. Done 2026-10-21.** Both play it. Every
+   playlist of Apple's `bipbop_adv_example_hevc` uses fragmented MP4 segments with `EXT-X-MAP`
+   and byte ranges, and the live test has played it on the LG since 2026-10-08, as the Mac played
+   it when it reported its track ids. Apple's H.264-only `img_bipbop_adv_example_fmp4` then
+   passed `LiveReceiverTest` on the LG from a desktop JVM: start at 30 s, position on the wall
+   clock, seek, pause, play, tracks and subtitles off
+   ([compatibility](../compatibility.md#checked)). So the translation's output plays on the LG
+   with no remux to MPEG-TS. Not cast from the sample app yet, and not on the Mac with the H.264
+   example.
 2. **Serving from the sender.** A hand-written playlist, and an MP4 as a `file` item, served from
    the phone over plain HTTP with `Access-Control-Allow-Origin: *`. Does the LG's hls.js fetch
    from an `http://` origin, and seek through the file with ranges; does the Mac. From a desktop
