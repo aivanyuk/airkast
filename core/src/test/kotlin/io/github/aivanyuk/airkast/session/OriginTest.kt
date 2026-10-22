@@ -8,7 +8,6 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
-import java.net.ConnectException
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.Socket
@@ -149,6 +148,15 @@ class OriginTest {
     }
 
     @Test
+    fun aHeadOfBlankLinesIsABadRequest() {
+        val url = origin.publish("master.m3u8", Resource.text(M3U8) { "#EXTM3U\n" })
+        Client(url).use { client ->
+            client.send("\r\n\r\n")
+            assertThat(client.read(head = false).status).isEqualTo(400)
+        }
+    }
+
+    @Test
     fun twoConnectionsAreServedAtOnce() {
         val opened = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -179,14 +187,15 @@ class OriginTest {
     fun theServerStopsOnceTheLastResourceIsWithdrawn() {
         val first = origin.publish("a.m3u8", Resource.text(M3U8) { "#EXTM3U\n" })
         val second = origin.publish("b.m3u8", Resource.text(M3U8) { "#EXTM3U\n" })
-        val port = origin.port!!
         origin.withdraw(first)
         assertThat(Client(first).get().status).isEqualTo(404)
-        assertThat(Client(second).get().status).isEqualTo(200)
+        val open = Client(second)
+        assertThat(open.get().status).isEqualTo(200)
 
+        // The port is not checked: another test's server may take it as soon as it is free.
         origin.withdraw(second)
         assertThat(origin.port).isNull()
-        assertThrows(ConnectException::class.java) { Socket(InetAddress.getLoopbackAddress(), port).close() }
+        open.use { assertThat(it.closed()).isTrue() }
 
         val again = origin.publish("a.m3u8", Resource.text(M3U8) { "#EXTM3U\n" })
         assertThat(Client(again).get().status).isEqualTo(200)
