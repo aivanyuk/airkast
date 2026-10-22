@@ -285,7 +285,8 @@ private fun FormatPicker(
             onClick = { onPick(null) },
             label = { Text(stringResource(R.string.format_auto, describe(MediaFormat.of(url.trim())))) },
         )
-        for (each in MediaFormat.entries) {
+        // Only the formats a receiver loads: DASH, picked by hand, would only fail the load.
+        for (each in listOf(MediaFormat.Hls, MediaFormat.File)) {
             FilterChip(selected = format == each, onClick = { onPick(each) }, label = { Text(describe(each)) })
         }
     }
@@ -511,6 +512,7 @@ private fun describe(format: MediaFormat): String =
     when (format) {
         MediaFormat.Hls -> stringResource(R.string.format_hls)
         MediaFormat.File -> stringResource(R.string.format_file)
+        MediaFormat.Dash -> stringResource(R.string.format_dash)
     }
 
 @Composable

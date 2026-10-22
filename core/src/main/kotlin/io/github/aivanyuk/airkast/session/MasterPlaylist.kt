@@ -17,7 +17,7 @@ internal object MasterPlaylist {
     const val MAX_SIZE = 1 shl 20
 
     /**
-     * Blocks until the master is read, or throws [AirkastException.MasterUnreadable]. [timeout]
+     * Blocks until the master is read, or throws [AirkastException.ManifestUnreadable]. [timeout]
      * bounds the whole read, not each socket read, so a server that sends a byte now and then
      * cannot hold it past [timeout] by more than one read's wait.
      */
@@ -29,15 +29,15 @@ internal object MasterPlaylist {
             try {
                 URL(url).openConnection() as? HttpURLConnection
             } catch (e: IOException) {
-                throw AirkastException.MasterUnreadable("The master's URL could not be opened", cause = e)
-            } ?: throw AirkastException.MasterUnreadable("The master's URL is not an HTTP URL")
+                throw AirkastException.ManifestUnreadable("The master's URL could not be opened", cause = e)
+            } ?: throw AirkastException.ManifestUnreadable("The master's URL is not an HTTP URL")
         val deadline = TimeSource.Monotonic.markNow() + timeout
         try {
             connection.connectTimeout = timeout.toSocketTimeout()
             connection.readTimeout = timeout.toSocketTimeout()
             val status = connection.responseCode
             if (status != HttpURLConnection.HTTP_OK) {
-                throw AirkastException.MasterUnreadable("The master's server answered $status", status)
+                throw AirkastException.ManifestUnreadable("The master's server answered $status", status)
             }
             if (connection.contentLength > MAX_SIZE) throw tooLarge()
             val body = ByteArrayOutputStream()
@@ -49,19 +49,19 @@ internal object MasterPlaylist {
                     if (body.size() + read > MAX_SIZE) throw tooLarge()
                     body.write(buffer, 0, read)
                     if (deadline.hasPassedNow()) {
-                        throw AirkastException.MasterUnreadable("The master took longer than $timeout to read")
+                        throw AirkastException.ManifestUnreadable("The master took longer than $timeout to read")
                     }
                 }
             }
             val text = String(body.toByteArray(), Charsets.UTF_8).removePrefix("﻿")
-            if (!text.startsWith("#EXTM3U")) throw AirkastException.MasterUnreadable("The master is not a playlist")
+            if (!text.startsWith("#EXTM3U")) throw AirkastException.ManifestUnreadable("The master is not a playlist")
             return text
         } catch (e: IOException) {
-            throw AirkastException.MasterUnreadable("The master could not be read", cause = e)
+            throw AirkastException.ManifestUnreadable("The master could not be read", cause = e)
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun tooLarge() = AirkastException.MasterUnreadable("The master is larger than $MAX_SIZE bytes")
+    private fun tooLarge() = AirkastException.ManifestUnreadable("The master is larger than $MAX_SIZE bytes")
 }

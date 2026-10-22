@@ -319,6 +319,7 @@ class MainActivity : AppCompatActivity() {
         when (format) {
             MediaFormat.Hls -> getString(R.string.format_hls)
             MediaFormat.File -> getString(R.string.format_file)
+            MediaFormat.Dash -> getString(R.string.format_dash)
         }
 
     private fun describe(compatibility: Compatibility): String =

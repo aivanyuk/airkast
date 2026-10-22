@@ -4,6 +4,21 @@ Every release, newest first. The format follows [Keep a Changelog](https://keepa
 and versions follow [docs/releasing.md](docs/releasing.md). A pull request that changes what a
 caller sees adds its line under "Unreleased".
 
+## Unreleased
+
+### Added
+
+- `MediaFormat.Dash`, which `MediaFormat.of` reads from a `.mpd` URL or the
+  `application/dash+xml` MIME type. No receiver loads DASH, so `load` throws the new
+  `AirkastException.UnsupportedMedia` at once and sends the receiver nothing, where it sent the
+  item as HLS and failed with `Timeout` after `loadTimeout`. `AirkastPlayer` reports it as
+  `ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED`.
+
+### Changed
+
+- `AirkastException.MasterUnreadable` is now `ManifestUnreadable`, the name a DASH manifest the
+  phone cannot read will share.
+
 ## 0.6.0 - 2026-10-17
 
 ### Added

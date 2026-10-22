@@ -18,6 +18,16 @@ class MediaFormatTest {
     }
 
     @Test
+    fun aDashManifestIsDash() {
+        assertThat(MediaFormat.of("https://example.com/angel-one/dash.mpd")).isEqualTo(MediaFormat.Dash)
+        assertThat(MediaFormat.of("https://example.com/live/Manifest.MPD?t=1")).isEqualTo(MediaFormat.Dash)
+        assertThat(MediaFormat.of("https://example.com/watch/7", "application/dash+xml")).isEqualTo(MediaFormat.Dash)
+        assertThat(MediaFormat.of("https://example.com/a.m3u8", "Application/DASH+XML; profiles=x")).isEqualTo(
+            MediaFormat.Dash,
+        )
+    }
+
+    @Test
     fun theQueryAndFragmentAreNotTheExtension() {
         assertThat(MediaFormat.of("https://example.com/film.mp4?expires=1#t=10")).isEqualTo(MediaFormat.File)
         assertThat(MediaFormat.of("https://example.com/play?file=film.mp4")).isEqualTo(MediaFormat.Hls)

@@ -24,7 +24,9 @@ public interface AirkastSession : AutoCloseable {
 
     /**
      * Plays [item], replacing whatever plays. Returns once the receiver has taken the item; throws
-     * [AirkastException.Timeout] when it stays silent, which a reconnect usually fixes.
+     * [AirkastException.Timeout] when it stays silent, which a reconnect usually fixes, and
+     * [AirkastException.UnsupportedMedia] at once, sending nothing, for a [MediaFormat] no receiver
+     * loads.
      */
     public suspend fun load(item: Media)
 
@@ -53,7 +55,7 @@ public interface AirkastSession : AutoCloseable {
      * keeps it until the next one. The fetch goes over the phone's default network, not through
      * [Airkast.socketFactory]: the master is on the internet, not on the receiver's network. The
      * receiver fetches the same URL from its own address, so a URL that only it may read throws
-     * [AirkastException.MasterUnreadable] here, as does any answer but 200.
+     * [AirkastException.ManifestUnreadable] here, as does any answer but 200.
      */
     public suspend fun renditions(): List<Rendition>
 

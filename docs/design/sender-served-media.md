@@ -1,6 +1,7 @@
 # Casting what the receiver cannot fetch
 
-A design, 2026-10-19. Nothing here is built. It answers two questions the owner asked: what it
+A design, 2026-10-19. Only the first step is built: `MediaFormat.Dash` and
+`AirkastException.UnsupportedMedia` (decision 4). It answers two questions the owner asked: what it
 takes to cast media the receiver cannot load from its URL, MPEG-DASH first, and which formats
 that can cover. Each claim about a receiver or a player names where it comes from, and
 [What to verify](#what-to-verify) lists what has to be checked on a receiver before the design is
@@ -229,15 +230,16 @@ client's: one server, started on the first publish, stopped once the last `Resol
 withdraws, so a client with no served item holds no port. No `Airkast` lifecycle call is added
 for it.
 
-Where the translator lives is the main open decision. The MPD parser needs XML, and
-`javax.xml.parsers` (DOM) is in the JDK and in Android since API 1, so a translator in `:core`
-needs no dependency, which CONTRIBUTING requires of `airkast-core`, and every app gets DASH with
-no line of setup, which is the point of the three levels. Against it: `:core` is "the protocol",
-and a translator with live and multi-period handling is the largest piece of code outside the
-session. A `:dash` artifact (plain JVM, depending on `:core`) keeps `:core` small at the price of
-one line in every app and a default that `Airkast(context)` cannot add, since modules depend only
-on `:core`. The remux and transcode resolvers need media3 and MediaCodec, so they are an Android
-module either way, added by the app as `AirkastAudioSink` is.
+Where the translator lives was the main open decision; the owner chose `:dash` (decision 2). The
+MPD parser needs XML, and `javax.xml.parsers` (DOM) is in the JDK and in Android since API 1, so
+a translator in `:core` needs no dependency, which CONTRIBUTING requires of `airkast-core`, and
+every app gets DASH with no line of setup, which is the point of the three levels. Against it:
+`:core` is "the protocol", and a translator with live and multi-period handling is the largest
+piece of code outside the session. A `:dash` artifact (plain JVM, depending on `:core`) keeps
+`:core` small at the price of one line in every app and a default that `Airkast(context)` cannot
+add, since modules depend only on `:core`. With `:dash`, `DashResolver()` leaves the default list
+above, and an app adds it. The remux and transcode resolvers need media3 and MediaCodec, so they
+are an Android module either way, added by the app as `AirkastAudioSink` is.
 
 ### Level 3: `AirkastPlayer`
 
@@ -358,18 +360,20 @@ In this order. Step 3 needs no new code on the phone side beyond a test server.
 Proposed, for the owner to take:
 
 1. **Mirroring is out** until step 7 says otherwise.
-2. **The origin and the DASH translator go in `:core`**, with no new dependency; remux and
-   transcode go in an Android module later, as resolvers an app adds.
+2. **The DASH translator goes in a `:dash` artifact**, a plain JVM module depending on `:core`,
+   not in `:core` as first proposed: taken by the owner 2026-10-22. The origin and the resolver
+   seam stay in `:core`, so `UnsupportedMedia` and the resolver types have public constructors a
+   module can use. Remux and transcode go in an Android module later, as resolvers an app adds.
 3. **Resolvers run inside `load`**, not in `connect`, and the architecture page's seam text
    changes to match.
-4. **A `.mpd` fails fast first**: `MediaFormat.Dash` and `UnsupportedMedia` can land as a small
-   PR before the translator, so a DASH item fails at `load` instead of at `loadTimeout`.
+4. **A `.mpd` fails fast first**: `MediaFormat.Dash` and `UnsupportedMedia` land as a small
+   PR before the translator, so a DASH item fails at `load` instead of at `loadTimeout`. Built.
+5. **Names**: `UnsupportedMedia` and `ManifestUnreadable` are taken, and `MasterUnreadable` became
+   the latter (2026-10-22). `Origin`, `Resource`, `MediaResolver` and `ResolvedMedia` are still
+   open.
 
 Open:
 
-5. **Names**: `Origin`, `Resource`, `MediaResolver`, `ResolvedMedia`, `UnsupportedMedia`,
-   `ManifestUnreadable`, and whether `MasterUnreadable` becomes the latter, since both say the
-   same thing about a different manifest.
 6. **`Media.headers`** for a stream the app fetches with a token, used by the resolvers in proxy
    mode and by the master fetch, which ignores the app's headers today.
 7. **The default mode**: manifest-only, cheaper and blind to a CDN without CORS; or proxy, sure

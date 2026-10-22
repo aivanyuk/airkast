@@ -126,16 +126,17 @@ The protocol facts, with the receivers they were seen on, are in
   the stream it opened, and `:exoplayer`'s sink is one route. Buffered audio (type 103), PTP
   timing and a group of speakers are further implementations behind the same interface.
 - **`AirkastSession` is the protocol seam.** Another protocol is another implementation, picked
-  in `Airkast.connect` from what the receiver advertises and what the `Media` holds: AirPlay
-  video v1's `POST /play`, or a local file or DASH stream the sender serves over HTTP. A speaker
-  is not one: its audio comes from the app's player, through an `AudioStream`. Callers
+  in `Airkast.connect` from what the receiver advertises, such as AirPlay video v1's
+  `POST /play`. A speaker is not one: its audio comes from the app's player, through an
+  `AudioStream`. Nor is media the receiver cannot fetch, such as DASH or a file on the phone: the
+  protocol is the same, only the item changes, so it is a step inside `load`
+  ([design/sender-served-media.md](design/sender-served-media.md)). Until that step exists, `load`
+  refuses a `MediaFormat.Dash` item with `UnsupportedMedia` and sends nothing. Callers
   don't change, which is why neither the session nor the item is named for video. The
   `Compatibility` case it clears becomes `Supported` in the same change. With a second
   implementation, the choice becomes a list of factories on `Airkast.Builder`, as Retrofit's
   converter factories and Coil's components are, so an app can add its own; until then it is a
-  branch in `connect`. [design/sender-served-media.md](design/sender-served-media.md) plans the
-  local file and DASH case differently: not another session but a step inside `load`, with an
-  HTTP server in `:core` the receiver fetches from.
+  branch in `connect`.
 - **`Airkast.Builder.socketFactory` is the network seam.** `:core` opens every connection
   through the factory it returns for the receiver, so `:android` can refuse a connect without the
   local network permission and bind the session to a network without `:core` knowing Android.
