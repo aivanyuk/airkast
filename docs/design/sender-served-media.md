@@ -1,7 +1,8 @@
 # Casting what the receiver cannot fetch
 
-A design, 2026-10-19. Only the first step is built: `MediaFormat.Dash` and
-`AirkastException.UnsupportedMedia` (decision 4). It answers two questions the owner asked: what it
+A design, 2026-10-19. Built so far: `MediaFormat.Dash` and `AirkastException.UnsupportedMedia`
+(decision 4), and the origin, internal to `:core` until the resolvers make it public
+(`session/Origin.kt`). It answers two questions the owner asked: what it
 takes to cast media the receiver cannot load from its URL, MPEG-DASH first, and which formats
 that can cover. Each claim about a receiver or a player names where it comes from, and
 [What to verify](#what-to-verify) lists what has to be checked on a receiver before the design is
@@ -152,9 +153,9 @@ URL keeps the format its extension or MIME type gives, and a resolver serves it.
 
 ```kotlin
 /**
- * What a receiver fetches from the sender: an HTTP server on the address the control connection
- * uses, started when something is first published and stopped when nothing is. Every published
- * path sits under a random prefix, so another device on the network cannot guess it.
+ * What a receiver fetches from the sender: an HTTP server on the address the session's control
+ * connection uses, started when something is first published and stopped when nothing is. Every
+ * published path sits under a random prefix, so another device on the network cannot guess it.
  */
 public interface Origin {
     /** Publishes [resource] under [name] and returns the URL the receiver fetches it at. */
@@ -167,17 +168,18 @@ public interface Origin {
 public interface Resource {
     public val contentType: String
 
-    /** The length in bytes, or null when it is not known ahead, as for a proxied stream. */
-    public val length: Long?
-
-    /** The bytes, or the [range] of them the receiver asked for, which a file and a byte-range segment need. */
-    public fun open(range: LongRange?): InputStream
+    public fun open(): Content
 
     public companion object {
         public fun text(contentType: String, text: () -> String): Resource
         public fun file(file: File, contentType: String): Resource
         public fun proxy(url: String, headers: Map<String, String> = emptyMap()): Resource
     }
+}
+
+/** One request's bytes: their length, or null when it is not known ahead, as for a proxied stream. */
+public class Content(public val length: Long?, open: (offset: Long) -> InputStream) {
+    public fun from(offset: Long): InputStream
 }
 
 /** Turns a [Media] the receiver cannot fetch into one it can. Null when it does not handle [media]. */
@@ -211,9 +213,16 @@ The origin serves in the clear, over HTTP on the local network, as a `file` item
 CDN does. The random prefix keeps a path from being guessed, not from being read off the air; the
 guide says so. It answers only published paths, with 404 for the rest, sends
 `Access-Control-Allow-Origin: *` on everything, answers `OPTIONS`, `HEAD` and `Range` (206 and
-416), and takes several connections at once, since AVFoundation and hls.js open several. It is
-bound on every interface and the URL carries the control connection's local address, the one the
-receiver can reach; an app whose phone has two networks gets the right one without a bind.
+416), and takes several connections at once, since AVFoundation and hls.js open several. Each
+session has its own, bound to its control connection's local address, the one the receiver
+reached it from, as the timing responder and an audio stream's sockets are: it listens on the
+receiver's network alone, and an app whose phone has two networks gets the right one.
+
+The built `Resource` differs from the first draft, which had a `length` property and
+`open(range)`: a live playlist's length is known only once it is written, so one `open()` per
+request returns the `Content` whose length the range is checked against. A range the origin
+cannot serve as one, such as several ranges or an unknown length, gets the whole resource,
+which RFC 9110 allows; a resource that throws gets a 500.
 
 ### Level 2: `Airkast`
 
@@ -226,9 +235,9 @@ public class Builder {
 
 `Airkast(context)` adds a resolver for `content:` URIs, which needs a `ContentResolver`, as it
 adds the socket factory and the credential store. `copy { }` copies the list. The origin is the
-client's: one server, started on the first publish, stopped once the last `ResolvedMedia`
-withdraws, so a client with no served item holds no port. No `Airkast` lifecycle call is added
-for it.
+session's (decision 8): started on the first publish, stopped once the last `ResolvedMedia`
+withdraws and when the session closes, so a session with no served item holds no port. No
+`Airkast` lifecycle call is added for it.
 
 Where the translator lives was the main open decision; the owner chose `:dash` (decision 2). The
 MPD parser needs XML, and `javax.xml.parsers` (DOM) is in the JDK and in Android since API 1, so
@@ -369,8 +378,8 @@ Proposed, for the owner to take:
 4. **A `.mpd` fails fast first**: `MediaFormat.Dash` and `UnsupportedMedia` land as a small
    PR before the translator, so a DASH item fails at `load` instead of at `loadTimeout`. Built.
 5. **Names**: `UnsupportedMedia` and `ManifestUnreadable` are taken, and `MasterUnreadable` became
-   the latter (2026-10-22). `Origin`, `Resource`, `MediaResolver` and `ResolvedMedia` are still
-   open.
+   the latter (2026-10-22). `Origin` and `Resource` are taken too; `MediaResolver` and
+   `ResolvedMedia` are still open.
 
 Open:
 
@@ -378,7 +387,7 @@ Open:
    mode and by the master fetch, which ignores the app's headers today.
 7. **The default mode**: manifest-only, cheaper and blind to a CDN without CORS; or proxy, sure
    and twice the bandwidth.
-8. **One origin per client or per session**: one per client is less to start and stop; one per
-   session would let each bind to its receiver's interface alone.
+8. **One origin per session**, taken 2026-10-22: each binds to its receiver's interface alone,
+   where one per client would be less to start and stop.
 9. **A codec profile per receiver family now**, from `model` and `srcvers`, or one common profile
    until step 8 shows a difference.
