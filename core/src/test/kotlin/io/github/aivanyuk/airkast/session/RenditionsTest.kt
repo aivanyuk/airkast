@@ -120,7 +120,7 @@ class RenditionsTest {
         withSession { session ->
             session.load(Media(url("missing.m3u8")))
             val error =
-                assertThrows(AirkastException.MasterUnreadable::class.java) { runBlocking { session.renditions() } }
+                assertThrows(AirkastException.ManifestUnreadable::class.java) { runBlocking { session.renditions() } }
             assertThat(error.status).isEqualTo(404)
         }
 
@@ -129,7 +129,7 @@ class RenditionsTest {
         withSession { session ->
             session.load(Media(url("huge.m3u8")))
             val error =
-                assertThrows(AirkastException.MasterUnreadable::class.java) { runBlocking { session.renditions() } }
+                assertThrows(AirkastException.ManifestUnreadable::class.java) { runBlocking { session.renditions() } }
             assertThat(error.status).isNull()
             assertThat(error).hasMessageThat().contains("larger")
         }
@@ -138,7 +138,7 @@ class RenditionsTest {
     fun aBodyThatIsNotAPlaylistIsUnreadable() =
         withSession { session ->
             session.load(Media(url("page.m3u8")))
-            assertThrows(AirkastException.MasterUnreadable::class.java) { runBlocking { session.renditions() } }
+            assertThrows(AirkastException.ManifestUnreadable::class.java) { runBlocking { session.renditions() } }
         }
 
     @Test
@@ -146,7 +146,7 @@ class RenditionsTest {
         withSession(airkast.copy { requestTimeout = 500.milliseconds }) { session ->
             session.load(Media(url("slow.m3u8")))
             val error =
-                assertThrows(AirkastException.MasterUnreadable::class.java) { runBlocking { session.renditions() } }
+                assertThrows(AirkastException.ManifestUnreadable::class.java) { runBlocking { session.renditions() } }
             assertThat(error).hasCauseThat().isInstanceOf(SocketTimeoutException::class.java)
         }
 
@@ -156,7 +156,7 @@ class RenditionsTest {
             session.load(Media(url("trickle.m3u8")))
             val start = TimeSource.Monotonic.markNow()
             val error =
-                assertThrows(AirkastException.MasterUnreadable::class.java) { runBlocking { session.renditions() } }
+                assertThrows(AirkastException.ManifestUnreadable::class.java) { runBlocking { session.renditions() } }
             assertThat(error).hasMessageThat().contains("longer than")
             assertThat(start.elapsedNow()).isLessThan(2.seconds)
         }
@@ -166,7 +166,7 @@ class RenditionsTest {
         withSession { session ->
             session.load(Media(url("missing.m3u8")))
             repeat(2) {
-                assertThrows(AirkastException.MasterUnreadable::class.java) { runBlocking { session.renditions() } }
+                assertThrows(AirkastException.ManifestUnreadable::class.java) { runBlocking { session.renditions() } }
             }
             assertThat(fetches.get()).isEqualTo(2)
         }

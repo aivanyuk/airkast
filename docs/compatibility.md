@@ -136,7 +136,7 @@ each receiver playing it. [The guide](guide.md#formats) explains formats from th
 | --- | --- | --- |
 | HLS | `streaming` | Plays on the LG CX and the Mac, with tracks and buffered ranges on the LG. HLS loaded as `file` plays on the LG too, without them. Both play fragmented MP4 segments (`EXT-X-MAP`, byte ranges): every playlist of Apple's `bipbop_adv_example_hevc` is one, and the LG plays the H.264-only `img_bipbop_adv_example_fmp4` (2026-10-21). MPEG-TS segments are not checked on either |
 | MP4, MOV, MP3, AAC, M4A and other files | `file` | Plays on the LG CX: an MP4 and an MP3, from a server that sends no CORS headers, with seek, pause and play, and the MP3 to its end. No tracks, and no buffered or seekable ranges. Not checked on a Mac yet; send-airplay2 casts MP4 files as `file` to an Apple TV (tvOS 26.6) and a Mac, and reports them playing. The live test plays an MP4 and an MP3 file when run (`AIRKAST_FILE_URL`, `AIRKAST_AUDIO_URL`) |
-| MPEG-DASH | none | Not played. The LG's player is hls.js, and the Mac's and the Apple TV's is AVFoundation, which plays HLS and files. A sender would have to rewrite the manifest as HLS and serve it |
+| MPEG-DASH | none | Not played. The LG's player is hls.js, and the Mac's and the Apple TV's is AVFoundation, which plays HLS and files. `MediaFormat.Dash` sends nothing: `load` throws `UnsupportedMedia`. A sender would have to rewrite the manifest as HLS and serve it ([design](design/sender-served-media.md)) |
 
 A speaker that takes AirPlay audio only reads as `NoVideo`. It plays what the sender decodes and
 streams itself, which `Airkast.connectAudio` does: see [Audio streams](#audio-streams).

@@ -190,6 +190,9 @@ internal class DefaultVideoSession private constructor(
     }
 
     private suspend fun insert(item: Media) {
+        val mediaType =
+            item.format.wire
+                ?: throw AirkastException.UnsupportedMedia(item.format, "No receiver loads ${item.format} media")
         val id = UUID.randomUUID().toString().uppercase()
         val taken = CompletableDeferred<Unit>()
         itemId = id
@@ -203,7 +206,7 @@ internal class DefaultVideoSession private constructor(
                     "item" to
                         mapOf(
                             "uuid" to id,
-                            "mediaType" to item.format.wire,
+                            "mediaType" to mediaType,
                             "Content-Location" to item.url,
                             "Start-Position" to cmTime(item.startAt),
                         ),

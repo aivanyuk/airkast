@@ -679,7 +679,7 @@ and with several ([compatibility](compatibility.md#lg-cx-webos-046400)).
 
 The session reads the master over HTTP once per `load`, on the phone's default network, and
 waits `requestTimeout` for it. The receiver fetches the same URL from its own address, so a URL that
-only the receiver may read fails here with `MasterUnreadable`, and still plays on the receiver. A `File` item has no renditions, and `renditions()` returns
+only the receiver may read fails here with `ManifestUnreadable`, and still plays on the receiver. A `File` item has no renditions, and `renditions()` returns
 an empty list for it.
 
 All times are `kotlin.time.Duration` values. A volume runs from 0 to 1.
@@ -805,7 +805,8 @@ the player's looper.
 | `Timeout` | The receiver did not answer in time. The session stays open, and ends only if the receiver is still silent at the next request. |
 | `Disconnected` | The connection is gone. `reason` says how: `ClosedByReceiver` when the receiver hung up, as for another sender, `ConnectionFailed` when the network failed or the receiver went silent, `ClosedByApp` after `close()`. |
 | `UnexpectedReply` | The receiver answered with something airkast cannot read. |
-| `MasterUnreadable` | `renditions()` could not read the HLS master: its server answered with another status than 200 (`status` holds it), did not send it within `requestTimeout`, sent more than 1 MB, or sent something that is not a playlist. |
+| `UnsupportedMedia` | `load` was given an item in a format no receiver loads, such as `MediaFormat.Dash` (`format` holds it). Nothing went to the receiver. `AirkastPlayer` reports it as `ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED`. |
+| `ManifestUnreadable` | `renditions()` could not read the HLS master: its server answered with another status than 200 (`status` holds it), did not send it within `requestTimeout`, sent more than 1 MB, or sent something that is not a playlist. |
 | `DiscoveryFailed` | Scanning for receivers could not start. `code` is the platform's error. |
 
 ## Threading
@@ -835,7 +836,7 @@ network setup.
 ### Formats
 
 The receiver loads an HLS stream and a file in different ways, so `Media.format` says which one
-the URL is. `MediaFormat.of(url, mimeType)` reads it from a MIME type when one is given, such as a
+the URL is, or that no receiver loads it. `MediaFormat.of(url, mimeType)` reads it from a MIME type when one is given, such as a
 media3 item's or a server's `Content-Type`, then from the extension of the URL's path, and picks
 `Hls` when neither says. `AirkastPlayer` reads it from each media item that way.
 
@@ -843,7 +844,7 @@ media3 item's or a server's `Content-Type`, then from the extension of the URL's
 | --- | --- | --- |
 | An HLS playlist (`.m3u8`) | `Hls` | Checked on the LG CX and a Mac. The receiver reports buffered ranges, and reports and switches tracks. |
 | An MP4 or MOV video file, or an MP3, AAC or M4A audio file | `File` | Loaded as a file, as other AirPlay senders load them. Checked on the LG CX, not on a Mac yet. The receiver reports no tracks, and the LG no buffered or seekable ranges. |
-| MPEG-DASH (`.mpd`) | none | Not played. The receivers' players take HLS and files, not DASH. |
+| MPEG-DASH (`.mpd`, `application/dash+xml`) | `Dash` | Not played. The receivers' players take HLS and files, not DASH, so `load` throws `UnsupportedMedia` at once and sends the receiver nothing; what it played before plays on. |
 
 An audio file goes to a TV or a Mac the same way as a video file. A speaker, such as a soundbar,
 is `Compatibility.NoVideo`: it takes audio only as a stream the sender decodes and sends itself

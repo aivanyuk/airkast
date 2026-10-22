@@ -17,11 +17,12 @@ public class Media(
 )
 
 /**
- * How a receiver loads a [Media]: as an HLS stream, or as a file it downloads while it plays.
- * New formats may join in a minor release. docs/compatibility.md has what each receiver plays.
+ * How a receiver loads a [Media]: as an HLS stream, or as a file it downloads while it plays. A
+ * format such as [Dash] names media no receiver loads, so that `load` can say so. New formats may join in a minor release. docs/compatibility.md has what each receiver plays.
  */
 public enum class MediaFormat(
-    internal val wire: String,
+    /** The `mediaType` a receiver loads the item as, or null for a format no receiver loads. */
+    internal val wire: String?,
 ) {
     /**
      * An HLS playlist, loaded as `streaming`. The LG reports what it has buffered, and reports and
@@ -35,18 +36,26 @@ public enum class MediaFormat(
      * seekable ranges.
      */
     File("file"),
+
+    /**
+     * An MPEG-DASH presentation (`.mpd`, `application/dash+xml`). No receiver loads one, so
+     * [AirkastSession.load] throws [AirkastException.UnsupportedMedia] at once, rather than wait
+     * out the load timeout for an item the receiver never takes.
+     */
+    Dash(null),
     ;
 
     public companion object {
         private val HLS_TYPES =
             setOf("application/vnd.apple.mpegurl", "application/x-mpegurl", "audio/mpegurl", "audio/x-mpegurl")
+        private const val DASH_TYPE = "application/dash+xml"
         private val HLS_EXTENSIONS = setOf("m3u8", "m3u")
         private val FILE_EXTENSIONS = setOf("mp4", "m4v", "mov", "m4a", "m4b", "mp3", "aac", "wav", "flac")
 
         /**
-         * The format of [url]: from [mimeType] when it is HLS's or any `video/` or `audio/` type,
-         * as a media3 `MediaItem` or an HTTP `Content-Type` gives it, and from the extension of
-         * the URL's path otherwise. [Hls] when neither says.
+         * The format of [url]: from [mimeType] when it is HLS's, DASH's or any `video/` or
+         * `audio/` type, as a media3 `MediaItem` or an HTTP `Content-Type` gives it, and from the
+         * extension of the URL's path otherwise. [Hls] when neither says.
          */
         public fun of(
             url: String,
@@ -57,6 +66,7 @@ public enum class MediaFormat(
             val type = mimeType.substringBefore(';').trim().lowercase()
             return when {
                 type in HLS_TYPES -> Hls
+                type == DASH_TYPE -> Dash
                 type.startsWith("video/") || type.startsWith("audio/") -> File
                 else -> null
             }
@@ -67,6 +77,7 @@ public enum class MediaFormat(
             val extension = name.substringAfterLast('.', "").lowercase()
             return when (extension) {
                 in HLS_EXTENSIONS -> Hls
+                "mpd" -> Dash
                 in FILE_EXTENSIONS -> File
                 else -> null
             }

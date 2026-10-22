@@ -3,6 +3,7 @@ package io.github.aivanyuk.airkast.media3
 import android.os.Looper
 import android.os.PowerManager
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.test.core.app.ApplicationProvider
@@ -136,6 +137,30 @@ class AirkastPlayerTest {
         )
         idle()
         assertThat(fake.loaded?.format).isEqualTo(MediaFormat.File)
+    }
+
+    @Test
+    fun aDashItemLoadsAsDash() {
+        player.session = fake
+        player.setMediaItem(
+            MediaItem
+                .Builder()
+                .setUri("https://example.com/play?id=7")
+                .setMimeType(MimeTypes.APPLICATION_MPD)
+                .build(),
+        )
+        idle()
+        assertThat(fake.loaded?.format).isEqualTo(MediaFormat.Dash)
+    }
+
+    @Test
+    fun anUnsupportedItemIsAnUnsupportedContainer() {
+        fake.loadError = AirkastException.UnsupportedMedia(MediaFormat.Dash, "No receiver loads Dash media")
+        player.session = fake
+        player.setMediaItem(MediaItem.fromUri("https://example.com/dash.mpd"))
+        idle()
+        assertThat(player.playbackState).isEqualTo(Player.STATE_IDLE)
+        assertThat(player.playerError?.errorCode).isEqualTo(PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED)
     }
 
     @Test

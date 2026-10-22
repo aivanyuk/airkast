@@ -184,7 +184,7 @@ class TracksTest {
 
     @Test
     fun anUnreadableMasterLeavesNoTracksAndTheReceiversPicks() {
-        fake.renditionsError = AirkastException.MasterUnreadable("The master playlist answered 403", status = 403)
+        fake.renditionsError = AirkastException.ManifestUnreadable("The master playlist answered 403", status = 403)
         player.trackSelectionParameters =
             player.trackSelectionParameters
                 .buildUpon()

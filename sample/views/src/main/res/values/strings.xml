@@ -19,6 +19,7 @@
     <string name="format_auto">Auto: %1$s</string>
     <string name="format_hls">HLS</string>
     <string name="format_file">File</string>
+    <string name="format_dash">DASH</string>
     <string name="play_here">Play on this phone</string>
     <string name="typed_in">Typed in</string>
 

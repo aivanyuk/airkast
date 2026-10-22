@@ -1047,6 +1047,10 @@ internal class SessionPlayer(
                         PlaybackException.ERROR_CODE_IO_NO_PERMISSION
                     }
 
+                    is AirkastException.UnsupportedMedia -> {
+                        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
+                    }
+
                     is AirkastException.Rejected,
                     is AirkastException.PairingFailed,
                     is AirkastException.SecretRejected,

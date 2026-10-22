@@ -84,6 +84,19 @@ class ReportingTest {
         }
 
     @Test
+    fun aDashItemReportsItsFailedLoad() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                airkast().connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    runCatching { session.load(Media("https://example.com/manifest.mpd")) }
+                }
+                val failed = events.filterIsInstance<Event.LoadFailed>().single()
+                assertThat(failed.failure).isInstanceOf(AirkastException.UnsupportedMedia::class.java)
+                assertThat(failed.took).isLessThan(1.seconds)
+            }
+        }
+
+    @Test
     fun aSessionTheReceiverClosesEndsWithItsReasonAndNoError() =
         runBlocking {
             FakeReceiver().use { fake ->

@@ -127,6 +127,22 @@ class SessionTest {
         }
 
     @Test
+    fun aDashItemFailsAtOnceAndLeavesTheItemBeforeIt() =
+        runBlocking {
+            FakeReceiver().use { fake ->
+                airkast.connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    session.load(Media("https://example.com/a.m3u8"))
+                    val error =
+                        assertThrows(AirkastException.UnsupportedMedia::class.java) {
+                            runBlocking { session.load(Media("https://example.com/manifest.mpd")) }
+                        }
+                    assertThat(error.format).isEqualTo(MediaFormat.Dash)
+                    assertThat(fake.commands.count { it["type"] == "insertPlayQueueItem" }).isEqualTo(1)
+                }
+            }
+        }
+
+    @Test
     fun aReceiverThatNamesTheNewItemOnlyInOtherNotificationsTakesItAllTheSame() =
         runBlocking<Unit> {
             FakeReceiver(namesTheNewItem = false).use { fake ->
