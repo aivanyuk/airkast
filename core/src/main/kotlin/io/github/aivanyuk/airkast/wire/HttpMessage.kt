@@ -58,6 +58,7 @@ internal class HttpMessage(
                     }
             }
             val lines = head.toString(Charsets.ISO_8859_1.name()).split("\r\n").filter { it.isNotEmpty() }
+            require(lines.isNotEmpty()) { "Message head of blank lines" }
             val headers =
                 lines.drop(1).mapNotNull { line ->
                     val colon = line.indexOf(':')
