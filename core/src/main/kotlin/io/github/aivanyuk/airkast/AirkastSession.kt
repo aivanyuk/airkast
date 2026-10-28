@@ -24,9 +24,13 @@ public interface AirkastSession : AutoCloseable {
 
     /**
      * Plays [item], replacing whatever plays. Returns once the receiver has taken the item; throws
-     * [AirkastException.Timeout] when it stays silent, which a reconnect usually fixes, and
-     * [AirkastException.UnsupportedMedia] at once, sending nothing, for a [MediaFormat] no receiver
-     * loads.
+     * [AirkastException.Timeout] when it stays silent, which a reconnect usually fixes.
+     *
+     * An item the receiver cannot fetch as given, such as a `file:` URL, goes through
+     * [Airkast.resolvers] first, and the receiver loads what the first one that handles it serves
+     * from the phone. One none of them serves, in a [MediaFormat] no receiver loads or at a URL
+     * that is not `http` or `https`, throws [AirkastException.UnsupportedMedia] at once, and the
+     * receiver gets nothing.
      */
     public suspend fun load(item: Media)
 

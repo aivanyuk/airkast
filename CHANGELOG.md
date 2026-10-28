@@ -8,6 +8,15 @@ caller sees adds its line under "Unreleased".
 
 ### Added
 
+- A file on the phone casts: `load` serves a `file:` URL to the receiver from the phone, over
+  plain HTTP with byte ranges, through `LocalFileResolver`, and `AirkastPlayer` does so for a
+  media item with a `file:` URI. `Airkast.Builder.resolvers` lists what `load` asks to serve an
+  item the receiver cannot fetch, `LocalFileResolver` by default; a `MediaResolver` of an app's
+  own publishes a `Resource` on the session's `Origin` and returns a `ResolvedMedia`, which the
+  session closes once the receiver moves on.
+- `load` throws `UnsupportedMedia` at once for an item at a URL that is not `http` or `https`,
+  such as a `content:` URI, that no resolver serves, where it sent it and failed with `Timeout`.
+
 - `MediaFormat.Dash`, which `MediaFormat.of` reads from a `.mpd` URL or the
   `application/dash+xml` MIME type. No receiver loads DASH, so `load` throws the new
   `AirkastException.UnsupportedMedia` at once and sends the receiver nothing, where it sent the

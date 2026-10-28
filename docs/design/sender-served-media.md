@@ -1,8 +1,8 @@
 # Casting what the receiver cannot fetch
 
 A design, 2026-10-19. Built so far: `MediaFormat.Dash` and `AirkastException.UnsupportedMedia`
-(decision 4), and the origin, internal to `:core` until the resolvers make it public
-(`session/Origin.kt`). It answers two questions the owner asked: what it
+(decision 4); the origin, one per session (`session/HttpOrigin.kt`); and the resolver seam,
+`Airkast.Builder.resolvers` with `LocalFileResolver` for `file:` URLs. It answers two questions the owner asked: what it
 takes to cast media the receiver cannot load from its URL, MPEG-DASH first, and which formats
 that can cover. Each claim about a receiver or a player names where it comes from, and
 [What to verify](#what-to-verify) lists what has to be checked on a receiver before the design is
@@ -378,8 +378,10 @@ Proposed, for the owner to take:
 4. **A `.mpd` fails fast first**: `MediaFormat.Dash` and `UnsupportedMedia` land as a small
    PR before the translator, so a DASH item fails at `load` instead of at `loadTimeout`. Built.
 5. **Names**: `UnsupportedMedia` and `ManifestUnreadable` are taken, and `MasterUnreadable` became
-   the latter (2026-10-22). `Origin` and `Resource` are taken too; `MediaResolver` and
-   `ResolvedMedia` are still open.
+   the latter (2026-10-22). `Origin`, `Resource`, `MediaResolver` and `ResolvedMedia` are
+   taken too, and `resolvers` is a read-only `List` on the builder, not the `MutableList` drafted
+   above. `ResolvedMedia.renditions` is null, not empty, when the resolver wrote no master, so
+   the session reads the master of what it serves as for any item.
 
 Open:
 

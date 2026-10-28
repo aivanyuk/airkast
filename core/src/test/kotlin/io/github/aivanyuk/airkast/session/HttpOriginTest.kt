@@ -1,6 +1,8 @@
 package io.github.aivanyuk.airkast.session
 
 import com.google.common.truth.Truth.assertThat
+import io.github.aivanyuk.airkast.Content
+import io.github.aivanyuk.airkast.Resource
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Rule
@@ -17,11 +19,11 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /** The origin, fetched over loopback as a receiver fetches it. */
-class OriginTest {
+class HttpOriginTest {
     @get:Rule
     val folder = TemporaryFolder()
 
-    private val origin = Origin(InetAddress.getLoopbackAddress())
+    private val origin = HttpOrigin(InetAddress.getLoopbackAddress())
 
     @After
     fun close() = origin.close()
@@ -220,8 +222,8 @@ class OriginTest {
     @Test
     fun anIpv6AddressGoesInBrackets() {
         val address = Inet6Address.getByAddress(null, InetAddress.getByName("fe80::1").address, 3)
-        assertThat(Origin.host(address)).isEqualTo("[fe80:0:0:0:0:0:0:1%253]")
-        assertThat(Origin.host(InetAddress.getByName("192.168.1.4"))).isEqualTo("192.168.1.4")
+        assertThat(HttpOrigin.host(address)).isEqualTo("[fe80:0:0:0:0:0:0:1%253]")
+        assertThat(HttpOrigin.host(InetAddress.getByName("192.168.1.4"))).isEqualTo("192.168.1.4")
     }
 
     @Test

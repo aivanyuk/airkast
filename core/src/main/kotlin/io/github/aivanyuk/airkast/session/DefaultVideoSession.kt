@@ -15,6 +15,7 @@ import io.github.aivanyuk.airkast.Reason
 import io.github.aivanyuk.airkast.Receiver
 import io.github.aivanyuk.airkast.ReceiverEvent
 import io.github.aivanyuk.airkast.Rendition
+import io.github.aivanyuk.airkast.ResolvedMedia
 import io.github.aivanyuk.airkast.Secret
 import io.github.aivanyuk.airkast.SenderIdentity
 import io.github.aivanyuk.airkast.Track
@@ -22,6 +23,7 @@ import io.github.aivanyuk.airkast.TrackKind
 import io.github.aivanyuk.airkast.crypto.Hkdf
 import io.github.aivanyuk.airkast.wire.BinaryPlist
 import io.github.aivanyuk.airkast.wire.HttpMessage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -96,6 +98,7 @@ internal class DefaultVideoSession private constructor(
     private val endReason = AtomicReference<DisconnectReason?>(null)
     private var eventChannel: EventChannel? = null
     private var streamId = 0L
+    private val origin = HttpOrigin(control.localAddress, log.tagged("origin"))
     private val rtspUri = "rtsp://${control.localAddress.hostAddress}/${SecureRandom().nextInt() and Int.MAX_VALUE}"
 
     @Volatile
@@ -190,15 +193,107 @@ internal class DefaultVideoSession private constructor(
     }
 
     private suspend fun insert(item: Media) {
+        val resolved = resolve(item)
+        val media = resolved?.media ?: item
         val mediaType =
-            item.format.wire
-                ?: throw AirkastException.UnsupportedMedia(item.format, "No receiver loads ${item.format} media")
+            try {
+                fetchable(media)
+            } catch (e: AirkastException) {
+                resolved?.let(::release)
+                throw e
+            }
         val id = UUID.randomUUID().toString().uppercase()
         val taken = CompletableDeferred<Unit>()
+        val previous = loaded
+        val current = Loaded(media, resolved)
         itemId = id
         itemTaken = taken
-        loaded = Loaded(item)
+        loaded = current
         paused = false
+        var moved = false
+        try {
+            send(id, media, mediaType)
+            withTimeoutOrNull(options.loadTimeout) { taken.await() }
+                ?: throw AirkastException.Timeout("The receiver did not take the item")
+            moved = true
+        } finally {
+            val earlier = previous?.take().orEmpty()
+            if (moved) {
+                earlier.forEach(::release)
+            } else {
+                // A receiver that did not take the new item may still play the one before, so it stays served,
+                // unless the session ended meanwhile, after end() took what the current item held.
+                current.keep(earlier)
+                if (closed.get()) current.take().forEach(::release)
+            }
+        }
+    }
+
+    /** What the first of the client's resolvers that handles [item] returns, or null when none does. */
+    private suspend fun resolve(item: Media): ResolvedMedia? {
+        if (options.resolvers.isEmpty()) return null
+        var resolved: ResolvedMedia? = null
+        try {
+            return withContext(Dispatchers.IO) {
+                for (resolver in options.resolvers) {
+                    resolved = resolving(item) { resolver.resolve(item, receiver, origin) } ?: continue
+                    log.debug { "${resolver::class.simpleName ?: "a resolver"} resolved the item" }
+                    break
+                }
+                resolved
+            }
+        } catch (e: CancellationException) {
+            // withContext drops what it returns when the caller is cancelled meanwhile.
+            resolved?.let(::release)
+            throw e
+        }
+    }
+
+    /** What [resolve] returns for [item], with any failure but cancellation as an [AirkastException]. */
+    private suspend fun resolving(
+        item: Media,
+        resolve: suspend () -> ResolvedMedia?,
+    ): ResolvedMedia? =
+        try {
+            resolve()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: AirkastException) {
+            throw e
+        } catch (e: Exception) {
+            // The origin refuses a publish once the session has closed it.
+            if (closed.get()) throw ended(e)
+            throw AirkastException.UnsupportedMedia(item.format, "A resolver could not serve the item", e)
+        }
+
+    /** The `mediaType` [media] loads as, or why the receiver cannot fetch it. */
+    private fun fetchable(media: Media): String {
+        val wire =
+            media.format.wire
+                ?: throw AirkastException.UnsupportedMedia(media.format, "No receiver loads ${media.format} media")
+        val scheme = media.url.substringBefore(':', "").lowercase()
+        if (scheme != "http" && scheme != "https") {
+            throw AirkastException.UnsupportedMedia(
+                media.format,
+                "The receiver cannot fetch a${if (scheme.isEmpty()) " relative" else " $scheme:"} URL, and no resolver serves it",
+            )
+        }
+        return wire
+    }
+
+    private fun release(resolved: ResolvedMedia) {
+        try {
+            resolved.close()
+        } catch (e: Exception) {
+            log.warn(e) { "the resolved item did not close" }
+        }
+    }
+
+    private suspend fun send(
+        id: String,
+        item: Media,
+        mediaType: String,
+    ) {
         io {
             command(
                 mapOf(
@@ -223,8 +318,6 @@ internal class DefaultVideoSession private constructor(
             command(mapOf("type" to "setProperty", "property" to "actionAtItemEnd", "value" to 1L))
             command(mapOf("type" to "setRate", "rate" to 1.0))
         }
-        withTimeoutOrNull(options.loadTimeout) { taken.await() }
-            ?: throw AirkastException.Timeout("The receiver did not take the item")
     }
 
     override suspend fun play() {
@@ -347,6 +440,7 @@ internal class DefaultVideoSession private constructor(
     override suspend fun stop() {
         paused = false
         io { command(mapOf("type" to "stop")) }
+        loaded?.take()?.forEach(::release)
     }
 
     override fun close() {
@@ -501,6 +595,8 @@ internal class DefaultVideoSession private constructor(
         runCatching { eventChannel?.close() }
         runCatching { control.close() }
         runCatching { timing?.close() }
+        loaded?.take()?.forEach(::release)
+        origin.close()
         scope.cancel()
         val lasted = opened?.elapsedNow() ?: return error
         val failure = if (byApp) null else error
@@ -532,9 +628,20 @@ internal class DefaultVideoSession private constructor(
 
     private class Loaded(
         val media: Media,
+        resolved: ResolvedMedia?,
     ) {
         val lock = Mutex()
-        var renditions: List<Rendition>? = null
+        var renditions: List<Rendition>? = resolved?.renditions
+
+        /**
+         * What a resolver served the item as, and the items before it a failed load left served,
+         * until [take] hands them over to be closed.
+         */
+        private val serving = mutableListOf<ResolvedMedia>().apply { resolved?.let(::add) }
+
+        fun take(): List<ResolvedMedia> = synchronized(serving) { serving.toList().also { serving.clear() } }
+
+        fun keep(earlier: List<ResolvedMedia>) = synchronized(serving) { serving += earlier }
     }
 
     companion object {

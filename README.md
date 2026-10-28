@@ -36,7 +36,9 @@ Before you adopt it, check these limitations:
   [docs/compatibility.md](docs/compatibility.md) lists every check.
 - **A TV must reach the URL itself.** airkast does not mirror the screen, and streams only audio
   itself. It loads HLS streams and MP4, MP3 and AAC files, files so far checked on the LG only,
-  and MPEG-DASH does not play ([formats](docs/guide.md#formats)). The LG plays HLS in a web page,
+  and MPEG-DASH does not play ([formats](docs/guide.md#formats)). A file on the phone is served
+  to the TV from the phone ([serve media from the phone](docs/guide.md#serve-media-from-the-phone)),
+  not yet checked on a receiver. The LG plays HLS in a web page,
   so the server must send CORS headers for every playlist and segment. Files play without them.
 - **Some receivers are not supported yet:**
   - receivers that let in only their owner's Apple devices, which includes a Mac at its default
@@ -295,6 +297,18 @@ extra. A sample that is already open takes the new URL too:
 
 ```bash
 adb shell am start -n io.github.aivanyuk.airkast.sample.compose/.MainActivity --es url https://example.com/master.m3u8
+```
+
+A file on the phone casts the same way, from a `file:` URL: the player serves it to the TV
+([serve media from the phone](docs/guide.md#serve-media-from-the-phone)). Put it in the sample's
+own storage, which it reads without a permission, and pass its URL:
+
+```bash
+adb push film.mp4 /sdcard/Android/data/io.github.aivanyuk.airkast.sample.compose/files/film.mp4
+```
+
+```bash
+adb shell am start -n io.github.aivanyuk.airkast.sample.compose/.MainActivity --es url file:///sdcard/Android/data/io.github.aivanyuk.airkast.sample.compose/files/film.mp4
 ```
 
 ## Documentation
