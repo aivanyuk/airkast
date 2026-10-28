@@ -178,6 +178,59 @@ class ResolverTest {
     }
 
     @Test
+    fun anotherExceptionFromAResolverIsAnAirkastException() {
+        val broken = MediaResolver { _, _, _ -> throw java.io.IOException("no socket") }
+        val reported = CopyOnWriteArrayList<Airkast.Event>()
+        val client = airkast.copy { resolvers = listOf(broken) }.copy { eventListener = { reported += it } }
+        withSession(client) { session, fake ->
+            val error =
+                assertThrows(AirkastException.UnsupportedMedia::class.java) {
+                    runBlocking { session.load(Media("https://example.com/a.m3u8")) }
+                }
+            assertThat(error.cause).hasMessageThat().isEqualTo("no socket")
+            assertThat(reported.filterIsInstance<Airkast.Event.LoadFailed>().single().failure).isSameInstanceAs(error)
+            assertThat(fake.loadedItems()).isEmpty()
+        }
+    }
+
+    @Test
+    fun aPublishOnAClosedSessionIsItsDisconnect() {
+        var session: AirkastSession? = null
+        val late =
+            MediaResolver { _, _, origin ->
+                session!!.close()
+                origin.publish("late.m3u8", Resource.text("application/vnd.apple.mpegurl") { "" })
+                null
+            }
+        withSession(airkast.copy { resolvers = listOf(late) }) { opened, _ ->
+            session = opened
+            assertThrows(AirkastException.Disconnected::class.java) {
+                runBlocking { opened.load(Media("https://example.com/a.m3u8")) }
+            }
+        }
+    }
+
+    @Test
+    fun aLoadTheReceiverDoesNotTakeKeepsServingTheItemBefore() {
+        val client = airkast.copy { resolvers = listOf(playlists) }
+        FakeReceiver(takesItems = false).use { fake ->
+            runBlocking {
+                client.connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    for (name in listOf("one", "two")) {
+                        val load = runCatching { session.load(Media("resolve:$name")) }
+                        assertThat(load.exceptionOrNull()).isInstanceOf(AirkastException.Timeout::class.java)
+                    }
+                    val first = fake.loadedItems().first()["Content-Location"] as String
+                    assertThat(closed).isEmpty()
+                    assertThat(status(first)).isEqualTo(200)
+                    session.stop()
+                    assertThat(closed).containsExactly("two", "one")
+                }
+            }
+        }
+    }
+
+    @Test
     fun aResolvedItemNoReceiverLoadsIsClosedAndRefused() {
         val dash =
             MediaResolver { media, _, _ ->

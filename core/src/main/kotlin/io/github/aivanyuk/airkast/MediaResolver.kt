@@ -14,7 +14,9 @@ public fun interface MediaResolver {
     /**
      * What the receiver loads in place of [media], or null when this resolver does not handle it.
      * It runs on an I/O thread, and may fetch; the time counts in [Airkast.Event.Loaded.took]. It
-     * throws an [AirkastException] for media it handles but cannot serve, which fails the load.
+     * throws an [AirkastException] for media it handles but cannot serve, which fails the load;
+     * `load` throws any other exception as [AirkastException.UnsupportedMedia] with it as the
+     * cause, or as [AirkastException.Disconnected] once the session has ended.
      */
     public suspend fun resolve(
         media: Media,
@@ -25,8 +27,9 @@ public fun interface MediaResolver {
 
 /**
  * What the receiver loads in place of what the app gave. The session closes it once the receiver
- * has moved on: after the next [AirkastSession.load], on [AirkastSession.stop], and when the
- * session ends. [close] withdraws what the resolver published.
+ * has moved on: after the receiver takes the next [AirkastSession.load], on
+ * [AirkastSession.stop], and when the session ends. A load the receiver does not take leaves it
+ * open, since the receiver may still play it. [close] withdraws what the resolver published.
  */
 public interface ResolvedMedia : AutoCloseable {
     /** The item the receiver gets, at a URL it can fetch. */

@@ -218,7 +218,8 @@ public final class io/github/aivanyuk/airkast/AirkastException$Unreachable : io/
 }
 
 public final class io/github/aivanyuk/airkast/AirkastException$UnsupportedMedia : io/github/aivanyuk/airkast/AirkastException {
-	public fun <init> (Lio/github/aivanyuk/airkast/MediaFormat;Ljava/lang/String;)V
+	public fun <init> (Lio/github/aivanyuk/airkast/MediaFormat;Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Lio/github/aivanyuk/airkast/MediaFormat;Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getFormat ()Lio/github/aivanyuk/airkast/MediaFormat;
 }
 

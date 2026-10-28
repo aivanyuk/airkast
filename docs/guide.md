@@ -869,7 +869,8 @@ session.load(Media(File(context.filesDir, "film.mp4").toURI().toString()))
 
 `AirkastPlayer` does the same for a media item with a `file:` URI. The file is served with the
 byte ranges the receiver asks for, so it seeks, and withdrawn once the receiver moves on: after
-the next `load`, on `stop()`, and when the session ends. Until then, the phone has to stay on the
+it takes the next `load`, on `stop()`, and when the session ends. A `load` the receiver does not
+take leaves the file served, since the receiver may still be playing it. Until then, the phone has to stay on the
 network and awake: `AirkastPlayer` holds a wake lock and a Wi-Fi lock while an item is on the
 receiver, unless `keepAwake` is off, and an app that drives a session itself holds its own.
 
@@ -881,7 +882,8 @@ it off the air. A file the app cannot read fails the load with `UnsupportedMedia
 A resolver of your own handles what the built-in ones do not. It returns null for media it leaves
 alone, and otherwise publishes what the receiver needs and returns a `ResolvedMedia`, whose
 `close()` withdraws it. It runs on an I/O thread, and throws an `AirkastException` for media it
-handles but cannot serve. In this example, `writePlaylist(name)` stands for the app's own
+handles but cannot serve; any other exception it throws fails the load as `UnsupportedMedia`,
+with that exception as the cause. In this example, `writePlaylist(name)` stands for the app's own
 function that writes an HLS playlist as text:
 
 ```kotlin

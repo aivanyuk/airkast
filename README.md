@@ -299,6 +299,18 @@ extra. A sample that is already open takes the new URL too:
 adb shell am start -n io.github.aivanyuk.airkast.sample.compose/.MainActivity --es url https://example.com/master.m3u8
 ```
 
+A file on the phone casts the same way, from a `file:` URL: the player serves it to the TV
+([serve media from the phone](docs/guide.md#serve-media-from-the-phone)). Put it in the sample's
+own storage, which it reads without a permission, and pass its URL:
+
+```bash
+adb push film.mp4 /sdcard/Android/data/io.github.aivanyuk.airkast.sample.compose/files/film.mp4
+```
+
+```bash
+adb shell am start -n io.github.aivanyuk.airkast.sample.compose/.MainActivity --es url file:///sdcard/Android/data/io.github.aivanyuk.airkast.sample.compose/files/film.mp4
+```
+
 ## Documentation
 
 - [docs/guide.md](docs/guide.md): the full usage guide: the client's options, pairing, the

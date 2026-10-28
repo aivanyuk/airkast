@@ -205,17 +205,21 @@ internal class DefaultVideoSession private constructor(
         val id = UUID.randomUUID().toString().uppercase()
         val taken = CompletableDeferred<Unit>()
         val previous = loaded
+        val current = Loaded(media, resolved)
         itemId = id
         itemTaken = taken
-        loaded = Loaded(media, resolved)
+        loaded = current
         paused = false
+        var moved = false
         try {
             send(id, media, mediaType)
             withTimeoutOrNull(options.loadTimeout) { taken.await() }
                 ?: throw AirkastException.Timeout("The receiver did not take the item")
+            moved = true
         } finally {
-            // The receiver has moved on from it, or the session is ending.
-            previous?.take()?.let(::release)
+            val earlier = previous?.take().orEmpty()
+            // A receiver that did not take the new item may still play the one before, so it stays served.
+            if (moved) earlier.forEach(::release) else current.keep(earlier)
         }
     }
 
@@ -226,7 +230,7 @@ internal class DefaultVideoSession private constructor(
         try {
             return withContext(Dispatchers.IO) {
                 for (resolver in options.resolvers) {
-                    resolved = resolver.resolve(item, receiver, origin) ?: continue
+                    resolved = resolving(item) { resolver.resolve(item, receiver, origin) } ?: continue
                     log.debug { "${resolver::class.simpleName ?: "a resolver"} resolved the item" }
                     break
                 }
@@ -238,6 +242,23 @@ internal class DefaultVideoSession private constructor(
             throw e
         }
     }
+
+    /** What [resolve] returns for [item], with any failure but cancellation as an [AirkastException]. */
+    private suspend fun resolving(
+        item: Media,
+        resolve: suspend () -> ResolvedMedia?,
+    ): ResolvedMedia? =
+        try {
+            resolve()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: AirkastException) {
+            throw e
+        } catch (e: Exception) {
+            // The origin refuses a publish once the session has closed it.
+            if (closed.get()) throw ended(e)
+            throw AirkastException.UnsupportedMedia(item.format, "A resolver could not serve the item", e)
+        }
 
     /** The `mediaType` [media] loads as, or why the receiver cannot fetch it. */
     private fun fetchable(media: Media): String {
@@ -413,7 +434,7 @@ internal class DefaultVideoSession private constructor(
     override suspend fun stop() {
         paused = false
         io { command(mapOf("type" to "stop")) }
-        loaded?.take()?.let(::release)
+        loaded?.take()?.forEach(::release)
     }
 
     override fun close() {
@@ -568,7 +589,7 @@ internal class DefaultVideoSession private constructor(
         runCatching { eventChannel?.close() }
         runCatching { control.close() }
         runCatching { timing?.close() }
-        loaded?.take()?.let(::release)
+        loaded?.take()?.forEach(::release)
         origin.close()
         scope.cancel()
         val lasted = opened?.elapsedNow() ?: return error
@@ -606,10 +627,15 @@ internal class DefaultVideoSession private constructor(
         val lock = Mutex()
         var renditions: List<Rendition>? = resolved?.renditions
 
-        /** What a resolver served the item as, until [take] hands it over to be closed. */
-        private val serving = AtomicReference(resolved)
+        /**
+         * What a resolver served the item as, and the items before it a failed load left served,
+         * until [take] hands them over to be closed.
+         */
+        private val serving = mutableListOf<ResolvedMedia>().apply { resolved?.let(::add) }
 
-        fun take(): ResolvedMedia? = serving.getAndSet(null)
+        fun take(): List<ResolvedMedia> = synchronized(serving) { serving.toList().also { serving.clear() } }
+
+        fun keep(earlier: List<ResolvedMedia>) = synchronized(serving) { serving += earlier }
     }
 
     companion object {

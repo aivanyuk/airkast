@@ -92,12 +92,14 @@ public sealed class AirkastException(
      * played before plays on: the item is in a [format] no receiver loads, such as
      * [MediaFormat.Dash], or at a URL the receiver cannot fetch, such as a `content:` URI, and no
      * resolver in [Airkast.resolvers] serves it; or a resolver handles it but cannot serve it, as
-     * [LocalFileResolver] for a file it cannot read. [message] says which.
+     * [LocalFileResolver] for a file it cannot read, or fails with another exception, which is the
+     * [cause]. [message] says which.
      */
     public class UnsupportedMedia(
         public val format: MediaFormat,
         message: String,
-    ) : AirkastException(message)
+        cause: Throwable? = null,
+    ) : AirkastException(message, cause)
 
     /**
      * The platform does not let this app reach the local network. On Android 17, an app that
