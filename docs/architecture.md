@@ -62,8 +62,8 @@ build file.
 
 | Package | Holds | May use |
 | --- | --- | --- |
-| `io.github.aivanyuk.airkast` | The public API: `Airkast`, `AirkastSession`, `AudioStream`, `AudioRoute`, `Media`, `PcmFormat`, `NowPlaying`, `Receiver`, `Compatibility`, `Credentials`, `CredentialStore`, the values and events, `AirkastException` | everything below |
-| `.session` | The protocol's state: `Opening` (the control connection, pairing and base SETUP every session starts with), `DefaultVideoSession` (AirPlay video v2), `DefaultAudioStream` (AirPlay 2 realtime audio) and its `PcmBuffer`, `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder`, `MasterPlaylist` (fetches the HLS master that `renditions()` reads), `RemoteCommands` (the remote's button codes as `RemoteCommand`), and `Log`, which writes to the client's logger | `wire`, `crypto` |
+| `io.github.aivanyuk.airkast` | The public API: `Airkast`, `AirkastSession`, `AudioStream`, `AudioRoute`, `Media`, `PcmFormat`, `NowPlaying`, `Receiver`, `Compatibility`, `Credentials`, `CredentialStore`, `MediaResolver`, `ResolvedMedia`, `LocalFileResolver`, `Origin`, `Resource`, the values and events, `AirkastException` | everything below |
+| `.session` | The protocol's state: `Opening` (the control connection, pairing and base SETUP every session starts with), `DefaultVideoSession` (AirPlay video v2), `DefaultAudioStream` (AirPlay 2 realtime audio) and its `PcmBuffer`, `SessionOptions` (what one connect takes from its client), `ControlConnection`, `EventChannel`, the pairings (`TransientPairing`, `SecretPairing`, `PairVerify`), `Digest`, `TimingResponder`, `HttpOrigin` (the HTTP server a session's `Origin` is), `MasterPlaylist` (fetches the HLS master that `renditions()` reads), `RemoteCommands` (the remote's button codes as `RemoteCommand`), and `Log`, which writes to the client's logger | `wire`, `crypto` |
 | `.wire` | Encodings and framing: HTTP and RTSP messages, TLV8, binary plists, the encrypted `Link`, RTP audio and sync packets, uncompressed ALAC frames, DMAP. No protocol decisions | `crypto` |
 | `.crypto` | SRP-6a, HKDF-SHA512, ChaCha20-Poly1305, X25519, Ed25519, as pure functions with vector tests. airkast carries its own ChaCha20-Poly1305 because Android's JCA has no provider for it below Android 9, and its own X25519 and Ed25519 because the JCA has none below Android 13 | nothing |
 | `.internal` | Build support, such as the `@Poko` annotation | nothing |
@@ -130,13 +130,20 @@ The protocol facts, with the receivers they were seen on, are in
   `POST /play`. A speaker is not one: its audio comes from the app's player, through an
   `AudioStream`. Nor is media the receiver cannot fetch, such as DASH or a file on the phone: the
   protocol is the same, only the item changes, so it is a step inside `load`
-  ([design/sender-served-media.md](design/sender-served-media.md)). Until that step exists, `load`
-  refuses a `MediaFormat.Dash` item with `UnsupportedMedia` and sends nothing. Callers
+  ([design/sender-served-media.md](design/sender-served-media.md)), the resolver seam below. Callers
   don't change, which is why neither the session nor the item is named for video. The
   `Compatibility` case it clears becomes `Supported` in the same change. With a second
   implementation, the choice becomes a list of factories on `Airkast.Builder`, as Retrofit's
   converter factories and Coil's components are, so an app can add its own; until then it is a
   branch in `connect`.
+- **`Airkast.Builder.resolvers` is the media seam.** `load` asks each `MediaResolver` in order
+  to turn an item the receiver cannot fetch into one it can, and the first that handles it
+  publishes what the receiver needs on the session's `Origin`, an HTTP server bound to the
+  control connection's local address. The session keeps the `ResolvedMedia` with the loaded item
+  and closes it once the receiver has moved on. `:core` serves `file:` URLs; a DASH translator in
+  a `:dash` module, and remuxing in an Android one, are further resolvers an app adds. An item no
+  resolver serves, in a format no receiver loads or at a URL that is not `http` or `https`, fails
+  at once with `UnsupportedMedia`.
 - **`Airkast.Builder.socketFactory` is the network seam.** `:core` opens every connection
   through the factory it returns for the receiver, so `:android` can refuse a connect without the
   local network permission and bind the session to a network without `:core` knowing Android.

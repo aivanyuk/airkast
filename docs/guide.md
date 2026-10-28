@@ -82,6 +82,7 @@ val airkast = Airkast(context) {
 | `audioLatency` | 1 second | How far ahead of the receiver's output an `AudioStream` sends: the time from `play()` to the first sound, and how long a gap on the network can last. |
 | `socketFactory` | none; with `Airkast(context)`, the permission check and network binding above | Picks the socket factory for each receiver. Setting your own replaces both Android behaviours. |
 | `credentialStore` | `CredentialStore.inMemory()`; `CredentialStore.encrypted(context)`, a file in the no-backup files, with `Airkast(context)` | Where pairings are kept (see [Pairing](#pairing)). |
+| `resolvers` | `listOf(LocalFileResolver())` | What `load` asks, in order, to serve an item the receiver cannot fetch as given (see [Serve media from the phone](#serve-media-from-the-phone)). |
 | `logger` | none | Takes debugging lines (see [Logs and statistics](#logs-and-statistics)). |
 | `eventListener` | none | Takes typed events for statistics (see [Logs and statistics](#logs-and-statistics)). |
 
@@ -805,7 +806,7 @@ the player's looper.
 | `Timeout` | The receiver did not answer in time. The session stays open, and ends only if the receiver is still silent at the next request. |
 | `Disconnected` | The connection is gone. `reason` says how: `ClosedByReceiver` when the receiver hung up, as for another sender, `ConnectionFailed` when the network failed or the receiver went silent, `ClosedByApp` after `close()`. |
 | `UnexpectedReply` | The receiver answered with something airkast cannot read. |
-| `UnsupportedMedia` | `load` was given an item in a format no receiver loads, such as `MediaFormat.Dash` (`format` holds it). Nothing went to the receiver. `AirkastPlayer` reports it as `ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED`. |
+| `UnsupportedMedia` | `load` was given an item it cannot hand the receiver: in a format no receiver loads, such as `MediaFormat.Dash` (`format` holds it), or at a URL that is not `http` or `https`, such as a `content:` URI, that no resolver serves; or a file the `LocalFileResolver` cannot read. The message says which. Nothing went to the receiver. `AirkastPlayer` reports it as `ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED`. |
 | `ManifestUnreadable` | `renditions()` could not read the HLS master: its server answered with another status than 200 (`status` holds it), did not send it within `requestTimeout`, sent more than 1 MB, or sent something that is not a playlist. |
 | `DiscoveryFailed` | Scanning for receivers could not start. `code` is the platform's error. |
 
@@ -821,7 +822,8 @@ the player's looper.
 
 The receiver fetches and plays the URL itself, so:
 
-- The receiver must reach the URL. A server on the phone's `localhost` does not work.
+- The receiver must reach the URL. A server on the phone's `localhost` does not work; a `file:`
+  URL does, since airkast serves it (see [Serve media from the phone](#serve-media-from-the-phone)).
 - `Media` holds only the URL, so the receiver cannot send your app's cookies or request headers.
 - The receiver takes HLS streams and whole files, but not DASH, and files have been checked on
   the LG CX only (see [Formats](#formats)).
@@ -849,3 +851,65 @@ media3 item's or a server's `Content-Type`, then from the extension of the URL's
 An audio file goes to a TV or a Mac the same way as a video file. A speaker, such as a soundbar,
 is `Compatibility.NoVideo`: it takes audio only as a stream the sender decodes and sends itself
 (see [Play on a speaker](#play-on-a-speaker) and [Stream audio yourself](#stream-audio-yourself)).
+
+### Serve media from the phone
+
+A receiver cannot fetch a file on the phone, so `load` serves it: each session runs a small HTTP
+server, its `Origin`, on the address the receiver reached it at, and a resolver publishes the
+item there and hands the receiver that URL instead. `Airkast.resolvers` lists the resolvers
+`load` asks, in order; the default `LocalFileResolver` serves a `file:` URL of a `File` item:
+
+```kotlin
+import io.github.aivanyuk.airkast.Media
+import java.io.File
+
+// A file the app wrote or downloaded into its own storage.
+session.load(Media(File(context.filesDir, "film.mp4").toURI().toString()))
+```
+
+`AirkastPlayer` does the same for a media item with a `file:` URI. The file is served with the
+byte ranges the receiver asks for, so it seeks, and withdrawn once the receiver moves on: after
+the next `load`, on `stop()`, and when the session ends. Until then, the phone has to stay on the
+network and awake: `AirkastPlayer` holds a wake lock and a Wi-Fi lock while an item is on the
+receiver, unless `keepAwake` is off, and an app that drives a session itself holds its own.
+
+The origin serves in the clear, over plain HTTP on the local network, as an `http` CDN does. Each
+path sits under a random prefix, so another device on the network cannot guess it, but it can read
+it off the air. A file the app cannot read fails the load with `UnsupportedMedia`, and so does a
+`content:` URI, which no built-in resolver serves yet.
+
+A resolver of your own handles what the built-in ones do not. It returns null for media it leaves
+alone, and otherwise publishes what the receiver needs and returns a `ResolvedMedia`, whose
+`close()` withdraws it. It runs on an I/O thread, and throws an `AirkastException` for media it
+handles but cannot serve. In this example, `writePlaylist(name)` stands for the app's own
+function that writes an HLS playlist as text:
+
+```kotlin
+import io.github.aivanyuk.airkast.LocalFileResolver
+import io.github.aivanyuk.airkast.Media
+import io.github.aivanyuk.airkast.MediaResolver
+import io.github.aivanyuk.airkast.ResolvedMedia
+import io.github.aivanyuk.airkast.Resource
+
+/** Plays `playlist:<name>` from playlists the app writes itself. */
+val playlists =
+    MediaResolver { media, _, origin ->
+        val name = media.url.removePrefix("playlist:").takeIf { it != media.url } ?: return@MediaResolver null
+        val url = origin.publish("$name.m3u8", Resource.text("application/vnd.apple.mpegurl") { writePlaylist(name) })
+        object : ResolvedMedia {
+            override val media = Media(url, media.startAt)
+
+            override fun close() = origin.withdraw(url)
+        }
+    }
+
+val airkast = Airkast(context) { resolvers = listOf(playlists, LocalFileResolver()) }
+```
+
+Setting `resolvers` replaces the default list, so the example keeps `LocalFileResolver` in it.
+A resolver that writes an HLS master can also return its `renditions`, which
+`AirkastSession.renditions()` then lists without fetching the master.
+
+A `Resource` is opened on every request, so a playlist written by a function can change between
+two, as a live one does. `Resource.file` serves a file in ranges, and a `Resource` of your own
+returns a `Content` with its length, or null when it is not known ahead.

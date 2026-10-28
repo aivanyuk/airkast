@@ -1,9 +1,8 @@
 package io.github.aivanyuk.airkast.session
 
+import io.github.aivanyuk.airkast.Origin
+import io.github.aivanyuk.airkast.Resource
 import io.github.aivanyuk.airkast.wire.HttpMessage
-import java.io.ByteArrayInputStream
-import java.io.File
-import java.io.FileInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -18,16 +17,16 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * What a receiver fetches from the sender: an HTTP/1.1 server on [bind], the address the session's
- * control connection uses, so only the receiver's network reaches it. It listens from the first
- * [publish] until nothing is published, and every path sits under a random prefix, so another
- * device on the network cannot guess one. It answers GET, HEAD and OPTIONS with CORS headers, which
- * the LG's hls.js needs, and byte ranges, which a file and a byte-range segment need.
+ * The [Origin] as an HTTP/1.1 server on [bind], the address the session's control connection
+ * uses, so only the receiver's network reaches it. It answers GET, HEAD and OPTIONS with CORS
+ * headers, which the LG's hls.js needs, and byte ranges, which a file and a byte-range segment
+ * need.
  */
-internal class Origin(
+internal class HttpOrigin(
     private val bind: InetAddress,
     private val log: Log = Log.NONE,
-) : AutoCloseable {
+) : Origin,
+    AutoCloseable {
     private val prefix = randomPrefix()
     private val resources = ConcurrentHashMap<String, Resource>()
     private val connections: MutableSet<Socket> = Collections.newSetFromMap(ConcurrentHashMap())
@@ -38,11 +37,7 @@ internal class Origin(
     /** The port it listens on, or null while nothing is published. */
     val port: Int? get() = synchronized(lock) { server?.localPort }
 
-    /**
-     * Publishes [resource] under [name], a relative path such as `video/main.m3u8`, and returns the
-     * URL the receiver fetches it at. A second publish under the same name replaces the first.
-     */
-    fun publish(
+    override fun publish(
         name: String,
         resource: Resource,
     ): String {
@@ -59,8 +54,7 @@ internal class Origin(
         return "http://${host(bind)}:$port/$prefix/$name"
     }
 
-    /** Stops serving [url], which [publish] returned, and stops listening once nothing is published. */
-    fun withdraw(url: String) {
+    override fun withdraw(url: String) {
         val path = "/" + url.substringAfter("://").substringAfter('/')
         synchronized(lock) {
             if (resources.remove(path) == null) return
@@ -298,51 +292,6 @@ internal class Origin(
             }
         }
     }
-}
-
-/** Bytes the [Origin] serves. [open] runs on every request, so a live playlist can change between two. */
-internal interface Resource {
-    val contentType: String
-
-    fun open(): Content
-
-    companion object {
-        /** [text] in UTF-8, written again on every request. */
-        fun text(
-            contentType: String,
-            text: () -> String,
-        ): Resource =
-            object : Resource {
-                override val contentType = contentType
-
-                override fun open(): Content {
-                    val bytes = text().toByteArray(Charsets.UTF_8)
-                    return Content(bytes.size.toLong()) { offset ->
-                        ByteArrayInputStream(bytes, offset.toInt(), bytes.size - offset.toInt())
-                    }
-                }
-            }
-
-        /** [file], whose length is read again on every request. */
-        fun file(
-            file: File,
-            contentType: String,
-        ): Resource =
-            object : Resource {
-                override val contentType = contentType
-
-                override fun open(): Content =
-                    Content(file.length()) { offset -> FileInputStream(file).apply { channel.position(offset) } }
-            }
-    }
-}
-
-/** One request's bytes: their [length] when it is known ahead, read [from] an offset into them. */
-internal class Content(
-    val length: Long?,
-    private val open: (offset: Long) -> InputStream,
-) {
-    fun from(offset: Long): InputStream = open(offset)
 }
 
 /** The `Range` header of a request, as RFC 9110 reads it, for one range of bytes. */

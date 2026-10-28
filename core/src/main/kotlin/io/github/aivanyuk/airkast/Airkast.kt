@@ -83,6 +83,15 @@ public class Airkast private constructor(
     public val credentialStore: CredentialStore = builder.credentialStore
 
     /**
+     * What [AirkastSession.load] asks, in order, for an item the receiver cannot fetch as given;
+     * the first that handles it publishes what the receiver needs on the session's [Origin]. By
+     * default a [LocalFileResolver], which serves `file:` URLs. An item none of them handles goes
+     * to the receiver as it is, unless no receiver can load it: then `load` throws
+     * [AirkastException.UnsupportedMedia].
+     */
+    public val resolvers: List<MediaResolver> = builder.resolvers.toList()
+
+    /**
      * Takes the client's debugging lines, from every connect, pairing and session: one per protocol
      * step at [Logger.Level.Debug], and every message on the wire at [Logger.Level.Verbose]. A line
      * never holds the media URL, a key, a PIN, a password or anything a pairing derives. Null, the
@@ -341,6 +350,7 @@ public class Airkast private constructor(
             ntpTiming = ntpTiming,
             audioLatency = audioLatency,
             socketFactory = factory,
+            resolvers = resolvers,
             logger = logger,
             eventListener = eventListener,
             credentials = credentials,
@@ -351,7 +361,8 @@ public class Airkast private constructor(
      * Where the client's debugging lines go: `Airkast { logger = Airkast.Logger.println() }`, or
      * `Airkast.Logger.logcat()` from `airkast-android`. The `tag` says which part wrote a line:
      * `connect`, `pairing`, `session`, `audio` (an [AudioStream]), `control` (the requests to the
-     * receiver), `events` (what the receiver sends), `timing`, `credentials` (a sealed
+     * receiver), `events` (what the receiver sends), `origin` (what the receiver fetches from the
+     * sender), `timing`, `credentials` (a sealed
      * [CredentialStore]), `player` (`AirkastPlayer`) or `discovery` (`ReceiverDiscovery`).
      * More may join.
      *
@@ -523,6 +534,7 @@ public class Airkast private constructor(
         public var audioLatency: Duration = 1.seconds
         public var socketFactory: (Receiver) -> SocketFactory? = { null }
         public var credentialStore: CredentialStore = CredentialStore.inMemory()
+        public var resolvers: List<MediaResolver> = listOf(LocalFileResolver())
         public var logger: Logger? = null
         public var eventListener: ((Event) -> Unit)? = null
 
@@ -537,6 +549,7 @@ public class Airkast private constructor(
             audioLatency = airkast.audioLatency
             socketFactory = airkast.socketFactory
             credentialStore = airkast.credentialStore
+            resolvers = airkast.resolvers
             logger = airkast.logger
             eventListener = airkast.eventListener
         }

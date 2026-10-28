@@ -2,6 +2,7 @@ package io.github.aivanyuk.airkast.session
 
 import io.github.aivanyuk.airkast.Airkast
 import io.github.aivanyuk.airkast.Credentials
+import io.github.aivanyuk.airkast.MediaResolver
 import javax.net.SocketFactory
 import kotlin.time.Duration
 
@@ -19,6 +20,7 @@ internal class SessionOptions(
     val ntpTiming: Boolean,
     val audioLatency: Duration,
     val socketFactory: SocketFactory?,
+    val resolvers: List<MediaResolver>,
     val logger: Airkast.Logger?,
     val eventListener: ((Airkast.Event) -> Unit)?,
     val credentials: Credentials?,
@@ -34,6 +36,7 @@ internal class SessionOptions(
             ntpTiming,
             audioLatency,
             socketFactory,
+            resolvers,
             logger,
             eventListener,
             credentials,

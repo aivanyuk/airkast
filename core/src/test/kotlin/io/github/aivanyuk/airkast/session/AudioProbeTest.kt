@@ -49,6 +49,7 @@ class AudioProbeTest {
             ntpTiming = true,
             audioLatency = 1.seconds,
             socketFactory = null,
+            resolvers = emptyList(),
             logger = logger,
             eventListener = null,
             credentials = null,
