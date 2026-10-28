@@ -13,6 +13,8 @@ import io.github.aivanyuk.airkast.Rendition
 import io.github.aivanyuk.airkast.ResolvedMedia
 import io.github.aivanyuk.airkast.Resource
 import io.github.aivanyuk.airkast.TrackKind
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertThrows
 import org.junit.Rule
@@ -225,6 +227,28 @@ class ResolverTest {
                     assertThat(status(first)).isEqualTo(200)
                     session.stop()
                     assertThat(closed).containsExactly("two", "one")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aSessionThatEndsDuringALoadClosesTheItemBeforeIt() {
+        val client = airkast.copy { resolvers = listOf(playlists) }
+        FakeReceiver(takesItems = false).use { fake ->
+            runBlocking {
+                client.connect(Receiver("fake", "127.0.0.1", fake.port)).use { session ->
+                    runCatching { session.load(Media("resolve:one")) }
+                    // On this thread, so the session has ended in full before the load wakes.
+                    val closing =
+                        launch {
+                            delay(300)
+                            session.close()
+                        }
+                    val load = runCatching { session.load(Media("resolve:two")) }
+                    closing.join()
+                    assertThat(load.exceptionOrNull()).isInstanceOf(AirkastException.Disconnected::class.java)
+                    assertThat(closed).containsExactly("one", "two")
                 }
             }
         }

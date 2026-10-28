@@ -218,8 +218,14 @@ internal class DefaultVideoSession private constructor(
             moved = true
         } finally {
             val earlier = previous?.take().orEmpty()
-            // A receiver that did not take the new item may still play the one before, so it stays served.
-            if (moved) earlier.forEach(::release) else current.keep(earlier)
+            if (moved) {
+                earlier.forEach(::release)
+            } else {
+                // A receiver that did not take the new item may still play the one before, so it stays served,
+                // unless the session ended meanwhile, after end() took what the current item held.
+                current.keep(earlier)
+                if (closed.get()) current.take().forEach(::release)
+            }
         }
     }
 
